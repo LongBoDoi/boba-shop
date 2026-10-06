@@ -32,6 +32,9 @@ The game is published at https://boba-shop.expo.app (Expo account `manhlong`, pr
 npx expo export --platform web && npx eas-cli@latest deploy --prod
 ```
 
+If `eas-cli` fails with `read ECONNRESET` on every request (it uses `node-fetch` over an IPv6 path
+some networks reset), prefix the command: `NODE_OPTIONS="--dns-result-order=ipv4first" npx eas-cli@latest deploy --prod`.
+
 `eas-cli` needs `npx eas-cli@latest login` on a new machine. `app.json` uses `web.output: "single"`;
 `public/index.html` is the web page template (sets `lang="vi"`).
 
