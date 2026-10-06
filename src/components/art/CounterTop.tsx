@@ -1,5 +1,5 @@
 import { memo } from 'react';
-import Svg, { Defs, Ellipse, G, LinearGradient, Path, Rect, Stop } from 'react-native-svg';
+import Svg, { Circle, Defs, Ellipse, G, LinearGradient, Path, Rect, Stop } from 'react-native-svg';
 
 import { colors } from '../../theme';
 
@@ -15,52 +15,100 @@ interface CounterTopProps {
  */
 export const CounterTop = memo(function CounterTop({ width, height }: CounterTopProps) {
   if (height <= 0 || width <= 0) return null;
-  const lip = Math.min(26, height * 0.12); // near edge of the counter
-  const surfaceH = height - lip;
   const s = Math.min(1.15, width / 390);
-  // Two loose rows so the surface has depth: smaller props at the back, larger near the front.
+  // The counter is drawn in 3D: a top surface that recedes away from us, a slab edge showing its
+  // thickness, and a front face (the barista-side cabinet) going down to the floor.
+  const surfaceH = Math.round(height * 0.52);
+  const slab = Math.max(9, Math.round(height * 0.035));
+  const faceTop = surfaceH + slab;
+  // The far (back) edge of the surface is inset, so the top looks like it recedes in perspective.
+  const inset = Math.min(width * 0.14, 64);
+  const vpx = width / 2;
+
+  // Props sit near the front of the surface; a back row is smaller for depth.
   const backY = surfaceH * 0.46;
-  const frontY = surfaceH * 0.9;
+  const frontY = surfaceH * 0.96;
 
   return (
     <Svg width={width} height={height}>
       <Defs>
         <LinearGradient id="ctSurface" x1="0" y1="0" x2="0" y2="1">
-          <Stop offset="0" stopColor={colors.counterLight} />
-          <Stop offset="1" stopColor={colors.counter} />
+          <Stop offset="0" stopColor={colors.counter} />
+          <Stop offset="1" stopColor={colors.counterLight} />
+        </LinearGradient>
+        <LinearGradient id="ctFace" x1="0" y1="0" x2="0" y2="1">
+          <Stop offset="0" stopColor={colors.counter} />
+          <Stop offset="1" stopColor={colors.counterEdge} />
         </LinearGradient>
         <LinearGradient id="ctBackShade" x1="0" y1="0" x2="0" y2="1">
-          <Stop offset="0" stopColor="#8A5A30" stopOpacity={0.28} />
+          <Stop offset="0" stopColor="#8A5A30" stopOpacity={0.3} />
           <Stop offset="1" stopColor="#8A5A30" stopOpacity={0} />
         </LinearGradient>
       </Defs>
 
-      {/* Wooden surface. */}
-      <Rect width={width} height={surfaceH} fill="url(#ctSurface)" />
-      {/* Grain lines running along the counter. */}
-      {Array.from({ length: Math.max(3, Math.round(surfaceH / 34)) }, (_, i) => (
-        <Rect key={i} y={(i + 0.5) * (surfaceH / Math.max(3, Math.round(surfaceH / 34)))} width={width} height={1.5} fill={colors.counterEdge} opacity={0.18} />
-      ))}
-      {/* Shadow cast by the stage counter where it meets this surface. */}
-      <Rect width={width} height={Math.min(30, surfaceH * 0.2)} fill="url(#ctBackShade)" />
+      {/* Back wall behind the counter, so the perspective corners read as wall, not a gap. */}
+      <Rect width={width} height={surfaceH} fill="#F3E6D5" />
+      <Rect width={width} height={surfaceH} fill="url(#ctBackShade)" />
 
-      {/* Front lip (near edge) for a bit of depth. */}
-      <Rect y={surfaceH} width={width} height={lip} fill={colors.counter} />
-      <Rect y={surfaceH} width={width} height={2} fill={colors.counterEdge} opacity={0.5} />
-      <Rect y={height - 3} width={width} height={3} fill={colors.counterDark} />
+      {/* Receding top surface: a trapezoid, inset at the far edge. */}
+      <Path d={`M0 ${surfaceH} L${inset} 0 H${width - inset} L${width} ${surfaceH} Z`} fill="url(#ctSurface)" />
+      {/* Grain lines converging toward a vanishing point for perspective. */}
+      {Array.from({ length: 7 }, (_, i) => {
+        const fx = (i / 6) * width; // across the near (front) edge
+        const bx = inset + (i / 6) * (width - 2 * inset); // across the far edge
+        return <Path key={i} d={`M${fx} ${surfaceH} L${bx} 0`} stroke={colors.counterEdge} strokeWidth={1.4} opacity={0.14} />;
+      })}
+      {/* Soft shadow cast by the stage counter along the far edge. */}
+      <Path d={`M0 ${surfaceH} L${inset} 0 H${width - inset} L${width} ${surfaceH} Z`} fill="url(#ctBackShade)" />
 
-      {/* Back row. */}
-      <NapkinBox cx={width * 0.2} cy={backY} scale={s * 0.9} />
-      <StrawCup cx={width * 0.5} cy={backY} scale={s * 0.9} />
-      <Succulent cx={width * 0.82} cy={backY} scale={s * 0.9} />
+      {/* Slab edge (thickness of the counter top). */}
+      <Rect y={surfaceH} width={width} height={slab} fill={colors.counterLight} />
+      <Rect y={surfaceH} width={width} height={2} fill="#FFFFFF" opacity={0.4} />
+      <Rect y={surfaceH + slab - 2} width={width} height={2} fill={colors.counterDark} opacity={0.5} />
 
-      {/* Front row. */}
+      {/* Front face = the barista-side cabinet. */}
+      <Rect y={faceTop} width={width} height={height - faceTop} fill="url(#ctFace)" />
+      <CabinetDoors width={width} top={faceTop + 6} bottom={height - 6} />
+      {/* kick plate / shadow */}
+      <Rect y={height - 5} width={width} height={5} fill={colors.counterDark} />
+
+      {/* Props on the surface. */}
+      <NapkinBox cx={width * 0.22} cy={backY} scale={s * 0.82} />
+      <StrawCup cx={vpx} cy={backY} scale={s * 0.82} />
+      <Succulent cx={width * 0.8} cy={backY} scale={s * 0.82} />
+
       <Register cx={width * 0.26} cy={frontY} scale={s} />
       <CupStack cx={width * 0.56} cy={frontY} scale={s} />
-      <TipJar cx={width * 0.82} cy={frontY} scale={s} />
+      <TipJar cx={width * 0.83} cy={frontY} scale={s} />
     </Svg>
   );
 });
+
+/** The row of cabinet doors on the barista side of the counter front. */
+function CabinetDoors({ width, top, bottom }: { width: number; top: number; bottom: number }) {
+  const count = width < 340 ? 3 : 4;
+  const gap = 10;
+  const pad = 12;
+  const doorW = (width - pad * 2 - gap * (count - 1)) / count;
+  const doorH = bottom - top;
+  return (
+    <G>
+      {Array.from({ length: count }, (_, i) => {
+        const x = pad + i * (doorW + gap);
+        const knobY = top + doorH * 0.5;
+        return (
+          <G key={i}>
+            <Rect x={x} y={top} width={doorW} height={doorH} rx={8} fill={colors.counter} />
+            <Rect x={x} y={top} width={doorW} height={doorH} rx={8} fill="none" stroke={colors.counterDark} strokeWidth={2} opacity={0.5} />
+            <Rect x={x + 5} y={top + 5} width={doorW - 10} height={doorH - 10} rx={5} fill="none" stroke={colors.counterLight} strokeWidth={1.5} opacity={0.6} />
+            {/* knob near the inner edge */}
+            <Circle cx={i < count / 2 ? x + doorW - 10 : x + 10} cy={knobY} r={3.5} fill={colors.counterDark} />
+          </G>
+        );
+      })}
+    </G>
+  );
+}
 
 function shadow(cx: number, cy: number, rx: number) {
   return <Ellipse cx={cx} cy={cy} rx={rx} ry={rx * 0.26} fill="#000000" opacity={0.1} />;
