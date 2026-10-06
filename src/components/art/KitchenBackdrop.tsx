@@ -17,8 +17,8 @@ const SEAM = '#7A5230';
 /**
  * The bare back wall of the barista's kitchen: the same striped pink wallpaper, scalloped awning and
  * warm wooden counter as the Counter page's `ShopBackdrop` / `CounterTop`, so swiping between the two
- * screens feels like turning around inside one shop. The supplies that stock this wall are the tappable
- * `IngredientShelves` drawn on top; this component only paints the room around them.
+ * screens feels like turning around inside one shop. The equipment that stocks this wall is the tappable
+ * `KitchenStation` drawn on top; this component only paints the room around it.
  */
 export const KitchenBackdrop = memo(function KitchenBackdrop({ width: w, height: h }: KitchenBackdropProps) {
   if (w <= 0 || h <= 0) return null;

@@ -53,10 +53,10 @@ src/game/               pure game logic, no React
 src/screens/            TitleScreen, DayEndScreen, and the in-play screens:
   GameScreen.tsx        orchestrator: HUD, the two-page swipe pager + tab indicator, effects/opening/pause overlays
   CounterPage.tsx       page 1 — the customer stage (take orders here)
-  PrepPage.tsx          page 2 — ticket rail; a kitchen wall of tappable ingredient shelves; and the
-                        recipe + machine/cup on the counter; serve/clear. Set on a shared KitchenBackdrop.
-src/components/         Cup (layered, animated), CustomerStage, TicketRail, OrderTicket, IngredientShelves,
-                        Hud, SealingMachine, Effects (coins/confetti/toss), OpeningSign…
+  PrepPage.tsx          page 2 — ticket rail; the KitchenStation of tappable equipment around the cup on
+                        a table in the middle; the recipe; serve/clear. Set on a shared KitchenBackdrop.
+src/components/         Cup (layered, animated), CustomerStage, TicketRail, OrderTicket, KitchenStation,
+                        Hud, Effects (coins/confetti/toss), OpeningSign…
 src/components/art/     SVG illustrations: Character, IngredientIcon, ShopBackdrop (customer wall),
                         KitchenBackdrop (prep room: shared awning/wall/wood counter),
                         Counter, CounterTop, Tiles, ToppingShelf
@@ -76,15 +76,23 @@ Both pages deliberately share one visual world so swiping feels like turning aro
 the Counter uses `ShopBackdrop` and the Prep room uses `KitchenBackdrop`, and both draw the same pink
 striped wall, scalloped awning and warm wooden counter (same wood tones as `CounterTop`).
 
-**The kitchen wall IS the ingredient selector** — there is no card panel. `IngredientShelves` renders one
-wooden shelf per unlocked category (`config.categories`), each holding that category's options
-(`config.options[category]`) as tappable objects drawn from `IngredientIcon`. Tapping an object dispatches
-`PICK` (toppings toggle, others set). Shelves share the wall height evenly with a per-shelf cap, so sparse
-early days show big objects and the full day-5 set (6 shelves) still fits without scrolling; on very short
-shelves the object captions auto-hide (the icons + the recipe still identify everything). Selected objects
-highlight with a ✓. When the player taps one, `GameScreen` bumps a `pickFx` signal that `PrepPage` turns
-into a little ingredient icon dropping into the cup on the machine, so grabbing from the shelf visibly
-feeds the drink. The selected order's recipe (`OrderTicket`) and the cup stand on the counter below.
+**The kitchen equipment IS the ingredient selector** — there is no card panel. `KitchenStation`
+(`src/components/KitchenStation.tsx`) lays the prep station out as real equipment arranged around the cup,
+which sits on a little wooden table in the middle (rendered by `PrepPage` as `CupTable`, keeping the
+geometry ref). It has four shelf bands (only those whose categories are unlocked show):
+- **Tea** — a row of beverage dispensers, one per `config.options.tea`; tap to pour that tea (pour effect),
+  `PICK('tea', id)`. Selected shows a ✓.
+- **Toppings** — a row of bins with scoops, one per `config.options.toppings`; tap to toggle, `PICK` (the
+  reducer toggles, capped at `maxToppings`), scoop effect, ✓ when in the cup.
+- **Equipment** (ice/sugar/milk/foam) — one piece each, which **cycles** on tap via `nextInCycle` so every
+  value incl. explicit `'none'` is reachable (matching is strict `===`, so `null` ≠ `'none'`): the ice chest
+  cycles less→regular→none (cubes shown build up — "amount depends on taps"), the syrup pump 30→50→100→0,
+  the milk carton whole→oat→none, the foam tub cheese→brulee→none. Each shows its current state (and reads
+  neutral, not crossed, while still unset).
+
+The cup animates every add itself (`Cup` plays pours/drops as the drink changes). The selected order's recipe
+(`OrderTicket`) sits beside the cup in the middle band. Bands measure their own height (via `SizeContext`) so
+equipment scales to the day's density.
 
 ### Game rules worth knowing
 
@@ -103,7 +111,7 @@ feeds the drink. The selected order's recipe (`OrderTicket`) and the cup stand o
   double toppings (5). More teas/toppings unlock through day 5.
 - Serving: 0 mistakes = full price + tip (faster since ordering = bigger tip), 1 mistake = half price,
   2+ = no pay. Hitting `config.goal` passes the day; stars at 1×, 1.3×, 1.6× the goal.
-- Serving requires a tea. Ingredients are tapped straight off the kitchen shelves (see "The two pages").
+- Serving requires a tea. Ingredients are added by operating the kitchen equipment (see "The two pages").
   A customer stays in their counter slot from `requesting` through to being served (taking the order does
   not free the slot).
 

@@ -101,8 +101,8 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 6,
     borderTopRightRadius: 6,
     paddingHorizontal: 10,
-    paddingTop: 10,
-    paddingBottom: 4,
+    paddingTop: 8,
+    paddingBottom: 3,
     shadowColor: '#000',
     shadowOpacity: 0.1,
     shadowRadius: 6,
@@ -172,7 +172,7 @@ const styles = StyleSheet.create({
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 1.5,
+    paddingVertical: 0.5,
   },
   icons: {
     width: 30,
@@ -186,8 +186,8 @@ const styles = StyleSheet.create({
   },
   item: {
     flex: 1,
-    fontSize: 13,
-    lineHeight: 17,
+    fontSize: 12.5,
+    lineHeight: 15,
     fontFamily: fonts.semi,
     color: colors.ink,
   },
