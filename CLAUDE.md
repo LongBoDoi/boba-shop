@@ -53,10 +53,13 @@ src/game/               pure game logic, no React
 src/screens/            TitleScreen, DayEndScreen, and the in-play screens:
   GameScreen.tsx        orchestrator: HUD, the two-page swipe pager + tab indicator, effects/opening/pause overlays
   CounterPage.tsx       page 1 — the customer stage (take orders here)
-  PrepPage.tsx          page 2 — ticket rail, order detail, machine/cup, ingredient panel, serve/clear
+  PrepPage.tsx          page 2 — ticket rail, order detail, machine/cup, ingredient panel, serve/clear,
+                        all set on a shared KitchenBackdrop so it reads as the same shop
 src/components/         Cup (layered, animated), CustomerStage, TicketRail, OrderTicket, IngredientPanel,
                         Hud, SealingMachine, Effects (coins/confetti/toss), OpeningSign…
-src/components/art/     SVG illustrations: Character, IngredientIcon, ShopBackdrop, Counter, Tiles, ToppingShelf
+src/components/art/     SVG illustrations: Character, IngredientIcon, ShopBackdrop (customer wall),
+                        KitchenBackdrop (prep wall: shared awning/wall/wood counter + stocked shelves),
+                        Counter, CounterTop, Tiles, ToppingShelf
 src/motion.ts           shared animation timings/easings
 src/theme.ts            colours and font family names
 ```
@@ -68,6 +71,14 @@ indicator under the HUD highlights the active page and badges each side (Quầy 
 Pha chế = # tickets to make); tapping a tab scrolls the pager (swiping is the primary gesture). Because
 `PrepPage` is off-screen until swiped to, it re-measures its machine/bin positions when the parent bumps
 its `measureToken` on scroll-settle, and reports them up via `onGeometry` for the effects overlay.
+
+Both pages deliberately share one visual world so swiping feels like turning around inside one shop:
+the Counter uses `ShopBackdrop` and the Prep station uses `KitchenBackdrop`, and both draw the same pink
+striped wall, scalloped awning and warm wooden counter (same wood tones as `CounterTop`). The Prep wall
+is stocked like a real tea kitchen (tea-canister + topping-jar shelves, a utensil pegboard, a kettle,
+and cup stack / blender / milk jug standing on the counter). When the player taps an ingredient,
+`GameScreen` bumps a `pickFx` signal that `PrepPage` turns into a little ingredient icon dropping into the
+cup on the machine, so choosing in the panel visibly feeds the drink above it.
 
 ### Game rules worth knowing
 

@@ -25,7 +25,7 @@ import { timing } from '../motion';
 import { colors, fonts } from '../theme';
 import { tapHaptic, toneHaptic } from '../utils/haptics';
 import { CounterPage } from './CounterPage';
-import { PrepGeometry, PrepPage } from './PrepPage';
+import { PickFx, PrepGeometry, PrepPage } from './PrepPage';
 
 const TICK_MS = 100;
 // Cap a single step so returning from the background doesn't skip time.
@@ -42,6 +42,7 @@ export function GameScreen({ state, dispatch }: GameScreenProps) {
   const [opening, setOpening] = useState(true);
   const [page, setPage] = useState(0);
   const [measureToken, setMeasureToken] = useState(0);
+  const [pickFx, setPickFx] = useState<PickFx | null>(null);
 
   useEffect(() => {
     if (paused || opening) return;
@@ -126,6 +127,7 @@ export function GameScreen({ state, dispatch }: GameScreenProps) {
     (category: CategoryId, optionId: string) => {
       tapHaptic();
       dispatch({ type: 'PICK', category, optionId });
+      setPickFx((prev) => ({ category, id: optionId, seq: (prev?.seq ?? 0) + 1 }));
     },
     [dispatch],
   );
@@ -211,6 +213,7 @@ export function GameScreen({ state, dispatch }: GameScreenProps) {
             selectedCustomer={selectedCustomer}
             clock={state.clock}
             sealCount={state.stats.served}
+            pickFx={pickFx}
             measureToken={measureToken}
             onGeometry={setPrep}
             onSelectTicket={selectTicket}

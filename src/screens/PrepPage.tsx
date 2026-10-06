@@ -1,10 +1,10 @@
 import { ReactNode, useEffect, useState } from 'react';
 import { LayoutChangeEvent, StyleSheet, View } from 'react-native';
-import Animated, { useAnimatedStyle, useSharedValue, withDelay, withTiming } from 'react-native-reanimated';
+import Animated, { interpolate, useAnimatedStyle, useSharedValue, withDelay, withTiming } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { Tiles } from '../components/art/Tiles';
-import { SHELF_HEIGHT, ToppingShelf } from '../components/art/ToppingShelf';
+import { IngredientIcon } from '../components/art/IngredientIcon';
+import { KitchenBackdrop } from '../components/art/KitchenBackdrop';
 import { Button } from '../components/Button';
 import { Cup } from '../components/Cup';
 import { Point } from '../components/Effects';
@@ -12,12 +12,12 @@ import { IngredientPanel } from '../components/IngredientPanel';
 import { OrderTicket } from '../components/OrderTicket';
 import { MACHINE_BASE, MACHINE_HEAD, SealingMachine } from '../components/SealingMachine';
 import { Ticket, TicketRail } from '../components/TicketRail';
-import { CategoryId, Drink } from '../game/ingredients';
+import { CategoryId, Drink, getIngredient } from '../game/ingredients';
 import { DayConfig } from '../game/levels';
 import { formatMoney } from '../game/money';
 import { drinkPrice } from '../game/orders';
 import { Customer } from '../game/reducer';
-import { DURATION, timing } from '../motion';
+import { DURATION, ease, timing } from '../motion';
 import { colors } from '../theme';
 
 export interface PrepGeometry {
@@ -26,6 +26,13 @@ export interface PrepGeometry {
   /** Centre of the bin, in window coordinates. */
   trash: Point;
   cupWidth: number;
+}
+
+/** The ingredient the player most recently tapped, so the prep page can drop it into the cup. */
+export interface PickFx {
+  category: CategoryId;
+  id: string;
+  seq: number;
 }
 
 interface PrepPageProps {
@@ -39,6 +46,7 @@ interface PrepPageProps {
   selectedCustomer: Customer | null;
   clock: number;
   sealCount: number;
+  pickFx: PickFx | null;
   /** Bumped by the parent when this page scrolls into view, to re-measure on-screen positions. */
   measureToken: number;
   onGeometry: (geometry: PrepGeometry) => void;
@@ -63,6 +71,7 @@ export function PrepPage({
   selectedCustomer,
   clock,
   sealCount,
+  pickFx,
   measureToken,
   onGeometry,
   onSelectTicket,
@@ -110,21 +119,19 @@ export function PrepPage({
           setStation({ width: w, height: h });
         }}
       >
-        {station.height > 0 && <Tiles width={station.width} height={station.height} />}
-        <View style={styles.ticketColumn}>
-          <OrderTicket customer={selectedCustomer} cup={cup} config={config} />
-          {station.height > 70 + config.categories.length * 22 + SHELF_HEIGHT && (
-            <View style={styles.shelf} pointerEvents="none">
-              <ToppingShelf width={station.width - cupWidth - 66} height={SHELF_HEIGHT} />
-            </View>
-          )}
-        </View>
-        <View ref={machineRef} style={styles.machineArea}>
-          <SealingMachine cupWidth={cupWidth} display={cupPrice > 0 ? `Giá: ${formatMoney(cupPrice)}` : 'Sẵn sàng'} sealCount={sealCount}>
-            <FreshCup key={cupId} width={cupWidth}>
-              <Cup drink={cup} width={cupWidth} backgroundColor={colors.machineInside} animated />
-            </FreshCup>
-          </SealingMachine>
+        {station.height > 0 && <KitchenBackdrop width={station.width} height={station.height} />}
+        <View style={styles.stationInner}>
+          <View style={styles.ticketColumn}>
+            <OrderTicket customer={selectedCustomer} cup={cup} config={config} />
+          </View>
+          <View ref={machineRef} style={styles.machineArea}>
+            <SealingMachine cupWidth={cupWidth} display={cupPrice > 0 ? `Giá: ${formatMoney(cupPrice)}` : 'Sẵn sàng'} sealCount={sealCount}>
+              <FreshCup key={cupId} width={cupWidth}>
+                <Cup drink={cup} width={cupWidth} backgroundColor={colors.machineInside} animated />
+              </FreshCup>
+            </SealingMachine>
+            {pickFx && <DropInIcon key={pickFx.seq} pick={pickFx} cupWidth={cupWidth} />}
+          </View>
         </View>
       </View>
 
@@ -153,6 +160,29 @@ function FreshCup({ width, children }: { width: number; children: ReactNode }) {
   return <Animated.View style={style}>{children}</Animated.View>;
 }
 
+/**
+ * When the player taps an ingredient, a little picture of it falls into the cup on the machine —
+ * so choosing in the panel visibly feeds the drink above it. Skipped for the "none" options.
+ */
+function DropInIcon({ pick, cupWidth }: { pick: PickFx; cupWidth: number }) {
+  const option = getIngredient(pick.category, pick.id);
+  const drop = useSharedValue(0);
+  const cupHeight = Math.round(cupWidth * 1.3);
+  useEffect(() => {
+    drop.set(withTiming(1, { duration: 420, easing: ease }));
+  }, [drop]);
+  const style = useAnimatedStyle(() => ({
+    opacity: interpolate(drop.value, [0, 0.15, 0.7, 1], [0, 1, 1, 0]),
+    transform: [{ translateY: interpolate(drop.value, [0, 1], [-cupHeight * 0.7, cupHeight * 0.18]) }, { scale: interpolate(drop.value, [0, 1], [1.1, 0.7]) }],
+  }));
+  if (!option || option.isNone) return null;
+  return (
+    <Animated.View style={[styles.drop, { bottom: MACHINE_BASE + cupHeight * 0.4 }, style]} pointerEvents="none">
+      <IngredientIcon category={pick.category} id={pick.id} size={Math.round(cupWidth * 0.46)} />
+    </Animated.View>
+  );
+}
+
 const styles = StyleSheet.create({
   page: {
     flex: 1,
@@ -160,23 +190,27 @@ const styles = StyleSheet.create({
   },
   station: {
     flex: 1,
+    overflow: 'hidden',
+  },
+  stationInner: {
+    flex: 1,
     flexDirection: 'row',
     gap: 10,
     paddingHorizontal: 10,
     paddingTop: 10,
     paddingBottom: 8,
-    overflow: 'hidden',
   },
   ticketColumn: {
     flex: 1,
   },
-  shelf: {
-    position: 'absolute',
-    left: 0,
-    bottom: 0,
-  },
   machineArea: {
     justifyContent: 'flex-end',
+  },
+  drop: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    alignItems: 'center',
   },
   actions: {
     flexDirection: 'row',

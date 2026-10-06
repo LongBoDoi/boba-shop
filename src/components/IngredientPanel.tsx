@@ -116,10 +116,15 @@ function OptionButton({ label, selected, onPress, children }: OptionButtonProps)
       accessibilityLabel={label}
       accessibilityState={{ selected }}
     >
-      {children}
+      <View style={[styles.optionIcon, selected && styles.optionIconSelected]}>{children}</View>
       <Text style={styles.optionLabel} numberOfLines={2}>
         {label}
       </Text>
+      {selected && (
+        <View style={styles.optionCheck}>
+          <Text style={styles.optionCheckText}>✓</Text>
+        </View>
+      )}
     </AnimatedPressable>
   );
 }
@@ -186,8 +191,8 @@ const styles = StyleSheet.create({
     width: '31.8%',
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 6,
+    gap: 5,
+    paddingHorizontal: 5,
     paddingVertical: 5,
     borderRadius: 14,
     borderWidth: 2,
@@ -199,11 +204,41 @@ const styles = StyleSheet.create({
     borderColor: colors.primary,
     backgroundColor: colors.primaryTint,
   },
+  optionIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 11,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.floor,
+  },
+  optionIconSelected: {
+    backgroundColor: '#FFFFFF',
+  },
   optionLabel: {
     flex: 1,
     fontSize: 12,
     lineHeight: 15,
     fontFamily: fonts.semi,
     color: colors.ink,
+  },
+  optionCheck: {
+    position: 'absolute',
+    top: -6,
+    right: -6,
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: colors.primary,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
+  },
+  optionCheckText: {
+    color: '#FFFFFF',
+    fontSize: 10,
+    lineHeight: 13,
+    fontFamily: fonts.display,
   },
 });
