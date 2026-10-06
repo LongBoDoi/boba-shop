@@ -12,7 +12,7 @@ import { ShopBackdrop } from './art/ShopBackdrop';
 import { Cup } from './Cup';
 import { FloatingText } from './FloatingText';
 
-export const COUNTER_HEIGHT = 36;
+export const COUNTER_HEIGHT = 44;
 /** Customers stand raised so the counter hides their waist, not their shoulders. */
 const FIGURE_LIFT = 14;
 const BUBBLE_CUP = 26;
