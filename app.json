@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "boba-shop",
+    "name": "Tiệm Trà Sữa",
     "slug": "boba-shop",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -11,7 +11,7 @@
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
+        "backgroundColor": "#FFE3EC",
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
@@ -19,7 +19,18 @@
       "predictiveBackGestureEnabled": false
     },
     "web": {
-      "favicon": "./assets/favicon.png"
-    }
+      "favicon": "./assets/favicon.png",
+      "output": "single"
+    },
+    "backgroundColor": "#FFE3EC",
+    "extra": {
+      "eas": {
+        "projectId": "a7ab235c-52a1-459c-a82e-cca1e4c3cf36"
+      }
+    },
+    "owner": "manhlong",
+    "plugins": [
+      "expo-font"
+    ]
   }
 }
