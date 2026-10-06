@@ -1,5 +1,7 @@
-import { StyleSheet, View } from 'react-native';
+import { useState } from 'react';
+import { LayoutChangeEvent, StyleSheet, View } from 'react-native';
 
+import { ShopFloor } from '../components/art/ShopFloor';
 import { CustomerStage } from '../components/CustomerStage';
 import { Customer, Departure, Feedback } from '../game/reducer';
 import { colors } from '../theme';
@@ -28,6 +30,7 @@ export function CounterPage({
   onTakeOrder,
   onFocusTicket,
 }: CounterPageProps) {
+  const [floor, setFloor] = useState({ width, height: 0 });
   return (
     <View style={[styles.page, { width }]}>
       <CustomerStage
@@ -41,7 +44,15 @@ export function CounterPage({
         onTakeOrder={onTakeOrder}
         onFocusTicket={onFocusTicket}
       />
-      <View style={styles.floor} />
+      <View
+        style={styles.floor}
+        onLayout={(event: LayoutChangeEvent) => {
+          const { width: w, height: h } = event.nativeEvent.layout;
+          setFloor({ width: w, height: h });
+        }}
+      >
+        <ShopFloor width={floor.width} height={floor.height} />
+      </View>
     </View>
   );
 }
