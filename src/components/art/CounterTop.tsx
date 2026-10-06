@@ -18,7 +18,7 @@ export const CounterTop = memo(function CounterTop({ width, height }: CounterTop
   const s = Math.min(1.15, width / 390);
   // The counter is drawn in 3D: a shallow top surface that recedes away from us, a slab edge (its
   // thickness) that overhangs, and a tall front face (the barista-side cabinet) down to the floor.
-  const surfaceH = Math.round(height * 0.42);
+  const surfaceH = Math.round(height * 0.3);
   const slab = Math.max(10, Math.round(height * 0.04));
   const faceTop = surfaceH + slab;
   const vpx = width / 2;
@@ -27,8 +27,7 @@ export const CounterTop = memo(function CounterTop({ width, height }: CounterTop
     <Svg width={width} height={height}>
       <Defs>
         <LinearGradient id="ctSurface" x1="0" y1="0" x2="0" y2="1">
-          <Stop offset="0" stopColor="#B5824F" />
-          <Stop offset="0.55" stopColor={colors.counter} />
+          <Stop offset="0" stopColor={colors.counterEdge} />
           <Stop offset="1" stopColor="#E7BB86" />
         </LinearGradient>
         <LinearGradient id="ctSheen" x1="0" y1="0" x2="1" y2="1">
@@ -41,7 +40,7 @@ export const CounterTop = memo(function CounterTop({ width, height }: CounterTop
           <Stop offset="1" stopColor="#B07A48" />
         </LinearGradient>
         <LinearGradient id="ctBackShade" x1="0" y1="0" x2="0" y2="1">
-          <Stop offset="0" stopColor="#6B421F" stopOpacity={0.38} />
+          <Stop offset="0" stopColor="#6B421F" stopOpacity={0.22} />
           <Stop offset="1" stopColor="#6B421F" stopOpacity={0} />
         </LinearGradient>
         <LinearGradient id="ctOverhang" x1="0" y1="0" x2="0" y2="1">
@@ -59,7 +58,7 @@ export const CounterTop = memo(function CounterTop({ width, height }: CounterTop
       })}
       {/* Glossy sheen + ambient shadow under the back ledge. */}
       <Rect width={width} height={surfaceH} fill="url(#ctSheen)" />
-      <Rect width={width} height={Math.min(34, surfaceH * 0.3)} fill="url(#ctBackShade)" />
+      <Rect width={width} height={Math.min(14, surfaceH * 0.22)} fill="url(#ctBackShade)" />
 
       {/* Slab edge (the counter's thickness) with a lit top and a shadowed underside. */}
       <Rect y={surfaceH} width={width} height={slab} fill={colors.counterLight} />

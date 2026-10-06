@@ -33,9 +33,9 @@ export const Counter = memo(function Counter({ width, height }: { width: number;
       {/* Lit top of the rim with a bright highlight catching the light. */}
       <Rect width={width} height={topH} fill="url(#rimTop)" />
       <Rect width={width} height={2.5} fill="#FFE9CC" opacity={0.85} />
-      {/* Rounded shade under the top edge, then a shadow where the rim meets the surface below. */}
+      {/* Soft shade under the lit top. The bottom carries no hard line: the rim's front face ends on
+          the same wood tone the surface below starts with, so the two read as one continuous counter. */}
       <Rect y={topH - 2} width={width} height={2} fill={colors.counterEdge} opacity={0.4} />
-      <Rect y={height - 2.5} width={width} height={2.5} fill="#6B421F" opacity={0.6} />
     </Svg>
   );
 });
