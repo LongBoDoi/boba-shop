@@ -16,17 +16,12 @@ interface CounterTopProps {
 export const CounterTop = memo(function CounterTop({ width, height }: CounterTopProps) {
   if (height <= 0 || width <= 0) return null;
   const s = Math.min(1.15, width / 390);
-  // The counter is drawn in 3D: a top surface that recedes away from us, a slab edge (its
-  // thickness) that overhangs, and a front face (the barista-side cabinet) down to the floor.
-  const surfaceH = Math.round(height * 0.52);
+  // The counter is drawn in 3D: a shallow top surface that recedes away from us, a slab edge (its
+  // thickness) that overhangs, and a tall front face (the barista-side cabinet) down to the floor.
+  const surfaceH = Math.round(height * 0.42);
   const slab = Math.max(10, Math.round(height * 0.04));
   const faceTop = surfaceH + slab;
   const vpx = width / 2;
-  const vpy = -surfaceH * 0.9; // vanishing point above the surface, for grain perspective
-
-  // Props sit near the front of the surface; a back row is smaller for depth.
-  const backY = surfaceH * 0.46;
-  const frontY = surfaceH * 0.97;
 
   return (
     <Svg width={width} height={height}>
@@ -80,14 +75,15 @@ export const CounterTop = memo(function CounterTop({ width, height }: CounterTop
       <Rect y={height - 12} width={width} height={12} fill="#5E3C22" />
       <Rect y={height - 12} width={width} height={2} fill="#3A2410" opacity={0.6} />
 
-      {/* Props on the surface. */}
-      <NapkinBox cx={width * 0.22} cy={backY} scale={s * 0.82} />
-      <StrawCup cx={vpx} cy={backY} scale={s * 0.82} />
-      <Succulent cx={width * 0.8} cy={backY} scale={s * 0.82} />
-
-      <Register cx={width * 0.26} cy={frontY} scale={s} />
-      <CupStack cx={width * 0.56} cy={frontY} scale={s} />
-      <TipJar cx={width * 0.83} cy={frontY} scale={s} />
+      {/* Props in two tight groupings (not an even grid), drawn back-to-front: a till station on
+          the left (cup stack behind, register at the front, tip jar beside it) and a supply station
+          on the right (plant behind, straws + napkins), leaving open prep space in the middle. */}
+      <Succulent cx={width * 0.8} cy={surfaceH * 0.56} scale={s * 0.6} />
+      <CupStack cx={width * 0.15} cy={surfaceH * 0.72} scale={s * 0.8} />
+      <NapkinBox cx={width * 0.86} cy={surfaceH * 0.9} scale={s * 0.9} />
+      <TipJar cx={width * 0.43} cy={surfaceH * 0.96} scale={s * 0.86} />
+      <StrawCup cx={width * 0.68} cy={surfaceH * 0.99} scale={s * 0.84} />
+      <Register cx={width * 0.24} cy={surfaceH * 1.03} scale={s} />
     </Svg>
   );
 });
