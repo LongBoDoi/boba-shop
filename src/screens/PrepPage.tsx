@@ -8,9 +8,9 @@ import { KitchenBackdrop } from '../components/art/KitchenBackdrop';
 import { Button } from '../components/Button';
 import { Cup } from '../components/Cup';
 import { Point } from '../components/Effects';
-import { IngredientPanel } from '../components/IngredientPanel';
+import { IngredientShelves } from '../components/IngredientShelves';
 import { OrderTicket } from '../components/OrderTicket';
-import { MACHINE_BASE, MACHINE_HEAD, SealingMachine } from '../components/SealingMachine';
+import { MACHINE_BASE, SealingMachine } from '../components/SealingMachine';
 import { Ticket, TicketRail } from '../components/TicketRail';
 import { CategoryId, Drink, getIngredient } from '../game/ingredients';
 import { DayConfig } from '../game/levels';
@@ -40,7 +40,6 @@ interface PrepPageProps {
   config: DayConfig;
   cup: Drink;
   cupId: number;
-  activeCategory: CategoryId;
   tickets: Ticket[];
   selectedSlot: number | null;
   selectedCustomer: Customer | null;
@@ -51,7 +50,6 @@ interface PrepPageProps {
   measureToken: number;
   onGeometry: (geometry: PrepGeometry) => void;
   onSelectTicket: (slot: number) => void;
-  onSelectCategory: (category: CategoryId) => void;
   onPick: (category: CategoryId, optionId: string) => void;
   onClear: () => void;
   onServe: () => void;
@@ -59,13 +57,12 @@ interface PrepPageProps {
   trashRef: React.RefObject<View | null>;
 }
 
-/** The drink-making screen: choose a ticket, build the cup, and serve it. */
+/** The drink-making screen: pick an order, tap ingredients off the kitchen shelves, and serve. */
 export function PrepPage({
   width,
   config,
   cup,
   cupId,
-  activeCategory,
   tickets,
   selectedSlot,
   selectedCustomer,
@@ -75,14 +72,13 @@ export function PrepPage({
   measureToken,
   onGeometry,
   onSelectTicket,
-  onSelectCategory,
   onPick,
   onClear,
   onServe,
   machineRef,
   trashRef,
 }: PrepPageProps) {
-  const [station, setStation] = useState({ width: 0, height: 0 });
+  const [scene, setScene] = useState({ width: 0, height: 0 });
   const insets = useSafeAreaInsets();
   const cupPrice = drinkPrice(cup);
   const canServe = Boolean(selectedCustomer && cup.tea);
@@ -91,14 +87,12 @@ export function PrepPage({
     : !cup.tea
       ? 'Chọn trà trước'
       : `Phục vụ ${selectedCustomer.name} ➜`;
-  const cupWidth = Math.round(
-    Math.max(56, Math.min(140, station.width * 0.34, station.height ? (station.height - 24 - MACHINE_HEAD - MACHINE_BASE - 22) / 1.3 : 90)),
-  );
+  const cupWidth = Math.round(Math.max(54, Math.min(92, scene.width * 0.22, scene.height * 0.16)));
 
   // Report where the cup and bin sit (window coordinates) whenever the layout or page changes,
   // so the effects overlay can aim coins and the toss. Re-measured when measureToken bumps.
   useEffect(() => {
-    if (station.height === 0) return;
+    if (scene.height === 0) return;
     machineRef.current?.measureInWindow((x, y, w, h) => {
       const machine: Point = { x: x + w / 2, y: y + h - MACHINE_BASE - (cupWidth * 1.3) / 2 - 4 };
       trashRef.current?.measureInWindow((tx, ty, tw, th) => {
@@ -106,22 +100,27 @@ export function PrepPage({
       });
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [station.width, station.height, cupWidth, measureToken]);
+  }, [scene.width, scene.height, cupWidth, measureToken]);
 
   return (
     <View style={[styles.page, { width }]}>
       <TicketRail tickets={tickets} selectedSlot={selectedSlot} cup={cup} config={config} clock={clock} onSelect={onSelectTicket} />
 
       <View
-        style={styles.station}
+        style={styles.scene}
         onLayout={(event: LayoutChangeEvent) => {
           const { width: w, height: h } = event.nativeEvent.layout;
-          setStation({ width: w, height: h });
+          setScene({ width: w, height: h });
         }}
       >
-        {station.height > 0 && <KitchenBackdrop width={station.width} height={station.height} />}
-        <View style={styles.stationInner}>
-          <View style={styles.ticketColumn}>
+        {scene.height > 0 && <KitchenBackdrop width={scene.width} height={scene.height} />}
+
+        {/* Shelves of tappable ingredients fill the wall. */}
+        <IngredientShelves config={config} cup={cup} onPick={onPick} />
+
+        {/* The order you're making + the cup on the machine, standing on the counter. */}
+        <View style={styles.counter}>
+          <View style={styles.recipe}>
             <OrderTicket customer={selectedCustomer} cup={cup} config={config} />
           </View>
           <View ref={machineRef} style={styles.machineArea}>
@@ -134,8 +133,6 @@ export function PrepPage({
           </View>
         </View>
       </View>
-
-      <IngredientPanel config={config} cup={cup} activeCategory={activeCategory} onSelectCategory={onSelectCategory} onPick={onPick} />
 
       <View style={[styles.actions, { paddingBottom: 10 + insets.bottom }]}>
         <View ref={trashRef} style={styles.clear}>
@@ -161,24 +158,27 @@ function FreshCup({ width, children }: { width: number; children: ReactNode }) {
 }
 
 /**
- * When the player taps an ingredient, a little picture of it falls into the cup on the machine —
- * so choosing in the panel visibly feeds the drink above it. Skipped for the "none" options.
+ * When the player taps an ingredient off a shelf, a little picture of it falls into the cup on the
+ * machine — so grabbing from the shelf visibly feeds the drink. Skipped for the "none" options.
  */
 function DropInIcon({ pick, cupWidth }: { pick: PickFx; cupWidth: number }) {
   const option = getIngredient(pick.category, pick.id);
   const drop = useSharedValue(0);
   const cupHeight = Math.round(cupWidth * 1.3);
   useEffect(() => {
-    drop.set(withTiming(1, { duration: 420, easing: ease }));
+    drop.set(withTiming(1, { duration: 440, easing: ease }));
   }, [drop]);
   const style = useAnimatedStyle(() => ({
     opacity: interpolate(drop.value, [0, 0.15, 0.7, 1], [0, 1, 1, 0]),
-    transform: [{ translateY: interpolate(drop.value, [0, 1], [-cupHeight * 0.7, cupHeight * 0.18]) }, { scale: interpolate(drop.value, [0, 1], [1.1, 0.7]) }],
+    transform: [
+      { translateY: interpolate(drop.value, [0, 1], [-cupHeight * 0.85, cupHeight * 0.18]) },
+      { scale: interpolate(drop.value, [0, 1], [1.15, 0.7]) },
+    ],
   }));
   if (!option || option.isNone) return null;
   return (
     <Animated.View style={[styles.drop, { bottom: MACHINE_BASE + cupHeight * 0.4 }, style]} pointerEvents="none">
-      <IngredientIcon category={pick.category} id={pick.id} size={Math.round(cupWidth * 0.46)} />
+      <IngredientIcon category={pick.category} id={pick.id} size={Math.round(cupWidth * 0.5)} />
     </Animated.View>
   );
 }
@@ -188,19 +188,18 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.floor,
   },
-  station: {
+  scene: {
     flex: 1,
     overflow: 'hidden',
   },
-  stationInner: {
-    flex: 1,
+  counter: {
     flexDirection: 'row',
-    gap: 10,
+    alignItems: 'flex-end',
+    gap: 8,
     paddingHorizontal: 10,
-    paddingTop: 10,
     paddingBottom: 8,
   },
-  ticketColumn: {
+  recipe: {
     flex: 1,
   },
   machineArea: {

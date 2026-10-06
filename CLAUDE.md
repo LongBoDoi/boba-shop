@@ -53,12 +53,12 @@ src/game/               pure game logic, no React
 src/screens/            TitleScreen, DayEndScreen, and the in-play screens:
   GameScreen.tsx        orchestrator: HUD, the two-page swipe pager + tab indicator, effects/opening/pause overlays
   CounterPage.tsx       page 1 — the customer stage (take orders here)
-  PrepPage.tsx          page 2 — ticket rail, order detail, machine/cup, ingredient panel, serve/clear,
-                        all set on a shared KitchenBackdrop so it reads as the same shop
-src/components/         Cup (layered, animated), CustomerStage, TicketRail, OrderTicket, IngredientPanel,
+  PrepPage.tsx          page 2 — ticket rail; a kitchen wall of tappable ingredient shelves; and the
+                        recipe + machine/cup on the counter; serve/clear. Set on a shared KitchenBackdrop.
+src/components/         Cup (layered, animated), CustomerStage, TicketRail, OrderTicket, IngredientShelves,
                         Hud, SealingMachine, Effects (coins/confetti/toss), OpeningSign…
 src/components/art/     SVG illustrations: Character, IngredientIcon, ShopBackdrop (customer wall),
-                        KitchenBackdrop (prep wall: shared awning/wall/wood counter + stocked shelves),
+                        KitchenBackdrop (prep room: shared awning/wall/wood counter),
                         Counter, CounterTop, Tiles, ToppingShelf
 src/motion.ts           shared animation timings/easings
 src/theme.ts            colours and font family names
@@ -73,12 +73,18 @@ Pha chế = # tickets to make); tapping a tab scrolls the pager (swiping is the 
 its `measureToken` on scroll-settle, and reports them up via `onGeometry` for the effects overlay.
 
 Both pages deliberately share one visual world so swiping feels like turning around inside one shop:
-the Counter uses `ShopBackdrop` and the Prep station uses `KitchenBackdrop`, and both draw the same pink
-striped wall, scalloped awning and warm wooden counter (same wood tones as `CounterTop`). The Prep wall
-is stocked like a real tea kitchen (tea-canister + topping-jar shelves, a utensil pegboard, a kettle,
-and cup stack / blender / milk jug standing on the counter). When the player taps an ingredient,
-`GameScreen` bumps a `pickFx` signal that `PrepPage` turns into a little ingredient icon dropping into the
-cup on the machine, so choosing in the panel visibly feeds the drink above it.
+the Counter uses `ShopBackdrop` and the Prep room uses `KitchenBackdrop`, and both draw the same pink
+striped wall, scalloped awning and warm wooden counter (same wood tones as `CounterTop`).
+
+**The kitchen wall IS the ingredient selector** — there is no card panel. `IngredientShelves` renders one
+wooden shelf per unlocked category (`config.categories`), each holding that category's options
+(`config.options[category]`) as tappable objects drawn from `IngredientIcon`. Tapping an object dispatches
+`PICK` (toppings toggle, others set). Shelves share the wall height evenly with a per-shelf cap, so sparse
+early days show big objects and the full day-5 set (6 shelves) still fits without scrolling; on very short
+shelves the object captions auto-hide (the icons + the recipe still identify everything). Selected objects
+highlight with a ✓. When the player taps one, `GameScreen` bumps a `pickFx` signal that `PrepPage` turns
+into a little ingredient icon dropping into the cup on the machine, so grabbing from the shelf visibly
+feeds the drink. The selected order's recipe (`OrderTicket`) and the cup stand on the counter below.
 
 ### Game rules worth knowing
 
@@ -97,8 +103,9 @@ cup on the machine, so choosing in the panel visibly feeds the drink above it.
   double toppings (5). More teas/toppings unlock through day 5.
 - Serving: 0 mistakes = full price + tip (faster since ordering = bigger tip), 1 mistake = half price,
   2+ = no pay. Hitting `config.goal` passes the day; stars at 1×, 1.3×, 1.6× the goal.
-- Serving requires a tea. Picking an ingredient auto-advances to the next unfilled tab. A customer stays
-  in their counter slot from `requesting` through to being served (taking the order does not free the slot).
+- Serving requires a tea. Ingredients are tapped straight off the kitchen shelves (see "The two pages").
+  A customer stays in their counter slot from `requesting` through to being served (taking the order does
+  not free the slot).
 
 ### How animations get their events
 

@@ -116,13 +116,6 @@ export function GameScreen({ state, dispatch }: GameScreenProps) {
     },
     [dispatch],
   );
-  const selectCategory = useCallback(
-    (category: CategoryId) => {
-      tapHaptic();
-      dispatch({ type: 'SET_CATEGORY', category });
-    },
-    [dispatch],
-  );
   const pick = useCallback(
     (category: CategoryId, optionId: string) => {
       tapHaptic();
@@ -207,7 +200,6 @@ export function GameScreen({ state, dispatch }: GameScreenProps) {
             config={config}
             cup={state.cup}
             cupId={state.cupId}
-            activeCategory={state.activeCategory}
             tickets={tickets}
             selectedSlot={state.selectedSlot}
             selectedCustomer={selectedCustomer}
@@ -217,7 +209,6 @@ export function GameScreen({ state, dispatch }: GameScreenProps) {
             measureToken={measureToken}
             onGeometry={setPrep}
             onSelectTicket={selectTicket}
-            onSelectCategory={selectCategory}
             onPick={pick}
             onClear={() => dispatch({ type: 'CLEAR_CUP' })}
             onServe={() => dispatch({ type: 'SERVE' })}
