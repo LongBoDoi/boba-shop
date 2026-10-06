@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { LayoutChangeEvent, StyleSheet, View } from 'react-native';
 
-import { ShopFloor } from '../components/art/ShopFloor';
+import { CounterTop } from '../components/art/CounterTop';
 import { CustomerStage } from '../components/CustomerStage';
 import { Customer, Departure, Feedback } from '../game/reducer';
 import { colors } from '../theme';
@@ -51,7 +51,7 @@ export function CounterPage({
           setFloor({ width: w, height: h });
         }}
       >
-        <ShopFloor width={floor.width} height={floor.height} />
+        <CounterTop width={floor.width} height={floor.height} />
       </View>
     </View>
   );
