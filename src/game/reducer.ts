@@ -8,13 +8,22 @@ import { createRng } from './random';
 export type Phase = 'title' | 'playing' | 'dayEnd';
 export type Tone = 'good' | 'ok' | 'bad';
 export type Outcome = 'perfect' | 'close' | 'wrong' | 'timeout';
+/** `requesting` = waiting for the player to take the order; `ordered` = waiting for the drink. */
+export type CustomerStatus = 'requesting' | 'ordered';
 
 export interface Customer {
   id: number;
   look: CustomerLook;
   name: string;
   order: Drink;
+  status: CustomerStatus;
+  /** When they walked up; drives the order-taking patience. */
   arrivedAt: number;
+  /** How long they'll wait for their order to be taken. */
+  orderPatienceMs: number;
+  /** When the order was taken; null until then. Drives the serve patience. */
+  orderedAt: number | null;
+  /** How long they'll wait for the finished drink after ordering. */
   patienceMs: number;
 }
 
@@ -74,6 +83,7 @@ export type GameAction =
   | { type: 'GO_TO_TITLE' }
   | { type: 'SET_PAUSED'; paused: boolean }
   | { type: 'TICK'; dt: number }
+  | { type: 'TAKE_ORDER'; slot: number }
   | { type: 'SELECT_SLOT'; slot: number }
   | { type: 'SET_CATEGORY'; category: CategoryId }
   | { type: 'PICK'; category: CategoryId; optionId: string }
@@ -125,8 +135,10 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       return state.phase === 'playing' ? { ...state, paused: action.paused } : state;
     case 'TICK':
       return tick(state, action.dt);
+    case 'TAKE_ORDER':
+      return isActive(state) ? takeOrder(state, action.slot) : state;
     case 'SELECT_SLOT':
-      return isActive(state) && state.slots[action.slot]
+      return isActive(state) && state.slots[action.slot]?.status === 'ordered'
         ? { ...state, selectedSlot: action.slot }
         : state;
     case 'SET_CATEGORY':
@@ -156,10 +168,17 @@ function tick(state: GameState, dt: number): GameState {
   let missed = 0;
 
   slots.forEach((customer, slot) => {
-    if (customer && clock - customer.arrivedAt >= customer.patienceMs) {
+    if (!customer) return;
+    const waited =
+      customer.status === 'requesting'
+        ? clock - customer.arrivedAt
+        : clock - (customer.orderedAt ?? customer.arrivedAt);
+    const limit = customer.status === 'requesting' ? customer.orderPatienceMs : customer.patienceMs;
+    if (waited >= limit) {
       slots[slot] = null;
       missed += 1;
-      feedback.push({ id: nextId++, slot, text: 'Chậm quá! 😤', tone: 'bad', expiresAt: clock + FEEDBACK_MS });
+      const text = customer.status === 'requesting' ? 'Chưa kịp nhận! 😤' : 'Chậm quá! 😤';
+      feedback.push({ id: nextId++, slot, text, tone: 'bad', expiresAt: clock + FEEDBACK_MS });
       departures.push({ id: nextId++, customer, slot, outcome: 'timeout', earned: 0, drink: null, at: clock });
     }
   });
@@ -175,7 +194,10 @@ function tick(state: GameState, dt: number): GameState {
         look: generateLook(rng),
         name: rng.pick(NAMES),
         order: generateOrder(config, rng),
+        status: 'requesting',
         arrivedAt: clock,
+        orderPatienceMs: config.orderPatienceMs,
+        orderedAt: null,
         patienceMs: config.patienceMs,
       };
       nextSpawnAt = clock + rng.int(config.spawnMinMs, config.spawnMaxMs);
@@ -201,19 +223,40 @@ function tick(state: GameState, dt: number): GameState {
   };
 }
 
-/** Keep the current selection if that customer is still there, else pick whoever has waited longest. */
+/**
+ * Keep the current selection if that customer still has an open order, else pick whoever
+ * has been waiting longest for their drink. Only `ordered` customers can be selected.
+ */
 function resolveSelection(slots: (Customer | null)[], current: number | null): number | null {
-  if (current !== null && slots[current]) return current;
+  if (current !== null && slots[current]?.status === 'ordered') return current;
   let best: number | null = null;
-  let bestArrival = Infinity;
+  let bestOrderedAt = Infinity;
   for (let slot = 0; slot < slots.length; slot++) {
     const customer = slots[slot];
-    if (customer && customer.arrivedAt < bestArrival) {
+    if (customer?.status === 'ordered' && (customer.orderedAt ?? 0) < bestOrderedAt) {
       best = slot;
-      bestArrival = customer.arrivedAt;
+      bestOrderedAt = customer.orderedAt ?? 0;
     }
   }
   return best;
+}
+
+/** Take a waiting customer's order: reveal the recipe as a ticket and start the serve timer. */
+function takeOrder(state: GameState, slot: number): GameState {
+  const customer = state.slots[slot];
+  if (!customer || customer.status !== 'requesting') return state;
+  const slots = [...state.slots];
+  slots[slot] = { ...customer, status: 'ordered', orderedAt: state.clock };
+  return {
+    ...state,
+    slots,
+    selectedSlot: state.selectedSlot ?? slot,
+    nextId: state.nextId + 1,
+    feedback: [
+      ...state.feedback,
+      { id: state.nextId, slot, text: 'Đã nhận order ✓', tone: 'good', expiresAt: state.clock + FEEDBACK_MS },
+    ],
+  };
 }
 
 function isFilled(cup: Drink, category: CategoryId) {
@@ -276,7 +319,8 @@ function serve(state: GameState): GameState {
 
   const { quality } = evaluateDrink(state.cup, customer.order, state.config.categories);
   const price = drinkPrice(customer.order);
-  const patienceLeft = Math.max(0, 1 - (state.clock - customer.arrivedAt) / customer.patienceMs);
+  const orderedAt = customer.orderedAt ?? customer.arrivedAt;
+  const patienceLeft = Math.max(0, 1 - (state.clock - orderedAt) / customer.patienceMs);
 
   let earned = 0;
   let tip = 0;

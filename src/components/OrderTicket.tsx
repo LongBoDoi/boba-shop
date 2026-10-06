@@ -23,7 +23,7 @@ export function OrderTicket({ customer, cup, config }: OrderTicketProps) {
   if (!customer) {
     return (
       <View style={[styles.ticket, styles.waiting]}>
-        <Text style={styles.waitingText}>Đang chờ khách…</Text>
+        <Text style={styles.waitingText}>Chọn một order để pha</Text>
       </View>
     );
   }

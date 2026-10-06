@@ -21,7 +21,6 @@ export interface Point {
 }
 
 export interface EffectsGeometry {
-  slotCenters: Point[];
   cup: Point;
   money: Point;
   trash: Point;
@@ -42,44 +41,17 @@ export function EffectsLayer({ departures, discarded, geometry, cupWidth }: Effe
   return (
     <View style={StyleSheet.absoluteFill} pointerEvents="none">
       {discarded && <TossedCup key={discarded.id} drink={discarded.drink} from={geometry.cup} to={geometry.trash} cupWidth={cupWidth} />}
-      {departures.map((departure) => {
-        const target = geometry.slotCenters[departure.slot];
-        if (!target) return null;
-        return (
-          <View key={departure.id} style={StyleSheet.absoluteFill}>
-            {departure.drink && <FlyingCup drink={departure.drink} from={geometry.cup} to={target} cupWidth={cupWidth} />}
-            {departure.outcome === 'perfect' && <Confetti at={target} delay={450} />}
-            {departure.earned > 0 && (
-              <CoinFlight from={target} to={geometry.money} count={Math.min(3, Math.max(1, Math.ceil(departure.earned / 3)))} />
-            )}
-          </View>
-        );
-      })}
+      {/* The served cup is carried off by the customer on the counter page, so here we only
+          reward the sale: confetti and coins spring from the prep machine to the HUD wallet. */}
+      {departures.map((departure) => (
+        <View key={departure.id} style={StyleSheet.absoluteFill}>
+          {departure.outcome === 'perfect' && <Confetti at={geometry.cup} delay={300} />}
+          {departure.earned > 0 && (
+            <CoinFlight from={geometry.cup} to={geometry.money} count={Math.min(3, Math.max(1, Math.ceil(departure.earned / 3)))} />
+          )}
+        </View>
+      ))}
     </View>
-  );
-}
-
-function FlyingCup({ drink, from, to, cupWidth }: { drink: Drink; from: Point; to: Point; cupWidth: number }) {
-  const progress = useSharedValue(0);
-  useEffect(() => {
-    progress.value = withDelay(150, withTiming(1, { duration: 600, easing: easeInOut }));
-  }, [progress]);
-  const cupHeight = cupWidth * 1.3;
-  const style = useAnimatedStyle(() => {
-    const p = progress.value;
-    return {
-      opacity: p < 0.85 ? 1 : (1 - p) / 0.15,
-      transform: [
-        { translateX: from.x + (to.x - from.x) * p - cupWidth / 2 },
-        { translateY: from.y + (to.y - from.y) * p - 40 * 4 * p * (1 - p) - cupHeight / 2 },
-        { scale: 1 - p * 0.65 },
-      ],
-    };
-  });
-  return (
-    <Animated.View style={[styles.flyer, style]}>
-      <Cup drink={drink} width={cupWidth} backgroundColor="transparent" sealed tapered={false} />
-    </Animated.View>
   );
 }
 

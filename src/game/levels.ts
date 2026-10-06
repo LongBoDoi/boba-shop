@@ -18,6 +18,9 @@ export interface DayConfig {
   maxToppings: number;
   slots: number;
   durationMs: number;
+  /** How long a customer waits for the player to take their order. */
+  orderPatienceMs: number;
+  /** How long a customer waits for the finished drink after ordering. */
   patienceMs: number;
   spawnMinMs: number;
   spawnMaxMs: number;
@@ -40,6 +43,8 @@ export function getDayConfig(day: number): DayConfig {
     maxToppings: day >= 5 ? 2 : 1,
     slots: day === 1 ? 2 : 3,
     durationMs: 90_000,
+    // Taking the order is quick, so this window is short and tightens a little each day.
+    orderPatienceMs: Math.max(9_000, 14_000 - (day - 1) * 500),
     // More categories take longer to build, so they buy extra patience.
     patienceMs: Math.max(25_000, 40_000 + categories.length * 2_000 - (day - 1) * 2_500),
     spawnMinMs,

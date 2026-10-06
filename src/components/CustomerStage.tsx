@@ -25,7 +25,18 @@ interface CustomerStageProps {
   selectedSlot: number | null;
   clock: number;
   feedback: Feedback[];
-  onSelect: (slot: number) => void;
+  /** Tap a waiting customer to take their order. */
+  onTakeOrder: (slot: number) => void;
+  /** Tap a customer whose order is already taken to jump to their ticket on the prep page. */
+  onFocusTicket: (slot: number) => void;
+}
+
+/** Fraction of patience left for whichever stage the customer is in (1 = full, 0 = gave up). */
+function patienceOf(customer: Customer, clock: number) {
+  if (customer.status === 'requesting') {
+    return Math.max(0, 1 - (clock - customer.arrivedAt) / customer.orderPatienceMs);
+  }
+  return Math.max(0, 1 - (clock - (customer.orderedAt ?? customer.arrivedAt)) / customer.patienceMs);
 }
 
 /** Character size for a stage, shared with the effects layer so cups land on the right spot. */
@@ -39,7 +50,7 @@ export function stageMetrics(width: number, height: number, slotCount: number) {
   return { slotWidth, charWidth, charHeight, bubbleBottom, bubbleCenterY };
 }
 
-export function CustomerStage({ width, height, slots, departures, selectedSlot, clock, feedback, onSelect }: CustomerStageProps) {
+export function CustomerStage({ width, height, slots, departures, selectedSlot, clock, feedback, onTakeOrder, onFocusTicket }: CustomerStageProps) {
   const metrics = stageMetrics(width, height, slots.length);
 
   return (
@@ -50,10 +61,16 @@ export function CustomerStage({ width, height, slots, departures, selectedSlot, 
           <Pressable
             key={slot}
             style={styles.slot}
-            onPress={() => onSelect(slot)}
+            onPress={() => (customer?.status === 'requesting' ? onTakeOrder(slot) : onFocusTicket(slot))}
             disabled={!customer}
             accessibilityRole="button"
-            accessibilityLabel={customer ? `Khách ${customer.name}` : 'Chỗ trống'}
+            accessibilityLabel={
+              customer
+                ? customer.status === 'requesting'
+                  ? `Nhận order của ${customer.name}`
+                  : `Xem order của ${customer.name}`
+                : 'Chỗ trống'
+            }
           >
             {departures
               .filter((departure) => departure.slot === slot)
@@ -65,7 +82,7 @@ export function CustomerStage({ width, height, slots, departures, selectedSlot, 
                 key={customer.id}
                 customer={customer}
                 selected={slot === selectedSlot}
-                patience={Math.max(0, 1 - (clock - customer.arrivedAt) / customer.patienceMs)}
+                patience={patienceOf(customer, clock)}
                 metrics={metrics}
                 enterFrom={slot < slots.length / 2 ? -1 : 1}
               />
@@ -135,6 +152,9 @@ function ActiveCustomer({ customer, selected, patience, metrics, enterFrom }: Ac
   }));
 
   const ringColor = patience > 0.6 ? colors.good : patience > 0.3 ? colors.ok : colors.bad;
+  const requesting = customer.status === 'requesting';
+  // A requesting customer always invites a tap; an ordered one points to its selected ticket.
+  const highlighted = requesting || selected;
 
   return (
     <>
@@ -142,20 +162,35 @@ function ActiveCustomer({ customer, selected, patience, metrics, enterFrom }: Ac
         <Character look={customer.look} mood={mood} blinking={blinking} width={metrics.charWidth} />
       </Animated.View>
       <Animated.View style={[styles.bubbleWrap, { bottom: metrics.bubbleBottom }, bubbleStyle]}>
-        <View style={[styles.pointer, !selected && styles.hidden]}>
+        <View style={[styles.pointer, !highlighted && styles.hidden]}>
           <Svg width={16} height={10} viewBox="0 0 16 10">
-            <Path d="M1 1 H15 L8 9 Z" fill={colors.primary} />
+            <Path d="M1 1 H15 L8 9 Z" fill={requesting ? colors.gold : colors.primary} />
           </Svg>
         </View>
-        <View style={[styles.bubble, selected && styles.bubbleSelected]}>
-          <Cup drink={customer.order} width={BUBBLE_CUP} backgroundColor="#FFFFFF" straw />
+        <View style={[styles.bubble, highlighted && (requesting ? styles.bubbleAsk : styles.bubbleSelected)]}>
+          {requesting ? (
+            <OrderPad />
+          ) : (
+            <Cup drink={customer.order} width={BUBBLE_CUP} backgroundColor="#FFFFFF" straw />
+          )}
           <View style={styles.ring}>
             <PatienceRing fraction={patience} color={ringColor} />
           </View>
         </View>
-        <View style={[styles.bubbleTail, selected && styles.bubbleTailSelected]} />
+        <View style={[styles.bubbleTail, highlighted && (requesting ? styles.bubbleTailAsk : styles.bubbleTailSelected)]} />
       </Animated.View>
     </>
+  );
+}
+
+/** A little speech bubble with "…" shown over a customer who wants to order but hasn't yet. */
+function OrderPad() {
+  return (
+    <Svg width={BUBBLE_CUP} height={BUBBLE_CUP + 4} viewBox="0 0 26 30">
+      <Path d="M5 3 H21 A2 2 0 0 1 23 5 V27 H3 V5 A2 2 0 0 1 5 3 Z" fill="#FFFDF6" stroke={colors.primary} strokeWidth={1.6} />
+      <Path d="M7 1 V5 M13 1 V5 M19 1 V5" stroke={colors.primaryDark} strokeWidth={1.6} strokeLinecap="round" />
+      <Path d="M7 12 H19 M7 17 H19 M7 22 H15" stroke={colors.line} strokeWidth={1.6} strokeLinecap="round" />
+    </Svg>
   );
 }
 
@@ -265,6 +300,10 @@ const styles = StyleSheet.create({
   bubbleSelected: {
     borderColor: colors.primary,
   },
+  bubbleAsk: {
+    borderColor: colors.gold,
+    backgroundColor: '#FFFDF2',
+  },
   bubbleTail: {
     width: 10,
     height: 10,
@@ -277,6 +316,9 @@ const styles = StyleSheet.create({
   },
   bubbleTailSelected: {
     borderColor: colors.primary,
+  },
+  bubbleTailAsk: {
+    borderColor: colors.gold,
   },
   ring: {
     position: 'absolute',
