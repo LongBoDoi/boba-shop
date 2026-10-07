@@ -83,17 +83,26 @@ striped wall, scalloped awning and warm wooden counter (same wood tones as `Coun
 table along the bottom, and **the cup is a physical object you drag around it** (`PanResponder`; the pager
 is frozen via `onDragging` while you hold it). `layoutKitchen(config, w, h)` places everything absolutely —
 one row of tea dispensers, one of topping bins, one of ice/sugar/milk/foam — and gives each station a
-**dock**: the spot the cup is held while that machine runs into it. Dropping the cup still standing on the
-table sends it home; lifting it up to a machine docks it there (`findStation`), and only the docked machine
-responds — tapping any other one just nudges ("Kéo ly tới đây").
+**dock**: the spot the cup is held while that tap runs into it. Dropping the cup still standing on the
+table sends it home; lifting it to a *pouring* station docks it there (`findStation` only considers those),
+and only the docked one pours.
 
-- **Tea dispensers / milk cartons** — press *and hold* (`useHoldPour`): how long you hold is how much goes
-  in (`POUR_RATE` per second). The level rises live because the station owns the cup's liquid level as a
-  shared value (`Cup`'s `levelSv`/`fill`/`marks` props) and the cup shows the tea's colour while pouring
-  even before `POUR` is dispatched. Release commits `POUR { category, optionId, amount }`.
-- **Topping bins / foam tubs** — one tap is one scoop, with the scoop lifting and tipping into the cup.
-- **Ice chest** — a tap is a scoop of two cubes (`ICE_SCOOP`); **syrup pump** — a tap is one pump
-  (`SUGAR_PUMP`). The amount is how many times you worked it, shown on the machine itself.
+- **Tea dispensers / milk cartons — carry the cup to them.** Drag the cup up under the spout to dock it,
+  then press *and hold* (`useHoldPour`): how long you hold is how much goes in (`POUR_RATE` per second).
+  The level rises live because the station owns the cup's liquid level as a shared value (`Cup`'s
+  `levelSv`/`fill`/`marks` props) and the cup shows the tea's colour while pouring, before `POUR` is even
+  dispatched. Letting go commits `POUR { category, optionId, amount }` and sets the cup back on its mat
+  (so a docked cup never ends up hiding a shelf).
+- **Everything else — carry it to the cup.** Topping bins, the ice chest, the syrup bottle and the foam
+  tubs are dragged: `useCarry` keeps what's in hand, draws the tool following the finger above everything
+  else, and on release either tips it into the cup (`SCOOP` / `ICE_SCOOP` / `SUGAR_PUMP`) or puts it back.
+  The cup doesn't move for these — drop onto it wherever it stands. Ice and syrup show how many scoops or
+  pumps went in on the machine itself.
+
+**All of this is the raw responder API (`GRABBY`), not `Pressable`**: a `Pressable` cancels its press when
+the finger drifts or the browser decides it was a long-press, which cut pours short. These gestures end
+only when the finger actually lifts, and the pager is frozen (`onDragging`) for the duration. Equipment
+shows no "added ✓" badges — the order slip is the checklist; machines only dim when they're locked out.
 
 `Cup` draws the "đủ" line (`MIN_FILL`) and the clean-pour band (`GOOD_FILL`) on the glass, and the station
 drips tea down the side when the live level goes over the brim. The order slip (`OrderTicket`) is a compact

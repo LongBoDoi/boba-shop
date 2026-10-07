@@ -144,8 +144,8 @@ export const MIN_FILL = 0.6;
 export const GOOD_FILL = 0.85;
 /** How much of the cup one second of holding a spigot pours. */
 export const POUR_RATE = 0.55;
-/** Holding past this is just spilling on the floor — the pour animation stops here. */
-export const MAX_POUR = 1.25;
+/** Holding this long past the brim is pure waste; the tea keeps running over until then. */
+export const MAX_POUR = 2.2;
 
 /** One scoop of ice is two cubes: one scoop = ít đá, two = đá thường. */
 export const MAX_ICE_SCOOPS = 2;

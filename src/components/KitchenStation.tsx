@@ -1,12 +1,12 @@
-import { Fragment, ReactNode, useEffect, useMemo, useRef, useState } from 'react';
-import { PanResponder, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Fragment, ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { GestureResponderHandlers, PanResponder, StyleSheet, Text, View } from 'react-native';
 import Animated, {
   Easing,
   interpolate,
   SharedValue,
   useAnimatedStyle,
   useSharedValue,
-  withSequence,
+  withDelay,
   withTiming,
 } from 'react-native-reanimated';
 import Svg, { Circle, Defs, Ellipse, LinearGradient, Path, Rect, Stop } from 'react-native-svg';
@@ -30,11 +30,19 @@ import { colors, fonts } from '../theme';
 import { shade } from './art/Character';
 import { Cup } from './Cup';
 
-const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
-
 // --------------------------------------------------------------------------- layout
 
 type StationKind = 'tea' | 'milk' | 'topping' | 'ice' | 'sugar' | 'foam';
+
+/** Tea and milk are poured into the cup; everything else is carried over to it. */
+const IS_POURED: Record<StationKind, boolean> = {
+  tea: true,
+  milk: true,
+  topping: false,
+  ice: false,
+  sugar: false,
+  foam: false,
+};
 
 interface Station {
   key: string;
@@ -49,13 +57,13 @@ interface Station {
   w: number;
   h: number;
   cx: number;
-  /** Full width of this station's column — the press target and the name under it. */
+  /** Full width of this station's column — the touch target and the name under it. */
   slot: number;
   /** Line the equipment stands on. */
   base: number;
   /** Where liquid leaves it, measured inside the box. */
   spout: number;
-  /** Where the cup's bottom goes while you work here: held just under the equipment. */
+  /** Where the cup's bottom goes while you hold this tap open. */
   dockY: number;
 }
 
@@ -99,8 +107,8 @@ export function cupSizeFor(W: number, H: number) {
 }
 
 /**
- * Arrange the kitchen: shelves of equipment above, a clear prep table along the bottom. Every
- * station gets a dock — the spot the cup is held while that piece of equipment runs into it.
+ * Arrange the kitchen: shelves of equipment above, a clear prep table along the bottom. Pouring
+ * stations also get a dock — the spot the cup is held while that tap runs into it.
  */
 export function layoutKitchen(config: DayConfig, W: number, H: number): KitchenLayout {
   const { width: cupW, height: cupH } = cupSizeFor(W, H);
@@ -142,7 +150,8 @@ export function layoutKitchen(config: DayConfig, W: number, H: number): KitchenL
       const w = Math.round(Math.min(slot - 8, maxH * aspect));
       const h = Math.round(w / aspect);
       const cx = Math.round(3 + slot * (i + 0.5));
-      const option = item.kind === 'ice' || item.kind === 'sugar' ? undefined : getIngredient(categoryOf(item.kind), item.id);
+      const option =
+        item.kind === 'ice' || item.kind === 'sugar' ? undefined : getIngredient(categoryOf(item.kind), item.id);
       stations.push({
         key: `${item.kind}-${item.id}`,
         kind: item.kind,
@@ -195,18 +204,20 @@ interface KitchenStationProps {
   onScoop: (category: 'toppings' | 'foam', optionId: string) => void;
   onIce: () => void;
   onSugar: () => void;
-  /** The pager must stop swiping while the cup is being dragged. */
+  /** The pager must stop swiping while something is being dragged around the kitchen. */
   onDragging: (dragging: boolean) => void;
   /** Measured for the coin/toss effects. */
   cupRef: React.RefObject<View | null>;
 }
 
 /**
- * The kitchen you actually work in. The cup is a physical object on the prep table: drag it under
- * a tea dispenser and hold the tap to fill it (how long you hold is how much tea goes in, and the
- * cup has to reach the "đủ" line), drag it to a bin and scoop toppings in, to the ice chest, the
- * syrup pump, the milk carton, the foam tub. A cup already holding tea locks the other dispensers —
- * tip it out to start over.
+ * The kitchen you actually work in. Two gestures, both held in the hand:
+ * - **drag the cup** up under a tea dispenser or a milk carton and **hold the tap** — how long you
+ *   hold is how much runs in, and the cup has to reach the "đủ" line to be worth serving;
+ * - **drag a topping, a scoop of ice, the syrup bottle or a spoon of foam straight onto the cup**,
+ *   wherever the cup happens to be standing.
+ *
+ * A cup already holding tea locks the other dispensers — tip it out to start over.
  */
 export function KitchenStation({
   width: W,
@@ -227,7 +238,7 @@ export function KitchenStation({
 
   const cupX = useSharedValue(homeX);
   const cupY = useSharedValue(homeY);
-  /** 0 = standing on the table, 1 = held up to a machine. */
+  /** 0 = standing on the table, 1 = held up to a tap. */
   const lift = useSharedValue(0);
   /** The live liquid level, which a held-open tap drives straight past the committed fill. */
   const level = useSharedValue(build.fill);
@@ -256,7 +267,7 @@ export function KitchenStation({
     const grab = { x: homeX, y: homeY };
     const settle = () => {
       onDragging(false);
-      // Left standing on the table it goes home; lifted up to a machine it docks there.
+      // Left standing on the table it goes home; lifted up to a tap it docks there.
       const lifted = cupY.get() + cupH < tableLine - 2;
       const found = lifted ? findStation(stations, cupX.get(), cupY.get(), cupW, cupH) : null;
       if (found) {
@@ -290,12 +301,37 @@ export function KitchenStation({
     });
   }, [stations, cupId, cupW, cupH, homeX, homeY, tableLine, W, H, cupX, cupY, lift, onDragging]);
 
+  // Finishing a pour sets the cup back on its mat, so it never ends up hiding a shelf you need.
+  const standDown = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const standCupDown = () => {
+    setDock({ cupId, key: null });
+    cupX.set(withTiming(homeX, timing(DURATION.slow)));
+    cupY.set(withTiming(homeY, timing(DURATION.slow)));
+    lift.set(withTiming(0, timing(DURATION.slow)));
+  };
+  useEffect(() => () => {
+    if (standDown.current) clearTimeout(standDown.current);
+  }, []);
+
+  const carry = useCarry({
+    cup,
+    build,
+    maxToppings: config.maxToppings,
+    cupX,
+    cupY,
+    cupW,
+    cupH,
+    homeX,
+    homeY,
+    onScoop,
+    onIce,
+    onSugar,
+    onDragging,
+    onNudge: nudge.show,
+  });
+
   const cupStyle = useAnimatedStyle(() => ({
-    transform: [
-      { translateX: cupX.value },
-      { translateY: cupY.value },
-      { scale: 1 + lift.value * 0.05 },
-    ],
+    transform: [{ translateX: cupX.value }, { translateY: cupY.value }, { scale: 1 + lift.value * 0.05 }],
   }));
   const shadowStyle = useAnimatedStyle(() => ({
     opacity: 0.22 * (1 - lift.value),
@@ -303,8 +339,15 @@ export function KitchenStation({
   }));
 
   const hint = nudge.text || hintFor(docked, cup, build);
-
-  const equipment = { cup, build, level, onNudge: nudge.show, onPouring: setPouring };
+  // Freeze the pager while a tap is held, so a drifting finger can't swipe the page away. When the
+  // tap is let go, the cup is put back down on the table a moment later.
+  const startPouring = (what: { category: 'tea' | 'milk'; id: string } | null) => {
+    setPouring(what);
+    onDragging(Boolean(what));
+    if (standDown.current) clearTimeout(standDown.current);
+    if (!what) standDown.current = setTimeout(standCupDown, 420);
+  };
+  const shared = { cup, build, level, onNudge: nudge.show, onPouring: startPouring, carry };
 
   return (
     <View style={StyleSheet.absoluteFill}>
@@ -318,24 +361,24 @@ export function KitchenStation({
       />
 
       {stations.map((station) => {
-        const props = { station, active: docked?.key === station.key, ...equipment };
+        const props = { station, active: docked?.key === station.key, ...shared };
         switch (station.kind) {
           case 'tea':
             return <TeaDispenser key={station.key} {...props} onPour={onPour} />;
           case 'milk':
             return <MilkCarton key={station.key} {...props} onPour={onPour} />;
           case 'topping':
-            return <ToppingBin key={station.key} {...props} max={config.maxToppings} onScoop={onScoop} />;
+            return <ToppingBin key={station.key} {...props} max={config.maxToppings} />;
           case 'ice':
-            return <IceChest key={station.key} {...props} onIce={onIce} />;
+            return <IceChest key={station.key} {...props} />;
           case 'sugar':
-            return <SyrupPump key={station.key} {...props} onSugar={onSugar} />;
+            return <SyrupPump key={station.key} {...props} />;
           default:
-            return <FoamTub key={station.key} {...props} onScoop={onScoop} />;
+            return <FoamTub key={station.key} {...props} />;
         }
       })}
 
-      {/* The cup: a thing on the table you pick up and carry around the kitchen. */}
+      {/* The cup: a thing on the table you pick up and carry to the taps. */}
       <Animated.View
         pointerEvents="none"
         style={[styles.cupShadow, { width: cupW, height: cupW * 0.3, top: cupH - cupW * 0.14 }, shadowStyle]}
@@ -344,7 +387,7 @@ export function KitchenStation({
         ref={cupRef}
         {...pan.panHandlers}
         accessible
-        accessibilityLabel="Ly đang pha — kéo tới thiết bị"
+        accessibilityLabel="Ly đang pha — kéo tới vòi trà"
         style={[styles.cup, { width: cupW }, cupStyle]}
       >
         {/* The cup's own body is glassy, so it carries a solid backing over busy shelves. */}
@@ -366,8 +409,15 @@ export function KitchenStation({
             marks
           />
         </FreshCup>
-        <Spill level={level} cupW={cupW} cupH={cupH} color={inCup.tea ? (getIngredient('tea', inCup.tea)?.color ?? colors.ink) : '#F7F4EC'} />
+        <Spill
+          level={level}
+          cupW={cupW}
+          cupH={cupH}
+          color={inCup.tea ? (getIngredient('tea', inCup.tea)?.color ?? colors.ink) : '#F7F4EC'}
+        />
       </Animated.View>
+
+      {carry.node}
 
       <View style={[styles.hintRow, { bottom: Math.max(2, (H - tableLine) / 2 - 9) }]} pointerEvents="none">
         <View style={styles.hint}>
@@ -380,11 +430,12 @@ export function KitchenStation({
   );
 }
 
-/** Which station the cup was dropped at: it has to be lined up under the equipment. */
+/** Which tap the cup was lifted to: it has to be lined up under the spout. */
 function findStation(stations: Station[], x: number, y: number, cupW: number, cupH: number): Station | null {
   let best: Station | null = null;
   let bestScore = Infinity;
   for (const station of stations) {
+    if (!IS_POURED[station.kind]) continue;
     const dx = Math.abs(x + cupW / 2 - station.cx) / (station.slot / 2 + cupW * 0.3);
     const dy = Math.abs(y - (station.base + 6)) / (cupH * 0.85);
     if (dx > 1 || dy > 1) continue;
@@ -397,26 +448,17 @@ function findStation(stations: Station[], x: number, y: number, cupW: number, cu
 }
 
 function hintFor(station: Station | null, cup: Drink, build: CupBuild): string {
-  if (!station) {
-    return build.fill >= MIN_FILL ? 'Kéo ly tới thiết bị khác, hoặc bấm Phục vụ' : 'Kéo ly tới bình trà rồi nhấn giữ vòi';
-  }
-  switch (station.kind) {
-    case 'tea':
+  if (station) {
+    if (station.kind === 'tea') {
       if (cup.tea && cup.tea !== station.id) return 'Ly đã có trà khác — Đổ bỏ rồi rót lại';
       if (build.fill < MIN_FILL) return `Nhấn giữ vòi: rót ${station.name} tới vạch`;
       return 'Đủ trà rồi — giữ thêm sẽ tràn';
-    case 'milk':
-      if (cup.milk && cup.milk !== station.id) return 'Ly đã có loại sữa khác rồi';
-      return `Nhấn giữ để rót ${station.name}`;
-    case 'topping':
-      return cup.toppings.includes(station.id) ? `Đã có ${station.name}` : `Chạm để múc ${station.name}`;
-    case 'ice':
-      return build.iceScoops >= MAX_ICE_SCOOPS ? 'Đá đã đầy' : 'Chạm để xúc đá (mỗi lần 2 viên)';
-    case 'sugar':
-      return build.sugarPumps >= SUGAR_STEPS.length ? 'Ngọt tối đa' : 'Chạm để nhấn bơm đường';
-    default:
-      return cup.foam ? 'Đã có kem' : `Chạm để phết ${station.name}`;
+    }
+    if (cup.milk && cup.milk !== station.id) return 'Ly đã có loại sữa khác rồi';
+    return `Nhấn giữ để rót ${station.name}`;
   }
+  if (build.fill < MIN_FILL) return 'Kéo ly tới bình trà rồi nhấn giữ vòi';
+  return 'Kéo topping, đá, đường… thả thẳng vào ly';
 }
 
 /** A short message that fades back to the normal hint. */
@@ -453,7 +495,7 @@ function Spill({ level, cupW, cupH, color }: { level: SharedValue<number>; cupW:
   return (
     <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, style]}>
       {[0.18, 0.5, 0.82].map((at, i) => (
-        <Drop key={at} level={level} left={cupW * at - 2} cupH={cupH} color={color} offset={i * 0.07} />
+        <Drop key={at} level={level} left={cupW * at - 2} cupH={cupH} color={color} offset={i * 0.12} />
       ))}
     </Animated.View>
   );
@@ -476,10 +518,215 @@ function Drop({
     const over = Math.max(0, level.value - 1 - offset);
     return {
       opacity: over > 0 ? 1 : 0,
-      transform: [{ translateY: interpolate(over, [0, MAX_POUR - 1], [0, cupH * 0.8]) }],
+      transform: [{ translateY: interpolate(over, [0, 0.55], [0, cupH * 0.82], 'clamp') }],
     };
   });
   return <Animated.View style={[styles.drop, { left, top: cupH * 0.1, backgroundColor: color }, style]} />;
+}
+
+// --------------------------------------------------------------------------- carrying things to the cup
+
+interface Carry {
+  /** Start carrying what this station holds; the gesture is owned by the station. */
+  begin: (station: Station) => void;
+  move: (dx: number, dy: number) => void;
+  drop: () => void;
+  /** The thing in hand, drawn above everything else. */
+  node: ReactNode;
+}
+
+/**
+ * Toppings, ice, syrup and foam aren't fetched by moving the cup — you take a scoop of them and
+ * drop it in. The station that was grabbed owns the gesture; this keeps what's in hand, draws it
+ * following the finger, and on release either tips it into the cup or puts it back.
+ */
+function useCarry({
+  cup,
+  build,
+  maxToppings,
+  cupX,
+  cupY,
+  cupW,
+  cupH,
+  homeX,
+  homeY,
+  onScoop,
+  onIce,
+  onSugar,
+  onDragging,
+  onNudge,
+}: {
+  cup: Drink;
+  build: CupBuild;
+  maxToppings: number;
+  cupX: SharedValue<number>;
+  cupY: SharedValue<number>;
+  cupW: number;
+  cupH: number;
+  homeX: number;
+  homeY: number;
+  onScoop: KitchenStationProps['onScoop'];
+  onIce: () => void;
+  onSugar: () => void;
+  onDragging: (dragging: boolean) => void;
+  onNudge: (message: string) => void;
+}): Carry {
+  const x = useSharedValue(0);
+  const y = useSharedValue(0);
+  const show = useSharedValue(0);
+  const tip = useSharedValue(0);
+  const [held, setHeld] = useState<Station | null>(null);
+  const size = Math.round(cupW * 0.95);
+
+  // Everything the drop needs to decide, kept fresh without rebuilding the gesture mid-drag.
+  const latest = useRef({ cup, build, maxToppings, cupW, cupH, homeX, homeY, size, onScoop, onIce, onSugar, onNudge });
+  useEffect(() => {
+    latest.current = { cup, build, maxToppings, cupW, cupH, homeX, homeY, size, onScoop, onIce, onSugar, onNudge };
+  });
+
+  const origin = useRef({ x: 0, y: 0, station: null as Station | null });
+
+  const begin = useCallback(
+    (station: Station) => {
+      origin.current = {
+        x: station.cx - latest.current.size / 2,
+        y: station.y + station.h * 0.1,
+        station,
+      };
+      x.set(origin.current.x);
+      y.set(origin.current.y);
+      tip.set(0);
+      show.set(1);
+      setHeld(station);
+      onDragging(true);
+    },
+    [x, y, tip, show, onDragging],
+  );
+
+  const move = useCallback(
+    (dx: number, dy: number) => {
+      x.set(origin.current.x + dx);
+      y.set(origin.current.y + dy);
+    },
+    [x, y],
+  );
+
+  const drop = useCallback(() => {
+    onDragging(false);
+    const station = origin.current.station;
+    if (!station) return;
+    const { cup: now, build: made, maxToppings: max, onScoop: scoop, onIce: ice, onSugar: sugar, onNudge: nudge, size: s } =
+      latest.current;
+
+    // Is the business end of the tool over the cup? The cup may still be gliding back to its mat,
+    // so either where it is now or where it's heading counts.
+    const px = x.get() + s / 2;
+    const py = y.get() + s * 0.7;
+    const overBox = (left: number, top: number) =>
+      px > left - cupW * 0.45 && px < left + cupW * 1.45 && py > top - cupH * 0.35 && py < top + cupH * 1.1;
+    const over = overBox(cupX.get(), cupY.get()) || overBox(latest.current.homeX, latest.current.homeY);
+
+    const putBack = (message?: string) => {
+      if (message) nudge(message);
+      x.set(withTiming(origin.current.x, timing(DURATION.base)));
+      y.set(withTiming(origin.current.y, timing(DURATION.base)));
+      show.set(withDelay(DURATION.base, withTiming(0, { duration: 1 })));
+    };
+
+    if (!over) {
+      // A tap that never went anywhere: say what to do with it.
+      const moved = Math.abs(x.get() - origin.current.x) + Math.abs(y.get() - origin.current.y);
+      putBack(moved < 8 ? `Kéo ${station.name.toLowerCase()} thả vào ly` : undefined);
+      return;
+    }
+
+    switch (station.kind) {
+      case 'topping':
+        if (now.toppings.includes(station.id)) return putBack(`Ly đã có ${station.name}`);
+        if (now.toppings.length >= max) return putBack(max === 1 ? 'Ly chỉ được 1 topping' : `Tối đa ${max} topping`);
+        scoop('toppings', station.id);
+        break;
+      case 'foam':
+        if (now.foam) return putBack('Ly đã có kem');
+        scoop('foam', station.id);
+        break;
+      case 'ice':
+        if (made.iceScoops >= MAX_ICE_SCOOPS) return putBack('Đá đã đầy ly');
+        ice();
+        break;
+      default:
+        if (made.sugarPumps >= SUGAR_STEPS.length) return putBack('Ngọt tối đa rồi');
+        sugar();
+        break;
+    }
+
+    // Tip it in over the cup, then it's gone.
+    tip.set(withTiming(1, { duration: 320, easing: ease }));
+    show.set(withDelay(300, withTiming(0, { duration: 1 })));
+  }, [x, y, show, tip, cupX, cupY, cupW, cupH, onDragging]);
+
+  const style = useAnimatedStyle(() => ({
+    opacity: show.value * (1 - tip.value * 0.85),
+    transform: [
+      { translateX: x.value },
+      { translateY: y.value + tip.value * cupH * 0.12 },
+      { rotate: `${interpolate(tip.value, [0, 1], [-6, 124])}deg` },
+    ],
+  }));
+
+  const node = (
+    <Animated.View pointerEvents="none" style={[styles.carried, { width: size, height: size }, style]}>
+      {held && <Tool station={held} size={size} />}
+    </Animated.View>
+  );
+
+  return { begin, move, drop, node };
+}
+
+/** What a station puts in your hand: a scoop of pearls, a scoop of ice, the syrup bottle, a spoon. */
+function Tool({ station, size }: { station: Station; size: number }) {
+  const S = size;
+  if (station.kind === 'sugar') {
+    return (
+      <Svg width={S} height={S} viewBox="0 0 24 24">
+        <Rect x={7} y={5} width={10} height={16} rx={4} fill="#FFF8EA" stroke="#E4D2AE" strokeWidth={1.2} />
+        <Rect x={8.5} y={9} width={7} height={11} rx={3} fill="#EFAE2B" />
+        <Rect x={9.5} y={1.5} width={5} height={4} rx={1.5} fill="#C98A3A" />
+        <Path d="M14.5 3.5 h4 l1 2 h-5 Z" fill="#A9712B" />
+      </Svg>
+    );
+  }
+  const cold = station.kind === 'ice';
+  const piece = station.kind === 'topping' ? (getIngredient('toppings', station.id) as Topping | undefined) : undefined;
+  const fill = cold ? '#EAF7FD' : station.kind === 'foam' ? '#F2EFEA' : '#D4D9DE';
+  const edge = cold ? '#A3CADD' : '#B3B9C0';
+  return (
+    <Svg width={S} height={S} viewBox="0 0 24 24">
+      <Rect x={10.6} y={0} width={2.8} height={12} rx={1.4} fill="#8F9794" />
+      <Path d="M4 12 h16 a2 2 0 0 1 2 2 v1.5 a10 7 0 0 1 -20 0 v-1.5 a2 2 0 0 1 2 -2 Z" fill={fill} stroke={edge} strokeWidth={1} />
+      {cold && (
+        <>
+          <Rect x={6.5} y={13} width={5} height={5} rx={1} fill="#FFFFFF" stroke="#9FD3EF" strokeWidth={0.8} />
+          <Rect x={12.5} y={14} width={4.5} height={4.5} rx={1} fill="#FFFFFF" stroke="#9FD3EF" strokeWidth={0.8} />
+        </>
+      )}
+      {station.kind === 'foam' && <Ellipse cx={12} cy={14.5} rx={6} ry={3.4} fill={station.color} />}
+      {piece &&
+        [
+          [8, 15],
+          [12, 14],
+          [16, 15.4],
+          [10, 17.4],
+          [14, 17.6],
+        ].map(([cx, cy], i) =>
+          piece.shape === 'pearl' ? (
+            <Circle key={i} cx={cx} cy={cy} r={2} fill={piece.color} stroke="rgba(0,0,0,0.18)" strokeWidth={0.5} />
+          ) : (
+            <Rect key={i} x={cx - 2} y={cy - 2} width={4} height={4} rx={0.8} fill={piece.color} stroke="rgba(0,0,0,0.18)" strokeWidth={0.5} />
+          ),
+        )}
+    </Svg>
+  );
 }
 
 // --------------------------------------------------------------------------- the room
@@ -523,15 +770,7 @@ function Furniture({
         ))}
 
         {/* the rubber mat the cup stands on between jobs */}
-        <Rect
-          x={matX}
-          y={tableLine - 11}
-          width={matW}
-          height={14}
-          rx={7}
-          fill={colors.counterDark}
-          opacity={0.16}
-        />
+        <Rect x={matX} y={tableLine - 11} width={matW} height={14} rx={7} fill={colors.counterDark} opacity={0.16} />
         <Rect
           x={matX + 4}
           y={tableLine - 9}
@@ -564,75 +803,66 @@ interface EquipProps {
   level: SharedValue<number>;
   onNudge: (message: string) => void;
   onPouring: (what: { category: 'tea' | 'milk'; id: string } | null) => void;
+  carry: Carry;
 }
 
 interface FrameProps {
   station: Station;
-  active: boolean;
+  active?: boolean;
   label: string;
-  done?: boolean;
   locked?: boolean;
   accessibilityLabel: string;
-  onPress?: () => void;
-  onPressIn?: () => void;
-  onPressOut?: () => void;
+  press: SharedValue<number>;
+  handlers: GestureResponderHandlers;
   children: ReactNode;
 }
 
-/** Every machine is a press target with its name under it; the one the cup is at glows. */
-function Frame({
-  station,
-  active,
-  label,
-  done,
-  locked,
-  accessibilityLabel,
-  onPress,
-  onPressIn,
-  onPressOut,
-  children,
-}: FrameProps) {
-  const press = useSharedValue(1);
+/**
+ * Every machine is a touch target with its name under it; the one the cup is held at glows. The
+ * gestures are PanResponders rather than presses, so a finger that drifts (or a browser's
+ * long-press) can never cut a pour short.
+ */
+function Frame({ station, active, label, locked, accessibilityLabel, press, handlers, children }: FrameProps) {
   const style = useAnimatedStyle(() => ({ transform: [{ scale: press.value }] }));
   return (
-    <AnimatedPressable
-      onPressIn={() => {
-        press.set(withTiming(0.96, { duration: 70 }));
-        onPressIn?.();
-      }}
-      onPressOut={() => {
-        press.set(withTiming(1, { duration: 160, easing: ease }));
-        onPressOut?.();
-      }}
-      onPress={onPress}
+    <Animated.View
+      {...handlers}
+      accessible
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel}
-      accessibilityState={{ selected: active }}
-      style={[
-        styles.frame,
-        { left: station.cx - station.slot / 2, top: station.y - 6, width: station.slot },
-        style,
-      ]}
+      accessibilityState={{ selected: Boolean(active) }}
+      style={[styles.frame, { left: station.cx - station.slot / 2, top: station.y - 6, width: station.slot }, style]}
     >
       <View style={[{ width: station.w, height: station.h }, locked && styles.locked]}>{children}</View>
       {active && <View style={[styles.ring, { width: station.w + 10, height: station.h + 10 }]} />}
-      {done && (
-        <View style={styles.check}>
-          <Text style={styles.checkText}>✓</Text>
-        </View>
-      )}
       <Text style={[styles.label, active && styles.labelActive]} numberOfLines={1}>
         {label}
       </Text>
-    </AnimatedPressable>
+    </Animated.View>
   );
 }
 
-/** Holding a tap open: how long you hold is how much runs into the cup. */
+/** Claim a touch outright and never give it back until the finger lifts. */
+const GRABBY = {
+  onStartShouldSetResponder: () => true,
+  onStartShouldSetResponderCapture: () => true,
+  onMoveShouldSetResponder: () => true,
+  onMoveShouldSetResponderCapture: () => true,
+  // Nothing — not the pager, not a long-press — gets to take this gesture away.
+  onResponderTerminationRequest: () => false,
+  onShouldBlockNativeResponder: () => true,
+} as const;
+
+/**
+ * Holding a tap open: how long you hold is how much runs into the cup. This is the raw responder,
+ * not a Pressable, so a finger that drifts (or a browser's long-press menu) can't cut a pour short:
+ * it only ends when the finger actually lifts.
+ */
 function useHoldPour({
   enabled,
   fill,
   level,
+  press,
   onStart,
   onCommit,
   onBlocked,
@@ -640,24 +870,28 @@ function useHoldPour({
   enabled: boolean;
   fill: number;
   level: SharedValue<number>;
+  press: SharedValue<number>;
   onStart: (running: boolean) => void;
   onCommit: (amount: number) => void;
   onBlocked: () => void;
 }) {
   const startedAt = useRef(0);
   const [pouring, setPouring] = useState(false);
+
   const down = () => {
     if (!enabled) {
       onBlocked();
       return;
     }
     startedAt.current = Date.now();
+    press.set(withTiming(0.96, { duration: 80 }));
     setPouring(true);
     onStart(true);
     const room = Math.max(0.02, MAX_POUR - fill);
     level.set(withTiming(MAX_POUR, { duration: (room / POUR_RATE) * 1000, easing: Easing.linear }));
   };
   const up = () => {
+    press.set(withTiming(1, { duration: 160, easing: ease }));
     if (!pouring) return;
     setPouring(false);
     onStart(false);
@@ -665,17 +899,32 @@ function useHoldPour({
     level.set(withTiming(Math.min(1, fill + amount), timing(DURATION.fast)));
     onCommit(amount);
   };
-  return { pouring, down, up };
+
+  return {
+    pouring,
+    handlers: { ...GRABBY, onResponderGrant: down, onResponderRelease: up, onResponderTerminate: up },
+  };
 }
 
-/** A one-shot 0→1→0 used for scoop and pump movements. */
-function useAction() {
-  const act = useSharedValue(0);
-  const fire = () =>
-    act.set(
-      withSequence(withTiming(1, { duration: 260, easing: ease }), withTiming(0, { duration: 380, easing: ease })),
-    );
-  return { act, fire };
+/** Picking a tool out of a bin and carrying it over to the cup. */
+function useCarryGesture(station: Station, carry: Carry, press: SharedValue<number>): GestureResponderHandlers {
+  const from = useRef({ x: 0, y: 0 });
+  const letGo = () => {
+    press.set(withTiming(1, { duration: 180, easing: ease }));
+    carry.drop();
+  };
+  return {
+    ...GRABBY,
+    onResponderGrant: (event) => {
+      from.current = { x: event.nativeEvent.pageX, y: event.nativeEvent.pageY };
+      press.set(withTiming(0.94, { duration: 80 }));
+      carry.begin(station);
+    },
+    onResponderMove: (event) =>
+      carry.move(event.nativeEvent.pageX - from.current.x, event.nativeEvent.pageY - from.current.y),
+    onResponderRelease: letGo,
+    onResponderTerminate: letGo,
+  };
 }
 
 /** The stream from a spout down into the cup's rim. */
@@ -709,14 +958,25 @@ function Stream({
 
 // --------------------------------------------------------------------------- tea dispensers
 
-function TeaDispenser({ station, active, cup, build, level, onNudge, onPouring, onPour }: EquipProps & { onPour: KitchenStationProps['onPour'] }) {
+function TeaDispenser({
+  station,
+  active,
+  cup,
+  build,
+  level,
+  onNudge,
+  onPouring,
+  onPour,
+}: EquipProps & { onPour: KitchenStationProps['onPour'] }) {
   const { w: W, h: H } = station;
   const tea = getIngredient('tea', station.id) as Tea;
   const locked = cup.tea !== null && cup.tea !== station.id;
-  const { pouring, down, up } = useHoldPour({
+  const press = useSharedValue(1);
+  const { pouring, handlers } = useHoldPour({
     enabled: active && !locked,
     fill: build.fill,
     level,
+    press,
     onStart: (running) => onPouring(running ? { category: 'tea', id: station.id } : null),
     onCommit: (amount) => onPour('tea', station.id, amount),
     onBlocked: () =>
@@ -734,11 +994,10 @@ function TeaDispenser({ station, active, cup, build, level, onNudge, onPouring, 
       station={station}
       active={active}
       locked={locked}
-      done={cup.tea === station.id}
       label={tea.name}
       accessibilityLabel={`Bình ${tea.name}`}
-      onPressIn={down}
-      onPressOut={up}
+      press={press}
+      handlers={handlers}
     >
       <Svg width={W} height={H}>
         <Defs>
@@ -793,19 +1052,30 @@ function TeaDispenser({ station, active, cup, build, level, onNudge, onPouring, 
 
 // --------------------------------------------------------------------------- milk cartons
 
-function MilkCarton({ station, active, cup, build, level, onNudge, onPouring, onPour }: EquipProps & { onPour: KitchenStationProps['onPour'] }) {
+function MilkCarton({
+  station,
+  active,
+  cup,
+  build,
+  level,
+  onNudge,
+  onPouring,
+  onPour,
+}: EquipProps & { onPour: KitchenStationProps['onPour'] }) {
   const { w: W, h: H } = station;
   const oat = station.id === 'oat';
   const body = oat ? '#F3E6CD' : '#FFFFFF';
   const band = oat ? '#C08E4F' : '#5AA9E6';
   const locked = cup.milk !== null && cup.milk !== station.id;
-  const { pouring, down, up } = useHoldPour({
+  const press = useSharedValue(1);
+  const { pouring, handlers } = useHoldPour({
     enabled: active && !locked,
     fill: build.fill,
     level,
+    press,
     onStart: (running) => onPouring(running ? { category: 'milk', id: station.id } : null),
     onCommit: (amount) => onPour('milk', station.id, amount),
-    onBlocked: () => onNudge(locked ? 'Ly đã có loại sữa khác' : 'Kéo ly tới hộp sữa trước'),
+    onBlocked: () => onNudge(locked ? 'Ly đã có loại sữa khác' : 'Kéo ly xuống dưới hộp sữa trước'),
   });
   const tip = useAnimatedStyle(() => ({ transform: [{ rotate: pouring ? '-24deg' : '0deg' }] }));
 
@@ -814,11 +1084,10 @@ function MilkCarton({ station, active, cup, build, level, onNudge, onPouring, on
       station={station}
       active={active}
       locked={locked}
-      done={cup.milk === station.id}
       label={oat ? 'Yến mạch' : 'Sữa tươi'}
       accessibilityLabel={`Hộp ${station.name}`}
-      onPressIn={down}
-      onPressOut={up}
+      press={press}
+      handlers={handlers}
     >
       <Animated.View style={[{ width: W, height: H }, tip]}>
         <Svg width={W} height={H}>
@@ -845,44 +1114,13 @@ function MilkCarton({ station, active, cup, build, level, onNudge, onPouring, on
 
 // --------------------------------------------------------------------------- topping bins
 
-function ToppingBin({
-  station,
-  active,
-  cup,
-  max,
-  onNudge,
-  onScoop,
-}: EquipProps & { max: number; onScoop: KitchenStationProps['onScoop'] }) {
+function ToppingBin({ station, cup, max, carry }: EquipProps & { max: number }) {
   const { w: W, h: H } = station;
   const option = getIngredient('toppings', station.id) as Topping;
   const inCup = cup.toppings.includes(station.id);
   const full = !inCup && cup.toppings.length >= max;
-  const { act, fire } = useAction();
-
-  const scoop = useAnimatedStyle(() => ({
-    transform: [
-      { translateY: interpolate(act.value, [0, 1], [0, H * 0.46]) },
-      { translateX: interpolate(act.value, [0, 1], [0, -W * 0.18]) },
-      { rotate: `${interpolate(act.value, [0, 1], [-8, 128])}deg` },
-    ],
-  }));
-
-  const handle = () => {
-    if (!active) {
-      onNudge(`Kéo ly tới hộp ${option.name} trước`);
-      return;
-    }
-    if (inCup) {
-      onNudge(`Ly đã có ${option.name}`);
-      return;
-    }
-    if (cup.toppings.length >= max) {
-      onNudge(max === 1 ? 'Ly chỉ được 1 topping' : `Tối đa ${max} topping`);
-      return;
-    }
-    fire();
-    onScoop('toppings', station.id);
-  };
+  const press = useSharedValue(1);
+  const handlers = useCarryGesture(station, carry, press);
 
   const binY = H * 0.2;
   const binH = H * 0.78;
@@ -900,12 +1138,11 @@ function ToppingBin({
   return (
     <Frame
       station={station}
-      active={active}
-      done={inCup}
       locked={full}
       label={option.name}
-      accessibilityLabel={`Hộp ${option.name}`}
-      onPress={handle}
+      accessibilityLabel={`Hộp ${option.name} — kéo vào ly`}
+      press={press}
+      handlers={handlers}
     >
       <Svg width={W} height={H}>
         {/* lid, hinged open at the back */}
@@ -941,42 +1178,24 @@ function ToppingBin({
         <Rect x={W * 0.24} y={binY + binH * 0.73} width={W * 0.42} height={2} rx={1} fill={colors.inkSoft} opacity={0.5} />
       </Svg>
 
-      {/* the scoop, which digs in and tips into the cup below */}
-      <Animated.View style={[styles.tool, { right: -W * 0.02, top: -H * 0.03 }, scoop]}>
+      {/* the scoop resting in the bin, waiting to be picked up */}
+      <View style={[styles.tool, { right: -W * 0.02, top: -H * 0.03 }]}>
         <Svg width={W * 0.4} height={H * 0.44} viewBox="0 0 24 26">
           <Rect x={10.5} y={0} width={3} height={13} rx={1.5} fill="#8F9794" />
           <Path d="M4 13 h16 a2 2 0 0 1 2 2 v2 a10 7 0 0 1 -20 0 v-2 a2 2 0 0 1 2 -2 Z" fill="#D4D9DE" stroke="#A9B0B8" strokeWidth={1} />
           <Path d="M5 17 h14 a9 5 0 0 1 -14 0 Z" fill={option.color} opacity={0.9} />
         </Svg>
-      </Animated.View>
+      </View>
     </Frame>
   );
 }
 
 // --------------------------------------------------------------------------- ice chest
 
-function IceChest({ station, active, build, onNudge, onIce }: EquipProps & { onIce: () => void }) {
+function IceChest({ station, build, carry }: EquipProps) {
   const { w: W, h: H } = station;
-  const { act, fire } = useAction();
-  const scoop = useAnimatedStyle(() => ({
-    transform: [
-      { translateY: interpolate(act.value, [0, 1], [0, H * 0.5]) },
-      { rotate: `${interpolate(act.value, [0, 1], [-6, 120])}deg` },
-    ],
-  }));
-
-  const handle = () => {
-    if (!active) {
-      onNudge('Kéo ly tới thùng đá trước');
-      return;
-    }
-    if (build.iceScoops >= MAX_ICE_SCOOPS) {
-      onNudge('Đá đã đầy ly');
-      return;
-    }
-    fire();
-    onIce();
-  };
+  const press = useSharedValue(1);
+  const handlers = useCarryGesture(station, carry, press);
 
   const boxY = H * 0.26;
   const boxH = H * 0.7;
@@ -991,10 +1210,10 @@ function IceChest({ station, active, build, onNudge, onIce }: EquipProps & { onI
   return (
     <Frame
       station={station}
-      active={active}
       label={build.iceScoops > 0 ? (build.iceScoops === 1 ? 'Ít đá' : 'Đá thường') : 'Thùng đá'}
-      accessibilityLabel="Thùng đá"
-      onPress={handle}
+      accessibilityLabel="Thùng đá — kéo vào ly"
+      press={press}
+      handlers={handlers}
     >
       <Svg width={W} height={H}>
         {/* open lid */}
@@ -1036,42 +1255,25 @@ function IceChest({ station, active, build, onNudge, onIce }: EquipProps & { onI
         ))}
       </Svg>
 
-      <Animated.View style={[styles.tool, { right: -W * 0.04, top: -H * 0.1 }, scoop]}>
+      <View style={[styles.tool, { right: -W * 0.04, top: -H * 0.1 }]}>
         <Svg width={W * 0.42} height={H * 0.48} viewBox="0 0 24 26">
           <Rect x={10.5} y={0} width={3} height={13} rx={1.5} fill="#8F9794" />
           <Path d="M4 13 h16 a2 2 0 0 1 2 2 v2 a10 7 0 0 1 -20 0 v-2 a2 2 0 0 1 2 -2 Z" fill="#EAF7FD" stroke="#A3CADD" strokeWidth={1} />
           <Rect x={7} y={14} width={5} height={5} rx={1} fill="#FFFFFF" stroke="#9FD3EF" strokeWidth={0.8} />
           <Rect x={13} y={15} width={4} height={4} rx={1} fill="#FFFFFF" stroke="#9FD3EF" strokeWidth={0.8} />
         </Svg>
-      </Animated.View>
+      </View>
     </Frame>
   );
 }
 
 // --------------------------------------------------------------------------- syrup pump
 
-function SyrupPump({ station, active, build, onNudge, onSugar }: EquipProps & { onSugar: () => void }) {
+function SyrupPump({ station, build, carry }: EquipProps) {
   const { w: W, h: H } = station;
-  const { act, fire } = useAction();
+  const press = useSharedValue(1);
+  const handlers = useCarryGesture(station, carry, press);
   const pumps = build.sugarPumps;
-  const head = useAnimatedStyle(() => ({ transform: [{ translateY: interpolate(act.value, [0, 1], [0, H * 0.055]) }] }));
-  const squirt = useAnimatedStyle(() => ({
-    opacity: act.value > 0.1 ? 1 : 0,
-    height: interpolate(act.value, [0, 1], [0, H * 0.2]),
-  }));
-
-  const handle = () => {
-    if (!active) {
-      onNudge('Kéo ly tới bình đường trước');
-      return;
-    }
-    if (pumps >= SUGAR_STEPS.length) {
-      onNudge('Ngọt tối đa rồi');
-      return;
-    }
-    fire();
-    onSugar();
-  };
 
   const bottleY = H * 0.3;
   const bottleH = H * 0.68;
@@ -1080,10 +1282,10 @@ function SyrupPump({ station, active, build, onNudge, onSugar }: EquipProps & { 
   return (
     <Frame
       station={station}
-      active={active}
       label={pumps > 0 ? `${SUGAR_STEPS[pumps - 1]}%` : 'Đường'}
-      accessibilityLabel="Bình đường"
-      onPress={handle}
+      accessibilityLabel="Bình đường — kéo vào ly"
+      press={press}
+      handlers={handlers}
     >
       <Svg width={W} height={H}>
         {/* bottle */}
@@ -1091,7 +1293,7 @@ function SyrupPump({ station, active, build, onNudge, onSugar }: EquipProps & { 
         <Rect x={W * 0.16} y={bottleY + bottleH - syrup} width={W * 0.68} height={syrup - 2} rx={W * 0.12} fill="#EFAE2B" />
         <Rect x={W * 0.22} y={bottleY + 5} width={W * 0.1} height={bottleH * 0.62} rx={W * 0.05} fill="#FFFFFF" opacity={0.45} />
         <Rect x={W * 0.18} y={bottleY + bottleH * 0.5} width={W * 0.64} height={bottleH * 0.2} rx={2} fill="#FFFDF6" opacity={0.9} />
-        {/* collar + neck */}
+        {/* collar + pump head */}
         <Rect x={W * 0.3} y={H * 0.2} width={W * 0.4} height={H * 0.12} rx={2} fill="#D9C49A" />
         {/* dose pips */}
         {[0, 1, 2].map((i) => (
@@ -1099,48 +1301,25 @@ function SyrupPump({ station, active, build, onNudge, onSugar }: EquipProps & { 
         ))}
       </Svg>
 
-      {/* pump head and its spout */}
-      <Animated.View style={[styles.tool, { left: W * 0.12, top: H * 0.06 }, head]}>
+      <View style={[styles.tool, { left: W * 0.12, top: H * 0.06 }]}>
         <Svg width={W * 0.9} height={H * 0.16} viewBox="0 0 30 10">
           <Rect x={2} y={3} width={18} height={5} rx={2.5} fill="#C98A3A" />
           <Rect x={18} y={4} width={11} height={3} rx={1.5} fill="#C98A3A" />
           <Rect x={8} y={0} width={7} height={4} rx={2} fill="#A9712B" />
         </Svg>
-      </Animated.View>
-      <Animated.View
-        pointerEvents="none"
-        style={[{ position: 'absolute', left: W * 0.92, top: H * 0.2, width: 3, borderRadius: 2, backgroundColor: '#EFAE2B' }, squirt]}
-      />
+      </View>
     </Frame>
   );
 }
 
 // --------------------------------------------------------------------------- foam tubs
 
-function FoamTub({ station, active, cup, onNudge, onScoop }: EquipProps & { onScoop: KitchenStationProps['onScoop'] }) {
+function FoamTub({ station, cup, carry }: EquipProps) {
   const { w: W, h: H } = station;
   const option = getIngredient('foam', station.id);
-  const { act, fire } = useAction();
   const inCup = cup.foam === station.id;
-  const spatula = useAnimatedStyle(() => ({
-    transform: [
-      { translateY: interpolate(act.value, [0, 1], [0, H * 0.5]) },
-      { rotate: `${interpolate(act.value, [0, 1], [10, 128])}deg` },
-    ],
-  }));
-
-  const handle = () => {
-    if (!active) {
-      onNudge(`Kéo ly tới hũ ${option?.name ?? 'kem'} trước`);
-      return;
-    }
-    if (cup.foam) {
-      onNudge('Ly đã có kem');
-      return;
-    }
-    fire();
-    onScoop('foam', station.id);
-  };
+  const press = useSharedValue(1);
+  const handlers = useCarryGesture(station, carry, press);
 
   const color = option?.color ?? '#FFF0C9';
   const tubY = H * 0.3;
@@ -1149,12 +1328,11 @@ function FoamTub({ station, active, cup, onNudge, onScoop }: EquipProps & { onSc
   return (
     <Frame
       station={station}
-      active={active}
-      done={inCup}
       locked={Boolean(cup.foam) && !inCup}
       label={station.id === 'cheese' ? 'Phô mai' : 'Brûlée'}
-      accessibilityLabel={`Hũ ${option?.name ?? 'kem'}`}
-      onPress={handle}
+      accessibilityLabel={`Hũ ${option?.name ?? 'kem'} — kéo vào ly`}
+      press={press}
+      handlers={handlers}
     >
       <Svg width={W} height={H}>
         {/* stainless tub */}
@@ -1172,13 +1350,13 @@ function FoamTub({ station, active, cup, onNudge, onScoop }: EquipProps & { onSc
         <Rect x={W * 0.2} y={tubY + tubH * 0.4} width={W * 0.56} height={tubH * 0.22} rx={2} fill="#FFFFFF" opacity={0.85} />
       </Svg>
 
-      <Animated.View style={[styles.tool, { left: W * 0.08, top: -H * 0.06 }, spatula]}>
+      <View style={[styles.tool, { left: W * 0.08, top: -H * 0.06 }]}>
         <Svg width={W * 0.44} height={H * 0.46} viewBox="0 0 24 26">
           <Rect x={10.5} y={0} width={2.6} height={15} rx={1.3} fill="#8F9794" />
           <Ellipse cx={11.8} cy={19} rx={6.5} ry={4.5} fill="#E9E4DA" stroke="#CFC7B8" strokeWidth={1} />
           <Ellipse cx={11.8} cy={18} rx={5} ry={3} fill={color} />
         </Svg>
-      </Animated.View>
+      </View>
     </Frame>
   );
 }
@@ -1201,25 +1379,6 @@ const styles = StyleSheet.create({
     borderColor: colors.primary,
     backgroundColor: 'rgba(255,111,156,0.1)',
   },
-  check: {
-    position: 'absolute',
-    top: 0,
-    right: 0,
-    width: 17,
-    height: 17,
-    borderRadius: 9,
-    backgroundColor: colors.good,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 2,
-    borderColor: '#FFFFFF',
-  },
-  checkText: {
-    color: '#FFFFFF',
-    fontSize: 9,
-    lineHeight: 12,
-    fontFamily: fonts.display,
-  },
   label: {
     fontSize: 9.5,
     lineHeight: 12,
@@ -1236,6 +1395,11 @@ const styles = StyleSheet.create({
   },
   tool: {
     position: 'absolute',
+  },
+  carried: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
   },
   cup: {
     position: 'absolute',
