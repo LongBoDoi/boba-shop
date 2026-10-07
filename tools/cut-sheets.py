@@ -110,22 +110,40 @@ def blank_card(card):
     card.save(OUT / 'card-blank.png')
 
 
-def soften_glow(lamp):
-    """The lamp's light was painted over the sheet's grey, so it cut out as an opaque box.
-    Below the shade, how much brighter than that grey a pixel is becomes how opaque it is."""
-    px = lamp.load()
-    W, H = lamp.size
+def lamp_sprite(raw, stripped, box, bg):
+    """
+    The lamp's light is painted straight onto the sheet's grey, so the usual background strip eats
+    its faint lower half and leaves a hard line across what is left. The shade and its cord come
+    from the stripped sheet as normal; everything below the shade is read back off the *raw* sheet
+    instead, where how far a pixel has been lifted off the grey is how much light is there.
+    """
     luma = lambda c: 0.299 * c[0] + 0.587 * c[1] + 0.114 * c[2]
+    lamp = stripped.crop(box)
+    src = raw.crop(box).convert('RGB')
+    px, sp = lamp.load(), src.load()
+    W, H = lamp.size
     pink = [y for y in range(H) for x in range(W) if px[x, y][3] > 100 and px[x, y][2] > px[x, y][1] + 10 and px[x, y][0] > 180]
     rim = max(pink) if pink else int(H * 0.72)
-    grey = 183.0
+    lift = 255 - bg[0]  # a fully lit pixel reaches white
+    tail = 13           # the painted beam simply stops, so take it to nothing over the last rows
     for y in range(rim + 1, H):
+        fade = min(1.0, (H - y) / tail)
         for x in range(W):
-            c = px[x, y]
-            if not c[3]:
+            c = sp[x, y]
+            # Only the light itself is reread. The shade's own paint is left exactly as it was
+            # cut — its bottom rim runs right through the brightest part of the bulb, where it is
+            # a lit orange rather than dark, so it takes colour as well as brightness to tell the
+            # two apart: light is pale, paint is not.
+            if luma(c) < 185 or max(c) - min(c) > 105 or c[1] < c[2]:
                 continue
-            a = (luma(c) - grey) / (255 - grey)
-            px[x, y] = (255, 243, 203, max(0, min(255, int(a * 235))))
+            # How far the pixel has been lifted off the grey is how much light is there; undoing
+            # that mix recovers the colour the artist painted, white-hot under the bulb and amber
+            # further out, instead of flattening the whole beam to one tone.
+            a = max(0.0, min(1.0, (c[0] - bg[0]) / lift))
+            if a < 0.03:
+                continue
+            light = tuple(max(0, min(255, int(bg[i] + (c[i] - bg[i]) / a))) for i in range(3))
+            px[x, y] = (*light, max(0, min(245, int(a * fade * 232))))
     return lamp
 
 
@@ -154,13 +172,22 @@ def main():
     cut(kitchen, (548, 224, 629, 368), 'card-order.png')       # the "Order" slip
 
     # ------------------------------------------------------------------ fittings and equipment
-    kit = sheet('equipment')
+    raw = Image.open(SHEETS / 'equipment.png').convert('RGBA')
+    kit = strip_background(raw.copy())
     # the wall tiles at the sprite's own size, so it is cut down to the brick size we want
     wall = kit.crop((14, 24, 190, 169))
     wall.resize((96, 79), Image.LANCZOS).save(OUT / 'wall.png')
-    lamp = kit.crop((324, 7, 432, 168))
-    soften_glow(lamp).crop(lamp.getbbox()).save(OUT / 'lamp.png')
-    cut(kit, (440, 37, 634, 92), 'shelf.png')
+    lamp = lamp_sprite(raw, kit, (322, 5, 434, 178), raw.convert('RGB').getpixel((2, 2)))
+    lamp.save(OUT / 'lamp.png')
+    # The shelf and the rail span the whole room, so they are cut into pieces: a slice of the
+    # middle to stretch, and the ends at their own size. Stretching them whole fattened the
+    # shelf's feet and squashed the rail's caps into ovals.
+    shelf = kit.crop((440, 37, 634, 92))
+    shelf.crop((60, 0, 130, 34)).save(OUT / 'shelf-plank.png')  # surface and front edge, evenly
+    # …and those two apart, for the work top, which needs a deep surface and only one front edge
+    shelf.crop((60, 0, 130, 17)).save(OUT / 'plank-top.png')
+    shelf.crop((60, 17, 130, 34)).save(OUT / 'plank-face.png')
+    shelf.crop((16, 33, 48, 55)).save(OUT / 'shelf-foot.png')
     cut(kit, (9, 187, 220, 291), 'counter-steel.png')
     cut(kit, (385, 180, 631, 292), 'cabinet.png')
     cut(kit, (222, 180, 375, 292), 'drawer.png')
@@ -181,7 +208,10 @@ def main():
     cut(room, (502, 210, 626, 435), 'cup-stack.png')
     cut(room, (475, 449, 629, 591), 'towel.png')
     cut(room, (15, 488, 166, 565), 'coaster.png')
-    cut(room, (177, 491, 463, 544), 'rail.png')
+    rail = room.crop((177, 491, 463, 544))
+    rail.crop((0, 0, 36, 53)).save(OUT / 'rail-cap.png')
+    rail.crop((60, 0, 72, 53)).save(OUT / 'rail-bar.png')
+    rail.crop((88, 0, 144, 53)).save(OUT / 'rail-clip.png')
 
     blank_card(Image.open(OUT / 'card.png').convert('RGBA'))
 

@@ -40,6 +40,7 @@ import {
   PAN,
   PIECE,
   PIECE_ART,
+  RAIL_CLIP,
   SCOOP,
   SCOOP_BOWL,
   SYRUP,
@@ -120,7 +121,7 @@ const EQUIPMENT_NAMES: Record<string, string> = {
 
 /** The cup the player builds, sized to the room it has. */
 export function cupSizeFor(W: number, H: number) {
-  const width = Math.round(Math.max(44, Math.min(92, W * 0.22, H * 0.17)));
+  const width = Math.round(Math.max(40, Math.min(70, W * 0.165, H * 0.14)));
   // The cup sprite is this much taller than it is wide.
   const height = Math.round(width / ART.cup);
   return { width, height };
@@ -139,7 +140,7 @@ export function layoutKitchen(config: DayConfig, W: number, H: number): KitchenL
   const labelH = 17;
   const cabinetH = Math.max(34, Math.round(H * 0.11));
   const cabinetTop = H - cabinetH;
-  const counterH = Math.max(11, Math.round(H * 0.028));
+  const counterH = Math.max(46, Math.round(W * 0.15));
   // The band the cup lives in: room to stand on the work top and to be lifted up to a tap.
   const bandH = cupH + 24 + counterH;
 
@@ -391,15 +392,13 @@ export function KitchenStation({
   const cupStyle = useAnimatedStyle(() => ({
     transform: [{ translateX: cupX.value }, { translateY: cupY.value }, { scale: 1 + lift.value * 0.05 }],
   }));
-  const shadowStyle = useAnimatedStyle(() => ({
-    opacity: 0.22 * (1 - lift.value),
-    transform: [{ translateX: cupX.value }, { translateY: cupY.value }],
-  }));
 
   // The note hangs from the rail down towards the work top; the pins sit beside it.
   const noteW = Math.round(Math.min(W * 0.235, (tableLine - railY) * 0.55));
   const noteH = Math.round(Math.min(noteW / ART.card, (tableLine - railY) * 0.95));
   const pinSize = Math.round(Math.min(W * 0.11, (tableLine - railY) * 0.3));
+  // The rail's clip, drawn over the note it is holding up.
+  const clipH = Math.max(17, Math.round(W * 0.058)) / ART.railCap;
   const hint = nudge.text || hintFor(docked, cup, build);
   // Freeze the pager while a tap is held, so a drifting finger can't swipe the page away. When the
   // tap is let go, the cup is put back down on the table a moment later.
@@ -422,8 +421,8 @@ export function KitchenStation({
         cabinetTop={cabinetTop}
         sideRoom={sideRoom}
         cupH={cupH}
-        matX={homeX - Math.round(cupW * 0.34)}
-        matW={Math.round(cupW * 1.68)}
+        matX={homeX - Math.round(cupW * 0.25)}
+        matW={Math.round(cupW * 1.5)}
       />
 
       {stations.map((station) => {
@@ -455,10 +454,22 @@ export function KitchenStation({
             : 1
         }
         x={Math.round(W * 0.035)}
-        y={railY + 6}
+        y={Math.round(railY + clipH * 0.42)}
         width={Math.round(noteH * ART.card)}
         height={noteH}
       />
+      {/* the clip holding that note to the rail */}
+      <Image
+        source={RAIL_CLIP}
+        style={{
+          position: 'absolute',
+          left: Math.round(W * 0.035 + (noteH * ART.card) / 2 - (clipH * ART.railClip) / 2),
+          top: railY,
+          width: clipH * ART.railClip,
+          height: clipH,
+        }}
+      />
+
       {tickets.map(({ slot, customer }, i) => (
         <TicketPin
           key={customer.id}
@@ -473,11 +484,8 @@ export function KitchenStation({
         />
       ))}
 
-      {/* The cup: a thing on the table you pick up and carry to the taps. */}
-      <Animated.View
-        pointerEvents="none"
-        style={[styles.cupShadow, { width: cupW, height: cupW * 0.3, top: cupH - cupW * 0.14 }, shadowStyle]}
-      />
+      {/* The cup: a thing on the table you pick up and carry to the taps. It needs no shadow of
+          its own — the coaster it stands in casts one. */}
       <Animated.View
         ref={cupRef}
         {...pan.panHandlers}
@@ -1360,12 +1368,6 @@ const styles = StyleSheet.create({
     height: 2.5,
     backgroundColor: '#FFFFFF',
     opacity: 0.3,
-  },
-  cupShadow: {
-    position: 'absolute',
-    left: 0,
-    borderRadius: 999,
-    backgroundColor: colors.counterDark,
   },
   drop: {
     position: 'absolute',

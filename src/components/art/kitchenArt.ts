@@ -57,11 +57,16 @@ export const PIECE_ART: Record<string, number> = {
 // ------------------------------------------------------------------ the room around it
 export const WALL = require('../../assets/kitchen/wall.png');
 export const LAMP = require('../../assets/kitchen/lamp.png');
-export const SHELF = require('../../assets/kitchen/shelf.png');
+export const SHELF_PLANK = require('../../assets/kitchen/shelf-plank.png');
+export const PLANK_TOP = require('../../assets/kitchen/plank-top.png');
+export const PLANK_FACE = require('../../assets/kitchen/plank-face.png');
+export const SHELF_FOOT = require('../../assets/kitchen/shelf-foot.png');
 export const COUNTER_STEEL = require('../../assets/kitchen/counter-steel.png');
 export const CABINET = require('../../assets/kitchen/cabinet.png');
 export const DRAWER = require('../../assets/kitchen/drawer.png');
-export const RAIL = require('../../assets/kitchen/rail.png');
+export const RAIL_CAP = require('../../assets/kitchen/rail-cap.png');
+export const RAIL_BAR = require('../../assets/kitchen/rail-bar.png');
+export const RAIL_CLIP = require('../../assets/kitchen/rail-clip.png');
 export const COASTER = require('../../assets/kitchen/coaster.png');
 export const PLANT = require('../../assets/kitchen/plant.png');
 export const POSTER = require('../../assets/kitchen/poster.png');
@@ -86,11 +91,13 @@ export const ART = {
   foam: 150 / 149,
   card: 130 / 229,
   wall: 176 / 145,
-  lamp: 108 / 161,
-  shelf: 194 / 55,
+  lamp: 112 / 173,
+  plank: 70 / 34,
+  foot: 32 / 22,
+  railCap: 36 / 53,
+  railClip: 56 / 53,
   counter: 211 / 104,
   cabinet: 246 / 112,
-  rail: 286 / 53,
   coaster: 151 / 77,
   plant: 144 / 215,
   poster: 116 / 168,

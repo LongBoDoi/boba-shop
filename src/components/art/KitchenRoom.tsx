@@ -1,6 +1,6 @@
 import { memo } from 'react';
 import { Image, ImageSourcePropType, StyleSheet, View } from 'react-native';
-import Svg, { Defs, Ellipse, RadialGradient, Stop } from 'react-native-svg';
+import Svg, { Ellipse } from 'react-native-svg';
 
 import {
   ART,
@@ -12,8 +12,12 @@ import {
   LAMP,
   PLANT,
   POSTER,
-  RAIL,
-  SHELF,
+  RAIL_BAR,
+  RAIL_CAP,
+  SHELF_FOOT,
+  PLANK_FACE,
+  PLANK_TOP,
+  SHELF_PLANK,
   STRAWS,
   SUCCULENT,
   TOWEL,
@@ -42,6 +46,13 @@ export const SHOP = {
   inkSoft: '#8A8290',
 };
 
+/**
+ * Where on the coaster sprite the cup's base belongs. Its top face is an ellipse centred about
+ * 0.39 down, but a cup standing dead centre reads as pushed to the back of the disc, so it sits a
+ * little forward of that.
+ */
+const COASTER_FACE = 0.52;
+
 export interface RoomShelf {
   /** Top of the equipment standing on this shelf. */
   top: number;
@@ -69,23 +80,25 @@ interface KitchenRoomProps {
   sideRoom: number;
 }
 
-/** The warm pool a pendant throws on the wall under it. */
-function Lamplight({ x, y, r }: { x: number; y: number; r: number }) {
+/**
+ * The soft pool a thing standing on a surface casts around its foot: nested ellipses, each barely
+ * there, piling up towards the middle. A `View` cannot be an ellipse — its border radius clamps to
+ * half the short side — and this renderer flattens a radial gradient to one solid tone, so the
+ * falloff is built by hand.
+ */
+const SHADOW_RINGS = [1, 0.86, 0.72, 0.58, 0.44, 0.3];
+
+function Shadow({ cx, cy, rx, ry }: { cx: number; cy: number; rx: number; ry: number }) {
   return (
-    <Svg style={{ position: 'absolute', left: x - r, top: y - r, width: r * 2, height: r * 2 }} pointerEvents="none">
-      <Defs>
-        <RadialGradient id={`lamp-${Math.round(x)}`} cx="50%" cy="50%" r="50%">
-          <Stop offset="0" stopColor="#FFDB78" stopOpacity={0.62} />
-          <Stop offset="0.45" stopColor="#FFE49C" stopOpacity={0.3} />
-          <Stop offset="1" stopColor="#FFEFC2" stopOpacity={0} />
-        </RadialGradient>
-      </Defs>
-      <Ellipse cx={r} cy={r} rx={r} ry={r} fill={`url(#lamp-${Math.round(x)})`} />
+    <Svg style={{ position: 'absolute', left: cx - rx, top: cy - ry, width: rx * 2, height: ry * 2 }} pointerEvents="none">
+      {SHADOW_RINGS.map((k) => (
+        <Ellipse key={k} cx={rx} cy={ry} rx={rx * k} ry={ry * k} fill="#5C3A18" opacity={0.055} />
+      ))}
     </Svg>
   );
 }
 
-/** One sprite, placed by its width with its own aspect kept. */
+/** One sprite, placed by its width with its own aspect kept, optionally sitting in its own shadow. */
 function Prop({
   src,
   aspect,
@@ -93,6 +106,7 @@ function Prop({
   bottom,
   w,
   opacity,
+  shadow,
 }: {
   src: ImageSourcePropType;
   aspect: number;
@@ -100,9 +114,17 @@ function Prop({
   bottom: number;
   w: number;
   opacity?: number;
+  /** How wide the contact shadow is, as a fraction of the sprite — 0 for none. */
+  shadow?: number;
 }) {
   const h = w / aspect;
-  return <Image source={src} style={{ position: 'absolute', left: x, top: bottom - h, width: w, height: h, opacity }} />;
+  const sw = w * (shadow ?? 0);
+  return (
+    <>
+      {sw > 0 && <Shadow cx={x + w / 2} cy={bottom - sw * 0.03} rx={sw * 0.6} ry={sw * 0.19} />}
+      <Image source={src} style={{ position: 'absolute', left: x, top: bottom - h, width: w, height: h, opacity }} />
+    </>
+  );
 }
 
 /**
@@ -126,9 +148,17 @@ export const KitchenRoom = memo(function KitchenRoom({
 
   const lampW = Math.max(32, Math.round(W * 0.125));
   const shelfH = Math.max(10, Math.round(W * 0.042));
-  const counterH = Math.max(12, Math.round(H * 0.03));
+  const plankH = Math.max(15, Math.round(W * 0.058));
+  const counterH = Math.max(46, Math.round(W * 0.15));
+  // how much of the table's surface shows behind the things standing on it
+  const surfaceD = Math.round(counterH * 0.72);
+  const coasterH = matW / ART.coaster;
+  // The lip is the strip of table in front of whatever stands on it — deep enough for the
+  // coaster, which is a disc seen from above: the cup sits at its middle, not on its back edge.
+  const lip = Math.round(Math.max(counterH * 0.16, coasterH * 0.56));
   const band = tableLine - railY; // the cup's band, rail to work top
-  const railH = Math.max(9, Math.round(W * 0.035));
+  const capW = Math.max(17, Math.round(W * 0.058));
+  const capH = capW / ART.railCap;
   // the cluster of props standing at the right of the work top
   const propRow = Math.min(band * 1.1, W * 0.44);
 
@@ -143,22 +173,8 @@ export const KitchenRoom = memo(function KitchenRoom({
       <View style={{ position: 'absolute', left: 0, top: 0, width: W, height: cabinetTop, backgroundColor: '#FFF6E9', opacity: 0.4 }} />
 
 
-      {/* ---- the dispenser shelf, dressed either side */}
-      {showProps && (
-        <>
-          <Prop src={PLANT} aspect={ART.plant} x={-propW * 0.3} bottom={topShelf.base + 2} w={propW * 1.25} />
-          <Prop src={POSTER} aspect={ART.poster} x={W - propW * 1.0} bottom={topShelf.base - propW * 1.02} w={propW * 0.74} />
-          <Prop src={CUP_STACK} aspect={ART.cupStack} x={W - propW * 0.92} bottom={topShelf.base + 2} w={propW * 0.72} />
-        </>
-      )}
-
-      {/* ---- pendant lamps, hanging from the ceiling in both corners */}
-      {[Math.round(W * 0.025), Math.round(W * 0.975 - lampW)].map((x) => (
-        <View key={x}>
-          <Lamplight x={x + lampW / 2} y={(lampW / ART.lamp) * 0.8} r={lampW * 1.15} />
-          <Image source={LAMP} style={{ position: 'absolute', left: x, top: 0, width: lampW, height: lampW / ART.lamp }} />
-        </View>
-      ))}
+      {/* ---- what hangs on the wall, behind everything in the room */}
+      {showProps && <Prop src={POSTER} aspect={ART.poster} x={W - propW * 1.0} bottom={topShelf.base - propW * 1.02} w={propW * 0.74} />}
 
       {shelves.map((shelf, i) =>
         shelf.steel ? (
@@ -191,37 +207,105 @@ export const KitchenRoom = memo(function KitchenRoom({
             />
           </View>
         ) : (
-          <Image
-            key={i}
-            source={SHELF}
-            resizeMode="stretch"
-            style={{ position: 'absolute', left: -2, top: shelf.base - 1, width: W + 4, height: shelfH * 1.4 }}
-          />
+          <View key={i}>
+            {[0.17, 0.83].map((at) => (
+              <Image
+                key={at}
+                source={SHELF_FOOT}
+                style={{
+                  position: 'absolute',
+                  left: W * at - (plankH * 0.82) / 2,
+                  top: shelf.base - plankH * 0.3 + plankH * 0.95,
+                  width: plankH * 0.82,
+                  height: plankH * 0.64,
+                }}
+              />
+            ))}
+            <Image
+              source={SHELF_PLANK}
+              resizeMode="stretch"
+              style={{ position: 'absolute', left: -2, top: shelf.base - plankH * 0.3, width: W + 4, height: plankH }}
+            />
+          </View>
         ),
+      )}
+
+      {/* ---- pendant lamps, hanging from the ceiling in both corners */}
+      {[Math.round(W * 0.025), Math.round(W * 0.975 - lampW)].map((x) => (
+        <Image key={x} source={LAMP} style={{ position: 'absolute', left: x, top: 0, width: lampW, height: lampW / ART.lamp }} />
+      ))}
+
+      {/* ---- and what stands on the dispenser shelf, in front of it */}
+      {showProps && (
+        <>
+          <Prop src={PLANT} aspect={ART.plant} x={-propW * 0.3} bottom={topShelf.base - plankH * 0.02} w={propW * 1.25} shadow={0.72} />
+          <Prop
+            src={CUP_STACK}
+            aspect={ART.cupStack}
+            x={W - propW * 0.92}
+            bottom={topShelf.base - plankH * 0.02}
+            w={propW * 0.72}
+            shadow={0.86}
+          />
+        </>
       )}
 
       {/* ---- the notes rail across the cup's band */}
       <Image
-        source={RAIL}
+        source={RAIL_BAR}
         resizeMode="stretch"
-        style={{ position: 'absolute', left: W * 0.03, top: railY, width: W * 0.94, height: railH }}
+        style={{ position: 'absolute', left: capW * 0.55, top: railY, width: W - capW * 1.1, height: capH }}
+      />
+      <Image source={RAIL_CAP} style={{ position: 'absolute', left: 1, top: railY, width: capW, height: capH }} />
+      <Image
+        source={RAIL_CAP}
+        style={{ position: 'absolute', right: 1, top: railY, width: capW, height: capH, transform: [{ scaleX: -1 }] }}
+      />
+      {/* ---- the work top: a surface receding behind whatever stands on it, then its front edge */}
+      <Image
+        source={PLANK_TOP}
+        resizeMode="stretch"
+        style={{ position: 'absolute', left: -2, top: tableLine - surfaceD, width: W + 4, height: surfaceD + lip + 2 }}
+      />
+      {/* the back of the table, where it meets the wall, sits in its own shadow */}
+      <View
+        style={{
+          position: 'absolute',
+          left: 0,
+          top: tableLine - surfaceD,
+          width: W,
+          height: surfaceD * 0.45,
+          backgroundColor: '#8A5526',
+          opacity: 0.22,
+        }}
       />
 
       {/* ---- props standing on the work top */}
-      <Prop src={STRAWS} aspect={ART.straws} x={W - propRow * 0.42} bottom={tableLine + 1} w={propRow * 0.36} />
-      <Prop src={CHALKBOARD} aspect={ART.chalkboard} x={W - propRow * 0.82} bottom={tableLine + 1} w={propRow * 0.38} />
-      <Prop src={SUCCULENT} aspect={ART.succulent} x={W - propRow * 0.94} bottom={tableLine + 1} w={propRow * 0.15} />
+      <Prop src={SUCCULENT} aspect={ART.succulent} x={W - propRow * 0.92} bottom={tableLine - surfaceD * 0.34} w={propRow * 0.16} shadow={0.8} />
+      <Prop src={CHALKBOARD} aspect={ART.chalkboard} x={W - propRow * 0.8} bottom={tableLine - surfaceD * 0.22} w={propRow * 0.37} shadow={0.74} />
+      <Prop src={STRAWS} aspect={ART.straws} x={W - propRow * 0.4} bottom={tableLine} w={propRow * 0.34} shadow={0.8} />
 
-      {/* ---- the work top itself, with the cup's coaster on it */}
-      <View style={{ position: 'absolute', left: 0, top: tableLine, width: W, height: counterH, backgroundColor: SHOP.wood }} />
-      <View style={{ position: 'absolute', left: 0, top: tableLine, width: W, height: 3, backgroundColor: SHOP.woodTop }} />
-      <View style={{ position: 'absolute', left: 0, top: tableLine + counterH - 3, width: W, height: 3, backgroundColor: SHOP.woodEdge }} />
-      <View
-        style={{ position: 'absolute', left: 0, top: tableLine + counterH, width: W, height: 3, backgroundColor: SHOP.woodDark, opacity: 0.2 }}
+      {/* ---- the table's front edge, in front of everything standing on it */}
+      <Image
+        source={PLANK_FACE}
+        resizeMode="stretch"
+        style={{ position: 'absolute', left: -2, top: tableLine + lip, width: W + 4, height: counterH - lip }}
       />
+
+      {/* The coaster is a disc lying on the table, so the cup standing at `tableLine` meets it at
+          its middle while the near rim carries on in front, with its shadow tucked under that rim. */}
+      <Shadow cx={matX + matW / 2} cy={tableLine + coasterH * 0.38} rx={matW * 0.52} ry={coasterH * 0.26} />
       <Image
         source={COASTER}
-        style={{ position: 'absolute', left: matX, top: tableLine - matW / ART.coaster + 4, width: matW, height: matW / ART.coaster }}
+        style={{
+          position: 'absolute',
+          left: matX,
+          // its top face is an ellipse centred COASTER_FACE down the sprite — that is where the
+          // cup has to stand for it to look like it is in the middle of the disc
+          top: tableLine - coasterH * COASTER_FACE,
+          width: matW,
+          height: coasterH,
+        }}
       />
 
       {/* ---- pink cabinets along the bottom, with the towel on its rail */}
