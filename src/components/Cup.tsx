@@ -41,6 +41,15 @@ interface CupProps {
   levelSv?: SharedValue<number>;
   /** Draw the "đủ" line and the brim line on the glass — the pouring mini-game's target. */
   marks?: boolean;
+  /** Override the body's height — for a cup whose glass is drawn by something else. */
+  height?: number;
+  /** How far the tapered sides come in at the bottom, as a fraction of the width. */
+  taper?: number;
+  /**
+   * Draw the glass itself: rim, outline, gloss and the tapering masks. Off leaves only what is
+   * *in* the cup, for when a painted cup sprite is layered over the top of it.
+   */
+  shell?: boolean;
 }
 
 const ICE_SPOTS = [
@@ -70,12 +79,15 @@ export const Cup = memo(function Cup({
   fill,
   levelSv,
   marks,
+  height: givenHeight,
+  taper = 0.12,
+  shell = true,
 }: CupProps) {
-  const height = Math.round(width * 1.3);
+  const height = givenHeight ?? Math.round(width * 1.3);
   const strawRise = straw ? Math.round(height * 0.2) : 0;
   const rimHeight = Math.max(3, Math.round(width * 0.07));
   const bodyHeight = height - rimHeight;
-  const inset = tapered ? Math.round(width * 0.12) : 0;
+  const inset = tapered ? Math.round(width * taper) : 0;
   const stroke = Math.max(1.5, width * 0.025);
   const detailed = width >= 60;
 
@@ -148,8 +160,8 @@ export const Cup = memo(function Cup({
         <View
           style={[
             styles.body,
-            { top: rimHeight, width, height: bodyHeight, borderBottomWidth: stroke },
-            !tapered && {
+            { top: rimHeight, width, height: bodyHeight, borderBottomWidth: shell ? stroke : 0 },
+            !tapered && shell && {
               borderLeftWidth: stroke,
               borderRightWidth: stroke,
               borderColor: colors.cupOutline,
@@ -232,7 +244,7 @@ export const Cup = memo(function Cup({
             </>
           )}
 
-          {detailed && (
+          {detailed && shell && (
             <View
               style={[
                 styles.gloss,
@@ -257,7 +269,7 @@ export const Cup = memo(function Cup({
                 { top: rimHeight, right: 0, borderBottomWidth: bodyHeight, borderBottomColor: backgroundColor, borderLeftWidth: inset },
               ]}
             />
-            {[-1, 1].map((side) => (
+            {shell && [-1, 1].map((side) => (
               <View
                 key={side}
                 style={[
@@ -275,7 +287,7 @@ export const Cup = memo(function Cup({
           </>
         )}
 
-        {sealed ? (
+        {shell && (sealed ? (
           <View style={[styles.seal, { width: width + 4, height: rimHeight * 1.9, top: -rimHeight * 0.6, borderRadius: rimHeight }]}>
             {[0.2, 0.5, 0.8].map((x) => (
               <View key={x} style={[styles.sealDot, { left: `${x * 100}%`, width: rimHeight, height: rimHeight, borderRadius: rimHeight / 2 }]} />
@@ -283,7 +295,7 @@ export const Cup = memo(function Cup({
           </View>
         ) : (
           <View style={[styles.rim, { width: width + 4, height: rimHeight, borderRadius: rimHeight / 2 }]} />
-        )}
+        ))}
 
         {sweetness && detailed && (
           <Sticker

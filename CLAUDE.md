@@ -62,7 +62,10 @@ src/components/         Cup (layered, animated), CustomerStage, TicketRail, Orde
 src/components/art/     SVG illustrations: Character, IngredientIcon, ShopBackdrop (customer wall),
                         KitchenRoom (prep room: tiled wall, pendant lamps, shelves, cabinets;
                         exports the SHOP palette + heartPath used by the equipment art),
+                        kitchenArt.ts (the painted kitchen sprites + their geometry),
                         Counter, CounterTop, Tiles, ToppingShelf
+src/assets/kitchen/     the painted sprites themselves — generated, see "The kitchen's artwork"
+tools/                  cut-kitchen-sheet.py: cuts the asset sheet into those sprites
 src/motion.ts           shared animation timings/easings
 src/theme.ts            colours and font family names
 ```
@@ -112,10 +115,29 @@ shows no "added ✓" badges — the order slip is the checklist; machines only d
 drips tea down the side when the live level goes over the brim. The order slip (`OrderTicket`) is a compact
 strip above the room, so the whole scene is workspace.
 
-The art is deliberately chunky and shop-like: jars with wooden lids and heart knobs, chrome taps with a
-heart button, wooden name plaques under every machine, stainless pans with pink-handled scoops, a cup with
-the shop's cat on it standing on a wooden coaster. Keep new equipment in that vocabulary (`SHOP` colours,
-`heartPath`) rather than inventing a second style.
+### The kitchen's artwork
+The dispensers, the topping pans and the cup are **painted sprites**, cut from a single asset sheet by
+`tools/cut-kitchen-sheet.py` into `src/assets/kitchen/` and addressed through
+[kitchenArt.ts](src/components/art/kitchenArt.ts). The sprites are generated: change the script (or the
+sheet), re-run it, don't hand-edit the PNGs. Drop a new sheet at `tools/kitchen-sheet.png` first — it is
+not in the repo.
+
+Anything that has to *move* is drawn behind its sprite and shows through a window the script cleared out
+of the artwork, which keeps the painted highlights, ticks and the cat decal on top of it:
+
+- a **dispenser** is a tinted block of tea inside `JAR_WINDOW`, with `jar.png` over it; one sprite serves
+  every tea;
+- the **cup** is three layers — `cup-base.png` (a flat cream silhouette, so the drink reads over a busy
+  shelf), then `Cup` itself drawn inside `CUP_WELL` with `shell={false}` so only the *contents* render
+  (liquid, pearls, ice, foam, the "đủ" marks), then `cup.png` over the top. `Cup`'s `height`, `taper` and
+  `shell` props exist for exactly this.
+- the **pans** are whole sprites, one per topping. Three were painted; the rest (grass jelly, red bean,
+  ice) are repainted from those by `repaint()`, which keeps the shading and leaves the red scoop alone.
+
+What is still hand-drawn — the room itself, the milk cartons, the syrup bottle, the foam tubs — matches
+the sheet's vocabulary: a dark `INK` outline, a shaded side, warm wood, pink grips, heart knobs
+(`heartPath`), wooden name plaques. Keep new equipment in that vocabulary rather than inventing a second
+style, or add it to the sheet.
 
 ### Game rules worth knowing
 

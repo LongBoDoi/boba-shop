@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { LayoutChangeEvent, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { ICON_CUP, ICON_TRASH } from '../components/art/kitchenArt';
 import { Button } from '../components/Button';
 import { Point } from '../components/Effects';
 import { cupSizeFor, KitchenStation } from '../components/KitchenStation';
@@ -76,9 +77,9 @@ export function PrepPage({
   const serveLabel = !selectedCustomer
     ? 'Chọn order để pha'
     : !cup.tea
-      ? 'Rót trà vào ly trước'
+      ? 'Rót trà vào ly'
       : !enough
-        ? 'Chưa đủ trà — rót tới vạch'
+        ? 'Chưa đủ trà'
         : `Phục vụ ${selectedCustomer.name} ➜`;
   const cupWidth = scene.width > 0 ? cupSizeFor(scene.width, scene.height).width : 56;
 
@@ -120,6 +121,7 @@ export function PrepPage({
             onIce={onIce}
             onSugar={onSugar}
             onDragging={onDragging}
+            hasOrder={Boolean(selectedCustomer)}
             cupRef={machineRef}
           />
         )}
@@ -127,9 +129,9 @@ export function PrepPage({
 
       <View style={[styles.actions, { paddingBottom: 10 + insets.bottom }]}>
         <View ref={trashRef} style={styles.clear}>
-          <Button label="Đổ bỏ" variant="secondary" onPress={onClear} />
+          <Button label="Đổ bỏ" variant="secondary" icon={ICON_TRASH} onPress={onClear} />
         </View>
-        <Button label={serveLabel} disabled={!canServe} onPress={onServe} style={styles.serve} />
+        <Button label={serveLabel} icon={ICON_CUP} disabled={!canServe} onPress={onServe} style={styles.serve} />
       </View>
     </View>
   );
@@ -154,7 +156,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.panel,
   },
   clear: {
-    flex: 1.1,
+    flex: 1.25,
   },
   serve: {
     flex: 2,

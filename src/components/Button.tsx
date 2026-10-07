@@ -1,4 +1,4 @@
-import { Pressable, StyleSheet, Text, ViewStyle } from 'react-native';
+import { Image, ImageSourcePropType, Pressable, StyleSheet, Text, ViewStyle } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 
 import { DURATION, timing } from '../motion';
@@ -12,9 +12,11 @@ interface ButtonProps {
   variant?: 'primary' | 'secondary';
   disabled?: boolean;
   style?: ViewStyle;
+  /** Painted icon shown to the left of the label. */
+  icon?: ImageSourcePropType;
 }
 
-export function Button({ label, onPress, variant = 'primary', disabled, style }: ButtonProps) {
+export function Button({ label, onPress, variant = 'primary', disabled, style, icon }: ButtonProps) {
   const primary = variant === 'primary';
   const press = useSharedValue(1);
   const animatedStyle = useAnimatedStyle(() => ({ transform: [{ scale: press.value }] }));
@@ -29,6 +31,7 @@ export function Button({ label, onPress, variant = 'primary', disabled, style }:
       accessibilityState={{ disabled }}
       style={[styles.button, primary ? styles.primary : styles.secondary, disabled && styles.disabled, style, animatedStyle]}
     >
+      {icon && <Image source={icon} style={styles.icon} />}
       <Text style={[styles.label, !primary && styles.secondaryLabel]} numberOfLines={1}>
         {label}
       </Text>
@@ -38,12 +41,19 @@ export function Button({ label, onPress, variant = 'primary', disabled, style }:
 
 const styles = StyleSheet.create({
   button: {
+    flexDirection: 'row',
+    gap: 6,
     paddingVertical: 11,
-    paddingHorizontal: 18,
+    paddingHorizontal: 13,
     borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
     borderBottomWidth: 5,
+  },
+  icon: {
+    width: 21,
+    height: 21,
+    resizeMode: 'contain',
   },
   primary: {
     backgroundColor: colors.primary,

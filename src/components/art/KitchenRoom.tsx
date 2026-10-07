@@ -88,8 +88,6 @@ export const KitchenRoom = memo(function KitchenRoom({
   const counterH = Math.max(11, Math.round(H * 0.028));
 
   // Props standing on the work top, left and right of the cup's coaster.
-  const stackW = Math.round(cupH * 0.46);
-  const stackH = Math.round(cupH * 0.62);
   const jarW = Math.round(cupH * 0.4);
   const jarH = Math.round(cupH * 0.46);
   const jarX = W - 10 - jarW;
@@ -132,7 +130,6 @@ export const KitchenRoom = memo(function KitchenRoom({
         <Rect x={0} y={tableLine + counterH - 3} width={W} height={3} fill={SHOP.woodEdge} />
         <Rect x={0} y={tableLine + counterH} width={W} height={3} fill={SHOP.woodDark} opacity={0.2} />
 
-        <PropCupStack x={10} base={tableLine} w={stackW} h={stackH} />
         <PropStrawJar x={jarX} base={tableLine} w={jarW} h={jarH} />
         {roomForBoard && <PropChalkboard x={boardX} base={tableLine} w={boardW} h={Math.round(cupH * 0.56)} />}
 
@@ -225,33 +222,6 @@ function SteelBar({ W, shelf, slab }: { W: number; shelf: RoomShelf; slab: numbe
       <Rect x={0} y={shelf.base} width={W} height={slab} fill="#D5DDE3" />
       <Rect x={0} y={shelf.base} width={W} height={2} fill={SHOP.steelTop} />
       <Rect x={0} y={shelf.base + slab - 2.5} width={W} height={2.5} fill={SHOP.steelEdge} />
-    </Fragmentish>
-  );
-}
-
-/** A stack of spare cups, upside down on the work top. */
-function PropCupStack({ x, base, w, h }: { x: number; base: number; w: number; h: number }) {
-  return (
-    <Fragmentish>
-      <Rect x={x - 4} y={base - 5} width={w + 8} height={7} rx={3} fill={SHOP.woodEdge} />
-      <Path
-        d={`M${x + w * 0.16} ${base - 4} L${x} ${base - h} H${x + w} L${x + w * 0.84} ${base - 4} Z`}
-        fill="#F1F6F8"
-        stroke="#CBD8DD"
-        strokeWidth={1.3}
-        opacity={0.95}
-      />
-      {[0.72, 0.5].map((at) => (
-        <Path
-          key={at}
-          d={`M${x + w * (0.16 - 0.16 * at)} ${base - 4 - (h - 4) * at} H${x + w * (0.84 + 0.16 * at)}`}
-          stroke="#CBD8DD"
-          strokeWidth={1.1}
-        />
-      ))}
-      <Circle cx={x + w / 2} cy={base - h * 0.42} r={w * 0.17} fill="#F6E6D4" stroke="#C8A98C" strokeWidth={1} />
-      <Circle cx={x + w / 2 - w * 0.06} cy={base - h * 0.44} r={1} fill="#6B5143" />
-      <Circle cx={x + w / 2 + w * 0.06} cy={base - h * 0.44} r={1} fill="#6B5143" />
     </Fragmentish>
   );
 }

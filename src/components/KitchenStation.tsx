@@ -1,5 +1,5 @@
 import { ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { GestureResponderHandlers, PanResponder, StyleSheet, Text, View } from 'react-native';
+import { GestureResponderHandlers, Image, PanResponder, StyleSheet, Text, View } from 'react-native';
 import Animated, {
   Easing,
   interpolate,
@@ -9,7 +9,7 @@ import Animated, {
   withDelay,
   withTiming,
 } from 'react-native-reanimated';
-import Svg, { Circle, Defs, Ellipse, LinearGradient, Path, Rect, Stop } from 'react-native-svg';
+import Svg, { Circle, Ellipse, Path, Rect } from 'react-native-svg';
 
 import {
   CategoryId,
@@ -30,6 +30,7 @@ import { DURATION, ease, timing } from '../motion';
 import { colors, fonts } from '../theme';
 import { shade } from './art/Character';
 import { heartPath, KitchenRoom, RoomShelf, SHOP } from './art/KitchenRoom';
+import { ART_ASPECT, CARD, CUP_BASE, CUP_SPRITE, JAR, JAR_LEVEL, JAR_SPOUT, JAR_WINDOW, PAN } from './art/kitchenArt';
 import { Cup } from './Cup';
 
 // --------------------------------------------------------------------------- layout
@@ -74,13 +75,22 @@ export interface KitchenLayout {
 
 /** How wide each piece of equipment is relative to its height. */
 const ASPECT: Record<StationKind, number> = {
-  tea: 0.66,
+  tea: ART_ASPECT.jar,
   milk: 0.52,
-  topping: 1.12,
-  ice: 1.12,
+  topping: ART_ASPECT.pan,
+  ice: ART_ASPECT.pan,
   sugar: 0.5,
   foam: 0.88,
 };
+
+/** The sheet outlines every object in this dark warm grey — hand-drawn pieces match it. */
+const INK = '#5C5660';
+const INK_SOFT = '#8A8290';
+
+/** The flat cream the cup sprite is backed with — what its tapered body masks against. */
+const CUP_PAPER = '#FFFAF4';
+/** Where the drink sits inside the painted cup: the glass walls take the rest. */
+const CUP_WELL = { x: 0.11, y: 0.145, w: 0.78, h: 0.82 };
 
 const EQUIPMENT_NAMES: Record<string, string> = {
   ice: 'Đá',
@@ -90,7 +100,8 @@ const EQUIPMENT_NAMES: Record<string, string> = {
 /** The cup the player builds, sized to the room it has. */
 export function cupSizeFor(W: number, H: number) {
   const width = Math.round(Math.max(42, Math.min(62, W * 0.15, H * 0.17)));
-  const height = Math.round(width * 1.3 + Math.max(3, width * 0.07));
+  // The cup sprite is this much taller than it is wide.
+  const height = Math.round(width / ART_ASPECT.cup);
   return { width, height };
 }
 
@@ -161,7 +172,7 @@ export function layoutKitchen(config: DayConfig, W: number, H: number): KitchenL
         cx,
         slot: Math.round(slot),
         base,
-        spout: item.kind === 'tea' ? Math.round(h * 0.8) : Math.round(h * 0.2),
+        spout: item.kind === 'tea' ? Math.round(h * JAR_SPOUT) : Math.round(h * 0.2),
         dockY: base + cupH + 8,
       });
     });
@@ -206,6 +217,8 @@ interface KitchenStationProps {
   onSugar: () => void;
   /** The pager must stop swiping while something is being dragged around the kitchen. */
   onDragging: (dragging: boolean) => void;
+  /** With no order picked, the shop's "Ly mới" card hangs on the rail instead. */
+  hasOrder: boolean;
   /** Measured for the coin/toss effects. */
   cupRef: React.RefObject<View | null>;
 }
@@ -231,6 +244,7 @@ export function KitchenStation({
   onIce,
   onSugar,
   onDragging,
+  hasOrder,
   cupRef,
 }: KitchenStationProps) {
   const layout = useMemo(() => layoutKitchen(config, W, H), [config, W, H]);
@@ -381,6 +395,20 @@ export function KitchenStation({
         }
       })}
 
+      {/* Nothing to make yet: the shop's own note hangs on the rail. */}
+      {!hasOrder && (
+        <Image
+          source={CARD}
+          style={{
+            position: 'absolute',
+            left: Math.round(W * 0.06),
+            top: Math.round(tableLine - cupH - 16),
+            height: Math.round(cupH * 0.92),
+            width: Math.round(cupH * 0.92 * ART_ASPECT.card),
+          }}
+        />
+      )}
+
       {/* The cup: a thing on the table you pick up and carry to the taps. */}
       <Animated.View
         pointerEvents="none"
@@ -391,28 +419,28 @@ export function KitchenStation({
         {...pan.panHandlers}
         accessible
         accessibilityLabel="Ly đang pha — kéo tới vòi trà"
-        style={[styles.cup, { width: cupW }, cupStyle]}
+        style={[styles.cup, { width: cupW, height: cupH }, cupStyle]}
       >
-        {/* The cup's own body is glassy, so it carries a solid backing over busy shelves. */}
-        <View
-          style={[
-            styles.cupBacking,
-            { top: Math.max(3, cupW * 0.07), height: cupH - Math.max(3, cupW * 0.07), borderRadius: cupW * 0.18 },
-          ]}
-        />
-        <FreshCup key={cupId}>
-          <Cup
-            drink={inCup}
-            width={cupW}
-            backgroundColor={colors.floor}
-            tapered={false}
-            animated
-            fill={build.fill}
-            levelSv={level}
-            marks
-          />
+        {/* The drink is poured between the cup's painted silhouette and the cup itself: the flat
+            backing gives the tapered body something to mask against, the sprite goes over the top. */}
+        <FreshCup key={cupId} width={cupW} height={cupH}>
+          <Image source={CUP_BASE} style={[styles.cupLayer, { width: cupW, height: cupH }]} />
+          <View style={[styles.cupLayer, { left: Math.round(cupW * CUP_WELL.x), top: Math.round(cupH * CUP_WELL.y) }]}>
+            <Cup
+              drink={inCup}
+              width={Math.round(cupW * CUP_WELL.w)}
+              height={Math.round(cupH * CUP_WELL.h)}
+              backgroundColor={CUP_PAPER}
+              tapered={false}
+              shell={false}
+              animated
+              fill={build.fill}
+              levelSv={level}
+              marks
+            />
+          </View>
+          <Image source={CUP_SPRITE} style={[styles.cupLayer, { width: cupW, height: cupH }]} />
         </FreshCup>
-        <CatDecal cupW={cupW} cupH={cupH} />
         <Spill
           level={level}
           cupW={cupW}
@@ -462,26 +490,6 @@ function hintFor(station: Station | null, cup: Drink, build: CupBuild): string {
   return 'Kéo topping, đá, đường… thả thẳng vào ly';
 }
 
-/** The shop's cat printed on the side of every cup. */
-function CatDecal({ cupW, cupH }: { cupW: number; cupH: number }) {
-  const s = Math.round(cupW * 0.42);
-  return (
-    <View pointerEvents="none" style={{ position: 'absolute', left: (cupW - s) / 2, top: cupH * 0.44, opacity: 0.92 }}>
-      <Svg width={s} height={s} viewBox="0 0 24 24">
-        <Path d="M6.4 8 L5.6 3.6 L9.6 6 Z" fill="#F6E6D4" stroke="#C8A98C" strokeWidth={1.1} strokeLinejoin="round" />
-        <Path d="M17.6 8 L18.4 3.6 L14.4 6 Z" fill="#F6E6D4" stroke="#C8A98C" strokeWidth={1.1} strokeLinejoin="round" />
-        <Circle cx={12} cy={13} r={7.6} fill="#F6E6D4" stroke="#C8A98C" strokeWidth={1.1} />
-        <Circle cx={9.2} cy={12} r={1.15} fill="#6B5143" />
-        <Circle cx={14.8} cy={12} r={1.15} fill="#6B5143" />
-        <Path d="M10.8 15 q1.2 1.2 2.4 0" stroke="#6B5143" strokeWidth={1.1} fill="none" strokeLinecap="round" />
-        <Circle cx={12} cy={16.9} r={1.5} fill="#3A2318" />
-        <Circle cx={9} cy={17.9} r={1.2} fill="#3A2318" />
-        <Circle cx={15} cy={17.9} r={1.2} fill="#3A2318" />
-      </Svg>
-    </View>
-  );
-}
-
 /** A short message that fades back to the normal hint. */
 function useNudge() {
   const [text, setText] = useState('');
@@ -498,7 +506,7 @@ function useNudge() {
 }
 
 /** Each new cup settles onto the table. */
-function FreshCup({ children }: { children: ReactNode }) {
+function FreshCup({ children, width, height }: { children: ReactNode; width: number; height: number }) {
   const appear = useSharedValue(0);
   useEffect(() => {
     appear.set(withTiming(1, timing(DURATION.slow)));
@@ -507,7 +515,7 @@ function FreshCup({ children }: { children: ReactNode }) {
     opacity: appear.value,
     transform: [{ translateY: (1 - appear.value) * -10 }],
   }));
-  return <Animated.View style={style}>{children}</Animated.View>;
+  return <Animated.View style={[{ width, height }, style]}>{children}</Animated.View>;
 }
 
 /** Tea running over the brim and down the side of the cup. */
@@ -975,15 +983,9 @@ function TeaDispenser({
       onNudge(locked ? 'Ly đã có trà khác — bấm Đổ bỏ trước' : `Kéo ly xuống dưới vòi ${tea.name} trước`),
   });
 
-  // The heart handle on the tap tips over while the tea runs.
-  const lever = useAnimatedStyle(() => ({ transform: [{ rotate: pouring ? '-24deg' : '0deg' }] }));
-
-  const lidY = H * 0.05;
-  const lidH = H * 0.1;
-  const jarY = lidY + lidH * 0.72;
-  const jarH = H * 0.66;
-  const jarBottom = jarY + jarH;
-  const teaY = jarY + jarH * 0.12;
+  // The jar is a painted sprite with its glass cleared out; the tea is drawn through that window.
+  const win = JAR_WINDOW;
+  const teaH = H * win.h * JAR_LEVEL;
 
   return (
     <Frame
@@ -995,62 +997,25 @@ function TeaDispenser({
       press={press}
       handlers={handlers}
     >
-      <Svg width={W} height={H}>
-        <Defs>
-          <LinearGradient id={`gl-${station.key}`} x1="0" y1="0" x2="1" y2="0">
-            <Stop offset="0" stopColor="#FFFFFF" stopOpacity={0.3} />
-            <Stop offset="0.35" stopColor="#FFFFFF" stopOpacity={0.02} />
-            <Stop offset="1" stopColor="#FFFFFF" stopOpacity={0.22} />
-          </LinearGradient>
-        </Defs>
-
-        {/* chunky wooden base the jar stands on */}
-        <Rect x={0} y={H * 0.82} width={W} height={H * 0.17} rx={4} fill={SHOP.wood} />
-        <Rect x={0} y={H * 0.82} width={W} height={H * 0.045} rx={3} fill={SHOP.woodTop} />
-        <Rect x={0} y={H * 0.955} width={W} height={H * 0.035} rx={3} fill={SHOP.woodEdge} />
-
-        {/* the glass jar, with the tea sitting in it */}
-        <Rect
-          x={W * 0.08}
-          y={jarY}
-          width={W * 0.84}
-          height={jarH}
-          rx={W * 0.14}
-          fill={SHOP.glass}
-          stroke={SHOP.glassEdge}
-          strokeWidth={1.6}
-        />
-        <Rect x={W * 0.11} y={teaY} width={W * 0.78} height={jarBottom - teaY - 2} rx={W * 0.12} fill={tea.color} />
-        <Rect x={W * 0.11} y={teaY} width={W * 0.78} height={2.5} fill="#FFFFFF" opacity={0.3} />
-        {/* measuring ticks down the side */}
-        {[0.3, 0.42, 0.54, 0.66].map((at) => (
-          <Rect key={at} x={W * 0.72} y={jarY + jarH * at} width={W * 0.12} height={1.6} rx={0.8} fill="#FFFFFF" opacity={0.55} />
-        ))}
-        <Rect x={W * 0.08} y={jarY} width={W * 0.84} height={jarH} rx={W * 0.14} fill={`url(#gl-${station.key})`} />
-        <Rect x={W * 0.17} y={jarY + jarH * 0.12} width={W * 0.08} height={jarH * 0.5} rx={W * 0.04} fill="#FFFFFF" opacity={0.5} />
-
-        {/* wooden lid with a heart knob */}
-        <Rect x={W * 0.03} y={lidY} width={W * 0.94} height={lidH} rx={lidH * 0.42} fill={SHOP.wood} />
-        <Rect x={W * 0.03} y={lidY} width={W * 0.94} height={lidH * 0.38} rx={lidH * 0.3} fill={SHOP.woodTop} />
-        <Rect x={W * 0.03} y={lidY + lidH * 0.72} width={W * 0.94} height={lidH * 0.28} rx={lidH * 0.14} fill={SHOP.woodEdge} />
-        <Path d={heartPath(W * 0.5, lidY - H * 0.012, W * 0.11)} fill={SHOP.woodEdge} />
-        <Path d={heartPath(W * 0.5, lidY - H * 0.016, W * 0.085)} fill={SHOP.wood} />
-
-        {/* the tap: a dark body with a heart button, and a chrome spout under it */}
-        <Rect x={W * 0.36} y={jarBottom - jarH * 0.2} width={W * 0.28} height={jarH * 0.16} rx={3} fill={SHOP.handle} />
-        <Path d={heartPath(W * 0.5, jarBottom - jarH * 0.12, W * 0.07)} fill="#FFB3C8" />
-        <Rect x={W * 0.42} y={jarBottom - jarH * 0.05} width={W * 0.16} height={H * 0.07} rx={3} fill="#C8D0D4" />
-        <Rect x={W * 0.44} y={jarBottom + H * 0.02} width={W * 0.12} height={H * 0.04} rx={2} fill="#A9B2B8" />
-        <Rect x={W * 0.45} y={jarBottom - jarH * 0.04} width={W * 0.04} height={H * 0.05} rx={2} fill="#FFFFFF" opacity={0.5} />
-      </Svg>
-
-      {/* the handle you hold down */}
-      <Animated.View style={[styles.lever, { left: W * 0.6, top: jarBottom - jarH * 0.21 }, lever]}>
-        <Svg width={W * 0.3} height={H * 0.1}>
-          <Rect x={0} y={H * 0.025} width={W * 0.22} height={H * 0.03} rx={H * 0.015} fill={SHOP.handle} />
-          <Path d={heartPath(W * 0.24, H * 0.04, W * 0.07)} fill={SHOP.pinkGrip} />
-        </Svg>
-      </Animated.View>
+      <View style={{ width: W, height: H }}>
+        <View
+          style={{
+            position: 'absolute',
+            left: W * win.x,
+            top: H * (win.y + win.h) - teaH,
+            width: W * win.w,
+            height: teaH,
+            backgroundColor: tea.color,
+            borderTopLeftRadius: W * 0.05,
+            borderTopRightRadius: W * 0.05,
+            borderBottomLeftRadius: W * 0.12,
+            borderBottomRightRadius: W * 0.12,
+          }}
+        >
+          <View style={styles.teaTop} />
+        </View>
+        <Image source={JAR} style={{ width: W, height: H }} />
+      </View>
 
       <Stream
         x={W / 2}
@@ -1089,23 +1054,40 @@ function MilkCarton({ station, cup, carry }: EquipProps) {
         <Path
           d={`M${W * 0.12} ${H * 0.26} L${W * 0.5} ${H * 0.06} L${W * 0.88} ${H * 0.26} V${H * 0.97} H${W * 0.12} Z`}
           fill={body}
-          stroke="#D8CCBE"
-          strokeWidth={1.4}
+          stroke={INK}
+          strokeWidth={2.2}
           strokeLinejoin="round"
         />
-        <Path d={`M${W * 0.12} ${H * 0.26} L${W * 0.5} ${H * 0.06} L${W * 0.88} ${H * 0.26} Z`} fill={band} />
-        <Rect x={W * 0.12} y={H * 0.45} width={W * 0.76} height={H * 0.2} fill={band} opacity={0.9} />
-        <Rect x={W * 0.2} y={H * 0.5} width={W * 0.6} height={H * 0.04} rx={2} fill="#FFFFFF" opacity={0.75} />
-        <Rect x={W * 0.2} y={H * 0.57} width={W * 0.38} height={H * 0.03} rx={2} fill="#FFFFFF" opacity={0.55} />
-        <Path d={heartPath(W * 0.5, H * 0.76, W * 0.12)} fill={band} opacity={0.5} />
+        {/* the shaded side, the way the painted pieces are lit from the left */}
+        <Path d={`M${W * 0.66} ${H * 0.18} L${W * 0.88} ${H * 0.26} V${H * 0.97} H${W * 0.66} Z`} fill="#000000" opacity={0.08} />
+        <Path
+          d={`M${W * 0.12} ${H * 0.26} L${W * 0.5} ${H * 0.06} L${W * 0.88} ${H * 0.26} Z`}
+          fill={band}
+          stroke={INK}
+          strokeWidth={2.2}
+          strokeLinejoin="round"
+        />
+        <Rect x={W * 0.12} y={H * 0.45} width={W * 0.76} height={H * 0.2} fill={band} opacity={0.92} />
+        <Rect x={W * 0.2} y={H * 0.5} width={W * 0.6} height={H * 0.04} rx={2} fill="#FFFFFF" opacity={0.8} />
+        <Rect x={W * 0.2} y={H * 0.57} width={W * 0.38} height={H * 0.03} rx={2} fill="#FFFFFF" opacity={0.6} />
+        <Path d={heartPath(W * 0.5, H * 0.78, W * 0.13)} fill={band} opacity={0.55} />
         {/* screw cap on the gable */}
-        <Rect x={W * 0.56} y={H * 0.12} width={W * 0.16} height={H * 0.07} rx={2} fill={shade(band, -18)} />
+        <Rect
+          x={W * 0.56}
+          y={H * 0.11}
+          width={W * 0.18}
+          height={H * 0.08}
+          rx={2.5}
+          fill={shade(band, -18)}
+          stroke={INK}
+          strokeWidth={1.8}
+        />
       </Svg>
     </Frame>
   );
 }
 
-// --------------------------------------------------------------------------- topping bins
+// --------------------------------------------------------------------------- the topping bar
 
 function ToppingBin({ station, cup, max, carry }: EquipProps & { max: number }) {
   const { w: W, h: H } = station;
@@ -1124,118 +1106,17 @@ function ToppingBin({ station, cup, max, carry }: EquipProps & { max: number }) 
       press={press}
       handlers={handlers}
     >
-      <Svg width={W} height={H}>
-        <Pan W={W} H={H} />
-        <Pieces W={W} H={H} color={option.color} shape={option.shape} />
-      </Svg>
-      <PanScoop station={station} fill={option.color} />
+      <Image source={PAN[station.id] ?? PAN.pearls} style={{ width: W, height: H }} />
     </Frame>
   );
 }
 
-/** A stainless pan dropped into the topping bar. */
-function Pan({ W, H }: { W: number; H: number }) {
-  return (
-    <>
-      <Rect x={0} y={H * 0.26} width={W} height={H * 0.72} rx={6} fill="#D6DDE3" stroke={SHOP.steelEdge} strokeWidth={1.6} />
-      <Rect x={0} y={H * 0.26} width={W} height={H * 0.1} rx={5} fill={SHOP.steelTop} />
-      <Rect
-        x={W * 0.09}
-        y={H * 0.38}
-        width={W * 0.82}
-        height={H * 0.52}
-        rx={4}
-        fill={SHOP.steelDeep}
-        stroke="#7D888F"
-        strokeWidth={1}
-      />
-    </>
-  );
-}
-
-/** The topping itself, heaped up in the pan. */
-function Pieces({ W, H, color, shape }: { W: number; H: number; color: string; shape: 'pearl' | 'cube' }) {
-  const r = W * 0.085;
-  const spots = [
-    [0.2, 0.52],
-    [0.38, 0.47],
-    [0.56, 0.5],
-    [0.74, 0.54],
-    [0.29, 0.65],
-    [0.47, 0.62],
-    [0.65, 0.65],
-    [0.2, 0.76],
-    [0.38, 0.78],
-    [0.56, 0.77],
-    [0.74, 0.75],
-  ];
-  return (
-    <>
-      {spots.map(([fx, fy], i) =>
-        shape === 'pearl' ? (
-          <Circle key={i} cx={W * fx + r} cy={H * fy} r={r} fill={color} stroke="rgba(0,0,0,0.22)" strokeWidth={0.7} />
-        ) : (
-          <Rect
-            key={i}
-            x={W * fx}
-            y={H * fy - r}
-            width={r * 2}
-            height={r * 2}
-            rx={1.6}
-            fill={color}
-            stroke="rgba(0,0,0,0.22)"
-            strokeWidth={0.7}
-          />
-        ),
-      )}
-      {spots
-        .filter((_, i) => i % 3 === 0)
-        .map(([fx, fy], i) => (
-          <Circle key={`s${i}`} cx={W * fx + r * 0.6} cy={H * fy - r * 0.4} r={r * 0.3} fill="#FFFFFF" opacity={0.45} />
-        ))}
-    </>
-  );
-}
-
-/** The scoop that lives in a pan: chrome bowl buried in the topping, pink handle sticking out. */
-function PanScoop({ station, fill }: { station: Station; fill: string }) {
-  const { w: W, h: H } = station;
-  return (
-    <View pointerEvents="none" style={[styles.tool, { left: W * 0.47, top: -H * 0.06 }]}>
-      <Svg width={W * 0.44} height={H * 0.95} viewBox="0 0 22 40">
-        <Rect x={11} y={1} width={5} height={20} rx={2.5} fill={SHOP.pinkGrip} transform="rotate(16 13 11)" />
-        <Rect x={12.2} y={3} width={1.3} height={13} rx={0.6} fill="#FFFFFF" opacity={0.4} transform="rotate(16 13 11)" />
-        <Rect x={6.6} y={19} width={6} height={3.2} rx={1.4} fill="#C3CBD2" transform="rotate(16 9.5 20)" />
-        <Path
-          d="M1.5 22 h13 a1.8 1.8 0 0 1 1.8 1.8 v1.6 a8.2 6.4 0 0 1 -16.6 0 v-1.6 a1.8 1.8 0 0 1 1.8 -1.8 Z"
-          fill="#E3E9ED"
-          stroke={SHOP.steelEdge}
-          strokeWidth={1}
-        />
-        <Path d="M2.4 25.4 h11.6 a7.4 4.6 0 0 1 -11.6 0 Z" fill={fill} opacity={0.9} />
-      </Svg>
-    </View>
-  );
-}
-
-// --------------------------------------------------------------------------- ice chest
+// --------------------------------------------------------------------------- the ice pan
 
 function IceChest({ station, build, carry }: EquipProps) {
   const { w: W, h: H } = station;
   const press = useSharedValue(1);
   const handlers = useCarryGesture(station, carry, press);
-
-  const cubes = [
-    [0.18, 0.5],
-    [0.4, 0.46],
-    [0.62, 0.5],
-    [0.28, 0.66],
-    [0.5, 0.64],
-    [0.7, 0.68],
-    [0.2, 0.79],
-    [0.44, 0.8],
-    [0.66, 0.81],
-  ];
 
   return (
     <Frame
@@ -1245,36 +1126,23 @@ function IceChest({ station, build, carry }: EquipProps) {
       press={press}
       handlers={handlers}
     >
-      <Svg width={W} height={H}>
-        <Pan W={W} H={H} />
-        {cubes.map(([fx, fy], i) => (
-          <Rect
-            key={i}
-            x={W * fx}
-            y={H * fy - W * 0.08}
-            width={W * 0.17}
-            height={W * 0.17}
-            rx={2.5}
-            fill="#F4FCFF"
-            stroke="#A8D6EE"
-            strokeWidth={1}
-          />
-        ))}
-        {/* how many scoops already went in the cup */}
+      <Image source={PAN.ice} style={{ width: W, height: H }} />
+      {/* how many scoops already went in the cup */}
+      <View style={[styles.tool, { left: W * 0.12, top: H * 0.1, flexDirection: 'row', gap: W * 0.05 }]}>
         {[0, 1].map((i) => (
-          <Circle
+          <View
             key={i}
-            cx={W * 0.4 + i * W * 0.2}
-            cy={H * 0.32}
-            r={W * 0.045}
-            fill={i < build.iceScoops ? colors.sky : '#FFFFFF'}
-            stroke={SHOP.steelEdge}
-            strokeWidth={1}
+            style={{
+              width: W * 0.09,
+              height: W * 0.09,
+              borderRadius: W * 0.05,
+              borderWidth: 1.2,
+              borderColor: SHOP.steelEdge,
+              backgroundColor: i < build.iceScoops ? colors.sky : '#FFFFFF',
+            }}
           />
         ))}
-      </Svg>
-
-      <PanScoop station={station} fill="#DCF2FC" />
+      </View>
     </Frame>
   );
 }
@@ -1301,8 +1169,8 @@ function SyrupPump({ station, build, carry }: EquipProps) {
     >
       <Svg width={W} height={H}>
         {/* a little wooden coaster, like everything else on this counter */}
-        <Rect x={0} y={H * 0.84} width={W} height={H * 0.14} rx={4} fill={SHOP.wood} />
-        <Rect x={0} y={H * 0.84} width={W} height={H * 0.04} rx={3} fill={SHOP.woodTop} />
+        <Rect x={0} y={H * 0.84} width={W} height={H * 0.14} rx={4} fill={SHOP.wood} stroke={INK} strokeWidth={2} />
+        <Rect x={W * 0.04} y={H * 0.85} width={W * 0.92} height={H * 0.035} rx={3} fill={SHOP.woodTop} />
 
         {/* glass syrup bottle */}
         <Rect
@@ -1312,8 +1180,8 @@ function SyrupPump({ station, build, carry }: EquipProps) {
           height={bottleH}
           rx={W * 0.18}
           fill="#FFF8EA"
-          stroke="#E4D2AE"
-          strokeWidth={1.4}
+          stroke={INK}
+          strokeWidth={2.2}
         />
         <Rect x={W * 0.13} y={bottleY + bottleH - syrup} width={W * 0.74} height={syrup - 2} rx={W * 0.14} fill="#EFAE2B" />
         <Rect x={W * 0.2} y={bottleY + 5} width={W * 0.1} height={bottleH * 0.55} rx={W * 0.05} fill="#FFFFFF" opacity={0.45} />
@@ -1321,9 +1189,9 @@ function SyrupPump({ station, build, carry }: EquipProps) {
         <Path d={heartPath(W * 0.5, bottleY + bottleH * 0.57, W * 0.1)} fill="#F6C56B" />
 
         {/* wooden collar and a pink pump head */}
-        <Rect x={W * 0.26} y={H * 0.17} width={W * 0.48} height={H * 0.1} rx={3} fill={SHOP.woodEdge} />
-        <Rect x={W * 0.42} y={H * 0.07} width={W * 0.16} height={H * 0.11} rx={2} fill="#C8D0D4" />
-        <Rect x={W * 0.3} y={H * 0.03} width={W * 0.42} height={H * 0.06} rx={3} fill={SHOP.pinkGrip} />
+        <Rect x={W * 0.24} y={H * 0.16} width={W * 0.52} height={H * 0.11} rx={3} fill={SHOP.woodEdge} stroke={INK} strokeWidth={2} />
+        <Rect x={W * 0.42} y={H * 0.07} width={W * 0.16} height={H * 0.11} rx={2} fill="#C8D0D4" stroke={INK} strokeWidth={1.6} />
+        <Rect x={W * 0.28} y={H * 0.02} width={W * 0.46} height={H * 0.07} rx={3.5} fill={SHOP.pinkGrip} stroke={INK} strokeWidth={2} />
 
         {/* dose pips */}
         {[0, 1, 2].map((i) => (
@@ -1333,8 +1201,8 @@ function SyrupPump({ station, build, carry }: EquipProps) {
             cy={H * 0.91}
             r={W * 0.07}
             fill={i < pumps ? '#C98A1E' : '#FFF3D9'}
-            stroke={SHOP.woodEdge}
-            strokeWidth={0.8}
+            stroke={INK_SOFT}
+            strokeWidth={1}
           />
         ))}
       </Svg>
@@ -1369,29 +1237,32 @@ function FoamTub({ station, cup, carry }: EquipProps) {
         <Path
           d={`M${W * 0.12} ${tubY} h${W * 0.76} l${-W * 0.07} ${tubH} h${-W * 0.62} Z`}
           fill="#E3E9ED"
-          stroke={SHOP.steelEdge}
-          strokeWidth={1.4}
+          stroke={INK}
+          strokeWidth={2.2}
+          strokeLinejoin="round"
         />
-        <Rect x={W * 0.06} y={tubY - H * 0.04} width={W * 0.88} height={H * 0.06} rx={3} fill="#D5DDE3" />
-        <Rect x={W * 0.06} y={tubY - H * 0.04} width={W * 0.88} height={H * 0.02} rx={2} fill={SHOP.steelTop} />
+        <Path d={`M${W * 0.66} ${tubY} h${W * 0.22} l${-W * 0.07} ${tubH} h${-W * 0.19} Z`} fill="#000000" opacity={0.07} />
+        <Rect x={W * 0.06} y={tubY - H * 0.045} width={W * 0.88} height={H * 0.065} rx={3} fill="#D5DDE3" stroke={INK} strokeWidth={2} />
+        <Rect x={W * 0.1} y={tubY - H * 0.03} width={W * 0.8} height={H * 0.02} rx={2} fill={SHOP.steelTop} />
         {/* whipped dome, swirled */}
         <Path
           d={`M${W * 0.14} ${tubY} q${W * 0.16} ${-H * 0.16} ${W * 0.36} ${-H * 0.02} q${W * 0.14} ${-H * 0.1} ${W * 0.36} ${H * 0.02} Z`}
           fill={color}
-          stroke={shade(color, -12)}
-          strokeWidth={1.1}
+          stroke={INK}
+          strokeWidth={2}
+          strokeLinejoin="round"
         />
         <Path d={`M${W * 0.28} ${tubY - H * 0.045} q${W * 0.1} ${-H * 0.03} ${W * 0.2} 0`} stroke="#FFFFFF" strokeWidth={1.4} fill="none" opacity={0.7} />
         {/* label band */}
-        <Rect x={W * 0.2} y={tubY + tubH * 0.38} width={W * 0.56} height={tubH * 0.24} rx={2} fill="#FFFFFF" opacity={0.85} />
+        <Rect x={W * 0.2} y={tubY + tubH * 0.38} width={W * 0.56} height={tubH * 0.24} rx={2.5} fill="#FFFFFF" opacity={0.9} stroke={INK_SOFT} strokeWidth={1.2} />
         <Path d={heartPath(W * 0.48, tubY + tubH * 0.5, W * 0.07)} fill={SHOP.pink} />
       </Svg>
 
       <View style={[styles.tool, { left: W * 0.04, top: -H * 0.12 }]}>
         <Svg width={W * 0.44} height={H * 0.56} viewBox="0 0 24 30">
-          <Rect x={10.2} y={0} width={4.4} height={17} rx={2.2} fill={SHOP.pinkGrip} />
+          <Rect x={10.2} y={0} width={4.4} height={17} rx={2.2} fill={SHOP.pinkGrip} stroke={INK} strokeWidth={1.4} />
           <Rect x={11.2} y={2} width={1.2} height={11} rx={0.6} fill="#FFFFFF" opacity={0.4} />
-          <Ellipse cx={12} cy={23} rx={6.8} ry={5} fill="#E3E9ED" stroke={SHOP.steelEdge} strokeWidth={1} />
+          <Ellipse cx={12} cy={23} rx={6.8} ry={5} fill="#E3E9ED" stroke={INK} strokeWidth={1.6} />
           <Ellipse cx={12} cy={21.6} rx={5.2} ry={3.2} fill={color} />
         </Svg>
       </View>
@@ -1407,7 +1278,7 @@ const styles = StyleSheet.create({
     paddingTop: 6,
   },
   locked: {
-    opacity: 0.42,
+    opacity: 0.55,
   },
   ring: {
     position: 'absolute',
@@ -1453,12 +1324,15 @@ const styles = StyleSheet.create({
     left: 0,
     top: 0,
   },
-  cupBacking: {
+  cupLayer: {
     position: 'absolute',
     left: 0,
-    right: 0,
-    // Clear plastic: enough body to read over the shelves, not so much that it looks painted.
-    backgroundColor: 'rgba(252,254,254,0.72)',
+    top: 0,
+  },
+  teaTop: {
+    height: 2.5,
+    backgroundColor: '#FFFFFF',
+    opacity: 0.3,
   },
   cupShadow: {
     position: 'absolute',
