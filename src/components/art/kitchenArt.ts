@@ -8,6 +8,7 @@ export const JAR = require('../../assets/kitchen/jar.png');
 export const CUP_SPRITE = require('../../assets/kitchen/cup.png');
 export const CUP_BASE = require('../../assets/kitchen/cup-base.png');
 export const CARD = require('../../assets/kitchen/card.png');
+export const SCOOP = require('../../assets/kitchen/scoop.png');
 export const ICON_TRASH = require('../../assets/kitchen/icon-trash.png');
 export const ICON_CUP = require('../../assets/kitchen/icon-cup.png');
 
@@ -27,7 +28,11 @@ export const ART_ASPECT = {
   pan: 228 / 232,
   cup: 133 / 199,
   card: 130 / 229,
+  scoop: 94 / 118,
 };
+
+/** The bowl of the carried scoop, as fractions of its sprite — what it is holding goes here. */
+export const SCOOP_BOWL = { cx: 0.33, cy: 0.78, r: 0.26 };
 
 /** The cleared glass of a dispenser, as fractions of the sprite. */
 export const JAR_WINDOW = { x: 24 / 191, y: 88 / 321, w: 157 / 191, h: 175 / 321 };

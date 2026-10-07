@@ -7,9 +7,10 @@ import Animated, {
   useAnimatedStyle,
   useSharedValue,
   withDelay,
+  withRepeat,
   withTiming,
 } from 'react-native-reanimated';
-import Svg, { Circle, Ellipse, Path, Rect } from 'react-native-svg';
+import Svg, { Circle, Defs, Ellipse, Path, RadialGradient, Rect, Stop } from 'react-native-svg';
 
 import {
   CategoryId,
@@ -30,8 +31,8 @@ import { DURATION, ease, timing } from '../motion';
 import { colors, fonts } from '../theme';
 import { shade } from './art/Character';
 import { heartPath, KitchenRoom, RoomShelf, SHOP } from './art/KitchenRoom';
-import { ART_ASPECT, CARD, CUP_BASE, CUP_SPRITE, JAR, JAR_LEVEL, JAR_SPOUT, JAR_WINDOW, PAN } from './art/kitchenArt';
-import { Cup } from './Cup';
+import { ART_ASPECT, CARD, JAR, JAR_LEVEL, JAR_SPOUT, JAR_WINDOW, PAN, SCOOP, SCOOP_BOWL } from './art/kitchenArt';
+import { KitchenCup, Piece, WELL_BOTTOM, WELL_RUN } from './KitchenCup';
 
 // --------------------------------------------------------------------------- layout
 
@@ -87,10 +88,6 @@ const ASPECT: Record<StationKind, number> = {
 const INK = '#5C5660';
 const INK_SOFT = '#8A8290';
 
-/** The flat cream the cup sprite is backed with — what its tapered body masks against. */
-const CUP_PAPER = '#FFFAF4';
-/** Where the drink sits inside the painted cup: the glass walls take the rest. */
-const CUP_WELL = { x: 0.11, y: 0.145, w: 0.78, h: 0.82 };
 
 const EQUIPMENT_NAMES: Record<string, string> = {
   ice: 'Đá',
@@ -421,25 +418,8 @@ export function KitchenStation({
         accessibilityLabel="Ly đang pha — kéo tới vòi trà"
         style={[styles.cup, { width: cupW, height: cupH }, cupStyle]}
       >
-        {/* The drink is poured between the cup's painted silhouette and the cup itself: the flat
-            backing gives the tapered body something to mask against, the sprite goes over the top. */}
         <FreshCup key={cupId} width={cupW} height={cupH}>
-          <Image source={CUP_BASE} style={[styles.cupLayer, { width: cupW, height: cupH }]} />
-          <View style={[styles.cupLayer, { left: Math.round(cupW * CUP_WELL.x), top: Math.round(cupH * CUP_WELL.y) }]}>
-            <Cup
-              drink={inCup}
-              width={Math.round(cupW * CUP_WELL.w)}
-              height={Math.round(cupH * CUP_WELL.h)}
-              backgroundColor={CUP_PAPER}
-              tapered={false}
-              shell={false}
-              animated
-              fill={build.fill}
-              levelSv={level}
-              marks
-            />
-          </View>
-          <Image source={CUP_SPRITE} style={[styles.cupLayer, { width: cupW, height: cupH }]} />
+          <KitchenCup drink={inCup} width={cupW} height={cupH} level={level} />
         </FreshCup>
         <Spill
           level={level}
@@ -448,6 +428,17 @@ export function KitchenStation({
           color={inCup.tea ? (getIngredient('tea', inCup.tea)?.color ?? colors.ink) : '#F7F4EC'}
         />
       </Animated.View>
+
+      {pouring && docked && (
+        <Stream
+          x={docked.cx}
+          top={docked.y + docked.spout}
+          cupTop={docked.dockY - cupH}
+          cupH={cupH}
+          color={getIngredient(pouring.category, pouring.id)?.color ?? colors.ink}
+          level={level}
+        />
+      )}
 
       {carry.node}
 
@@ -758,38 +749,70 @@ function Tool({ station, size }: { station: Station; size: number }) {
       </Svg>
     );
   }
-  const cold = station.kind === 'ice';
-  const piece = station.kind === 'topping' ? (getIngredient('toppings', station.id) as Topping | undefined) : undefined;
-  const fill = cold ? '#EAF7FD' : station.kind === 'foam' ? '#F2EFEA' : '#DDE3E8';
-  const edge = cold ? '#A3CADD' : SHOP.steelEdge;
+  // Toppings, ice and foam are carried over in the shop's own scoop, holding what you picked up.
+  const piece = station.kind === 'topping' ? (getIngredient('toppings', station.id) as Topping) : undefined;
+  // The scoop sprite is taller than it is wide; everything it holds is placed in that same box.
+  const SH = S / ART_ASPECT.scoop;
+  const bowlR = S * SCOOP_BOWL.r;
+  const bowl = { x: S * SCOOP_BOWL.cx, y: SH * SCOOP_BOWL.cy };
   return (
-    <Svg width={S} height={S} viewBox="0 0 24 24">
-      <Rect x={10.4} y={0} width={3.2} height={11} rx={1.6} fill={SHOP.pinkGrip} />
-      <Rect x={11.1} y={1} width={1} height={8} rx={0.5} fill="#FFFFFF" opacity={0.45} />
-      <Rect x={9.9} y={10} width={4.2} height={2.4} rx={1} fill="#C3CBD2" />
-      <Path d="M4 12 h16 a2 2 0 0 1 2 2 v1.5 a10 7 0 0 1 -20 0 v-1.5 a2 2 0 0 1 2 -2 Z" fill={fill} stroke={edge} strokeWidth={1} />
-      {cold && (
-        <>
-          <Rect x={6.5} y={13} width={5} height={5} rx={1} fill="#FFFFFF" stroke="#9FD3EF" strokeWidth={0.8} />
-          <Rect x={12.5} y={14} width={4.5} height={4.5} rx={1} fill="#FFFFFF" stroke="#9FD3EF" strokeWidth={0.8} />
-        </>
-      )}
-      {station.kind === 'foam' && <Ellipse cx={12} cy={14.5} rx={6} ry={3.4} fill={station.color} />}
-      {piece &&
-        [
-          [8, 15],
-          [12, 14],
-          [16, 15.4],
-          [10, 17.4],
-          [14, 17.6],
-        ].map(([cx, cy], i) =>
-          piece.shape === 'pearl' ? (
-            <Circle key={i} cx={cx} cy={cy} r={2} fill={piece.color} stroke="rgba(0,0,0,0.18)" strokeWidth={0.5} />
-          ) : (
-            <Rect key={i} x={cx - 2} y={cy - 2} width={4} height={4} rx={0.8} fill={piece.color} stroke="rgba(0,0,0,0.18)" strokeWidth={0.5} />
-          ),
+    <View style={{ width: S, height: SH }}>
+      <Svg style={StyleSheet.absoluteFill} width={S} height={SH}>
+        {/* the chrome bowl, which the sprite only outlines */}
+        <Ellipse cx={S * 0.35} cy={SH * 0.76} rx={S * 0.33} ry={SH * 0.19} fill="#DCE3E8" stroke="#A9B2BA" strokeWidth={1.2} />
+        <Defs>
+          {piece && (
+            <RadialGradient id={`tg-${station.key}`} cx="35%" cy="30%" r="75%">
+              <Stop offset="0" stopColor={shade(piece.color, 30)} />
+              <Stop offset="1" stopColor={shade(piece.color, -22)} />
+            </RadialGradient>
+          )}
+        </Defs>
+        {piece &&
+          [
+            [-0.62, -0.1],
+            [0.04, -0.06],
+            [0.66, -0.04],
+            [-0.32, -0.55],
+            [0.34, -0.52],
+            [0, -0.95],
+          ].map(([fx, fy], i) => (
+            <Piece
+              key={i}
+              x={bowl.x + fx * bowlR}
+              y={bowl.y + fy * bowlR}
+              r={bowlR * 0.4}
+              topping={piece}
+              fill={`url(#tg-${station.key})`}
+            />
+          ))}
+        {station.kind === 'ice' &&
+          [
+            [-0.5, -0.12],
+            [0.5, -0.08],
+            [0, -0.62],
+          ].map(([fx, fy], i) => (
+            <Rect
+              key={i}
+              x={bowl.x + fx * bowlR - bowlR * 0.3}
+              y={bowl.y + fy * bowlR - bowlR * 0.3}
+              width={bowlR * 0.72}
+              height={bowlR * 0.72}
+              rx={bowlR * 0.14}
+              fill="#F2FBFF"
+              stroke="#A8D6EE"
+              strokeWidth={1.2}
+            />
+          ))}
+        {station.kind === 'foam' && (
+          <>
+            <Ellipse cx={bowl.x} cy={bowl.y - bowlR * 0.45} rx={bowlR * 0.95} ry={bowlR * 0.6} fill={station.color} stroke={shade(station.color, -16)} strokeWidth={1.2} />
+            <Ellipse cx={bowl.x - bowlR * 0.3} cy={bowl.y - bowlR * 0.6} rx={bowlR * 0.34} ry={bowlR * 0.18} fill="#FFFFFF" opacity={0.6} />
+          </>
         )}
-    </Svg>
+      </Svg>
+      <Image source={SCOOP} style={{ width: S, height: SH }} />
+    </View>
   );
 }
 
@@ -927,31 +950,99 @@ function useCarryGesture(station: Station, carry: Carry, press: SharedValue<numb
   };
 }
 
-/** The stream from a spout down into the cup's rim. */
+/**
+ * The tea running out of a tap. It is drawn over the whole kitchen rather than inside the
+ * dispenser, so it visibly falls *into* the cup, and it ends at the drink's surface — the stream
+ * gets shorter as the cup fills, the way a real pour does.
+ */
 function Stream({
   x,
   top,
-  length,
+  cupTop,
+  cupH,
   color,
-  on,
-  width = 3.4,
+  level,
+  width = 6,
 }: {
   x: number;
   top: number;
-  length: number;
+  cupTop: number;
+  cupH: number;
   color: string;
-  on: boolean;
+  level: SharedValue<number>;
   width?: number;
 }) {
   const run = useSharedValue(0);
   useEffect(() => {
-    run.set(withTiming(on ? 1 : 0, { duration: on ? 130 : 110, easing: Easing.linear }));
-  }, [on, run]);
-  const style = useAnimatedStyle(() => ({ height: run.value * length, opacity: run.value }));
+    run.set(withTiming(1, { duration: 170, easing: Easing.linear }));
+    return () => {
+      run.set(0);
+    };
+  }, [run]);
+  const style = useAnimatedStyle(() => {
+    const surface = cupTop + (WELL_BOTTOM - Math.min(1, Math.max(0, level.get())) * WELL_RUN) * cupH;
+    return { height: Math.max(0, surface - top) * run.get(), opacity: Math.min(1, run.get() * 2.2) };
+  });
+
+  return (
+    <Animated.View pointerEvents="none" style={[{ position: 'absolute', left: x - width / 2, top, width }, style]}>
+      {/* the falling column, with the light down one side of it */}
+      <View style={[StyleSheet.absoluteFill, { backgroundColor: color, borderRadius: width * 0.5 }]} />
+      <View
+        style={{
+          position: 'absolute',
+          left: width * 0.16,
+          top: 0,
+          bottom: 0,
+          width: width * 0.26,
+          borderRadius: width,
+          backgroundColor: '#FFFFFF',
+          opacity: 0.32,
+        }}
+      />
+      {/* it leaves the spout as a fat drop */}
+      <View
+        style={{
+          position: 'absolute',
+          left: -width * 0.45,
+          right: -width * 0.45,
+          top: -width * 0.35,
+          height: width * 1.3,
+          borderRadius: width,
+          backgroundColor: color,
+        }}
+      />
+      <Ripple color={color} size={width * 3.4} />
+    </Animated.View>
+  );
+}
+
+/** Where the stream hits the drink: a ring that spreads and fades, over and over. */
+function Ripple({ color, size }: { color: string; size: number }) {
+  const spread = useSharedValue(0);
+  useEffect(() => {
+    spread.set(withRepeat(withTiming(1, { duration: 520, easing: Easing.linear }), -1, false));
+  }, [spread]);
+  const style = useAnimatedStyle(() => ({
+    opacity: 0.5 * (1 - spread.get()),
+    transform: [{ scaleX: 0.45 + spread.get() }, { scaleY: 0.45 + spread.get() * 0.5 }],
+  }));
   return (
     <Animated.View
       pointerEvents="none"
-      style={[{ position: 'absolute', left: x - width / 2, top, width, borderRadius: width, backgroundColor: color }, style]}
+      style={[
+        {
+          position: 'absolute',
+          bottom: -size * 0.16,
+          left: -size / 2,
+          width: size * 2,
+          height: size * 0.5,
+          borderRadius: size,
+          borderWidth: Math.max(1.4, size * 0.1),
+          borderColor: color,
+        },
+        style,
+      ]}
     />
   );
 }
@@ -972,7 +1063,7 @@ function TeaDispenser({
   const tea = getIngredient('tea', station.id) as Tea;
   const locked = cup.tea !== null && cup.tea !== station.id;
   const press = useSharedValue(1);
-  const { pouring, handlers } = useHoldPour({
+  const { handlers } = useHoldPour({
     enabled: active && !locked,
     fill: build.fill,
     level,
@@ -1017,13 +1108,6 @@ function TeaDispenser({
         <Image source={JAR} style={{ width: W, height: H }} />
       </View>
 
-      <Stream
-        x={W / 2}
-        top={station.spout}
-        length={station.base - station.y - station.spout + 10}
-        color={tea.color}
-        on={pouring}
-      />
     </Frame>
   );
 }

@@ -95,9 +95,10 @@ there (`findStation` only considers teas), and only the docked one pours.
 
 - **Tea dispensers — carry the cup to them.** Drag the cup up under the spout to dock it,
   then press *and hold* (`useHoldPour`): how long you hold is how much goes in (`POUR_RATE` per second).
-  The level rises live because the station owns the cup's liquid level as a shared value (`Cup`'s
-  `levelSv`/`fill`/`marks` props) and the cup shows the tea's colour while pouring, before `POUR` is even
-  dispatched. Letting go commits `POUR { category, optionId, amount }` and sets the cup back on its mat
+  The level rises live because the station owns the cup's liquid level as a shared value and the cup shows
+  the tea's colour while pouring, before `POUR` is even dispatched. The `Stream` is drawn over the whole
+  kitchen rather than inside the dispenser — otherwise the cup covers it — and it ends at the drink's
+  surface, so it visibly shortens as the cup fills. Letting go commits `POUR { category, optionId, amount }` and sets the cup back on its mat
   (so a docked cup never ends up hiding a shelf).
 - **Everything else — carry it to the cup.** The topping pans, the ice pan, the syrup bottle, the milk
   cartons and the foam tubs are dragged: `useCarry` keeps what's in hand, draws the tool following the
@@ -127,10 +128,15 @@ of the artwork, which keeps the painted highlights, ticks and the cat decal on t
 
 - a **dispenser** is a tinted block of tea inside `JAR_WINDOW`, with `jar.png` over it; one sprite serves
   every tea;
-- the **cup** is three layers — `cup-base.png` (a flat cream silhouette, so the drink reads over a busy
-  shelf), then `Cup` itself drawn inside `CUP_WELL` with `shell={false}` so only the *contents* render
-  (liquid, pearls, ice, foam, the "đủ" marks), then `cup.png` over the top. `Cup`'s `height`, `taper` and
-  `shell` props exist for exactly this.
+- the **cup** is [KitchenCup](src/components/KitchenCup.tsx): `cup-base.png` (a flat cream silhouette, so
+  the drink reads over a busy shelf), then the drink drawn in the sprite's own 133×199 coordinate space
+  and **clipped to `WELL`** — the path round the inside of the glass — then `cup.png` over the top. The
+  liquid is a full-height painting of itself inside a container whose height follows the level, so it is
+  revealed from the bottom as the cup fills; the pearls, jelly and ice are shaded SVG `Piece`s that sit
+  low enough to stay clear of the cat printed on the front. Nothing can escape the glass, because
+  everything is inside the clip. (The vector `Cup` is still what the tickets and customers use.)
+- the **carried scoop** is `scoop.png` with the pieces drawn into its bowl, so what is in your hand is
+  the same scoop that sits in the pan;
 - the **pans** are whole sprites, one per topping. Three were painted; the rest (grass jelly, red bean,
   ice) are repainted from those by `repaint()`, which keeps the shading and leaves the red scoop alone.
 
