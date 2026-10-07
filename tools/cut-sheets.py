@@ -90,6 +90,26 @@ def repaint(src, target):
     return im
 
 
+def blank_card(card):
+    """Wipe the printed note clean, keeping its torn edge and the coloured header band."""
+    px = card.load()
+    W, H = card.size
+    paper = px[10, 120]
+    green = px[34, 42]
+    for y in range(24, 60):                      # the header: fill between its own ends
+        ends = [x for x in range(W) if px[x, y][3] and px[x, y][1] > px[x, y][0] * 1.1]
+        if ends:
+            for x in range(ends[0], ends[-1] + 1):
+                px[x, y] = green
+    for y in range(62, 218):                     # the body: back to blank paper
+        row = [x for x in range(W) if px[x, y][3] > 200]
+        if len(row) < 20:
+            continue
+        for x in range(row[0] + 4, row[-1] - 3):
+            px[x, y] = paper
+    card.save(OUT / 'card-blank.png')
+
+
 def main():
     OUT.mkdir(parents=True, exist_ok=True)
 
@@ -142,6 +162,8 @@ def main():
     cut(room, (475, 449, 629, 591), 'towel.png')
     cut(room, (15, 488, 166, 565), 'coaster.png')
     cut(room, (177, 491, 463, 544), 'rail.png')
+
+    blank_card(Image.open(OUT / 'card.png').convert('RGBA'))
 
     for f in sorted(OUT.iterdir()):
         print(f'{f.name:22s} {Image.open(f).size}')

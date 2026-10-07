@@ -71,6 +71,7 @@ export const CUP_STACK = require('../../assets/kitchen/cup-stack.png');
 export const STRAWS = require('../../assets/kitchen/straws.png');
 export const TOWEL = require('../../assets/kitchen/towel.png');
 export const CARD = require('../../assets/kitchen/card.png');
+export const CARD_BLANK = require('../../assets/kitchen/card-blank.png');
 export const ICON_TRASH = require('../../assets/kitchen/icon-trash.png');
 export const ICON_CUP = require('../../assets/kitchen/icon-cup.png');
 

@@ -55,8 +55,8 @@ src/game/               pure game logic, no React
 src/screens/            TitleScreen, DayEndScreen, and the in-play screens:
   GameScreen.tsx        orchestrator: HUD, the two-page swipe pager + tab indicator, effects/opening/pause overlays
   CounterPage.tsx       page 1 — the customer stage (take orders here)
-  PrepPage.tsx          page 2 — ticket rail; the order slip; the KitchenStation (the room you work in);
-                        serve/clear. The room's own art comes with the station.
+  PrepPage.tsx          page 2 — the KitchenStation (the room you work in) edge to edge, plus
+                        serve/clear. The orders hang inside the room, not above it.
 src/components/         Cup (layered, animated), CustomerStage, TicketRail, OrderTicket, KitchenStation,
                         Hud, Effects (coins/confetti/toss), OpeningSign…
 src/components/art/     SVG illustrations: Character, IngredientIcon, ShopBackdrop (customer wall),
@@ -143,6 +143,15 @@ keeps the painted ticks, highlights and the cat decal on top of it:
   that [KitchenRoom](src/components/art/KitchenRoom.tsx) and the station place by the layout's
   lines. Three pans and two pieces had no art of their own and are repainted from the ones that do,
   by `repaint()`, which keeps the shading and leaves the red scoop alone.
+
+**The prep page is all kitchen.** There is no ticket rail or order slip above it: the room fills
+everything between the tabs and the action buttons, which is what gives the equipment the size it has
+in the reference. The order lives on a note clipped to the shop's rail
+([OrderNote.tsx](src/components/OrderNote.tsx)) — the printed "Ly mới" slip when nothing is taken,
+otherwise the customer's name on the header with the drink listed underneath, ticking off as the cup
+comes together. The other taken orders are pegged up beside it as `TicketPin`s; tap one to switch.
+`layoutKitchen` sizes each row to what stands on it and gives most of the slack to the cup's band, so
+the room packs the way the reference does rather than leaving empty wall.
 
 The layout follows `tools/sheets/reference.png`: lamps and tiled wall, the dispenser shelf (with
 the plant and the poster at its ends when there is room for them), the notes rail, the work top

@@ -25,13 +25,12 @@ import {
   Topping,
 } from '../game/ingredients';
 import { DayConfig } from '../game/levels';
-import { CupBuild } from '../game/reducer';
+import { CupBuild, Customer } from '../game/reducer';
 import { DURATION, ease, timing } from '../motion';
 import { colors, fonts } from '../theme';
 import { KitchenRoom, RoomShelf, SHOP } from './art/KitchenRoom';
 import {
   ART,
-  CARD,
   FOAM,
   JAR,
   JAR_LEVEL,
@@ -46,6 +45,8 @@ import {
   SYRUP,
 } from './art/kitchenArt';
 import { KitchenCup, WELL_BOTTOM, WELL_RUN } from './KitchenCup';
+import { OrderNote, TicketPin } from './OrderNote';
+import { Ticket } from './TicketRail';
 
 // --------------------------------------------------------------------------- layout
 
@@ -91,6 +92,16 @@ export interface KitchenLayout {
   homeY: number;
 }
 
+/** How wide a piece of equipment may get, as a fraction of the room's width. */
+const MAX_WIDTH: Record<StationKind, number> = {
+  tea: 0.26,
+  milk: 0.21,
+  topping: 0.3,
+  ice: 0.3,
+  sugar: 0.17,
+  foam: 0.23,
+};
+
 /** How wide each piece of equipment is relative to its height. */
 const ASPECT: Record<StationKind, number> = {
   tea: ART.jar,
@@ -109,7 +120,7 @@ const EQUIPMENT_NAMES: Record<string, string> = {
 
 /** The cup the player builds, sized to the room it has. */
 export function cupSizeFor(W: number, H: number) {
-  const width = Math.round(Math.max(42, Math.min(62, W * 0.15, H * 0.17)));
+  const width = Math.round(Math.max(44, Math.min(92, W * 0.22, H * 0.17)));
   // The cup sprite is this much taller than it is wide.
   const height = Math.round(width / ART.cup);
   return { width, height };
@@ -123,8 +134,8 @@ export function cupSizeFor(W: number, H: number) {
  */
 export function layoutKitchen(config: DayConfig, W: number, H: number): KitchenLayout {
   const { width: cupW, height: cupH } = cupSizeFor(W, H);
-  // Headroom for the pendant lamps, a wooden name plaque under each machine, cabinets at the foot.
-  const top = Math.max(34, Math.round(H * 0.085));
+  // The lamps hang over the top of the wall, so the shelf starts close to it.
+  const top = Math.max(16, Math.round(H * 0.035));
   const labelH = 17;
   const cabinetH = Math.max(34, Math.round(H * 0.11));
   const cabinetTop = H - cabinetH;
@@ -144,34 +155,42 @@ export function layoutKitchen(config: DayConfig, W: number, H: number): KitchenL
     ],
   ].filter((row) => row.length > 0);
 
-  const avail = cabinetTop - top - bandH;
-  const weights = rows.map((row) => (row[0].kind === 'tea' ? 1.25 : 1));
-  const total = weights.reduce((a, b) => a + b, 0);
+  // With only a few dispensers the shelf has room at both ends for the plant and the poster.
+  const sideRoom = rows[0].length <= 4 ? Math.round(W * 0.13) : 0;
+
+  // Each row is only as tall as what stands on it — the slack goes to the cup, like the shop does.
+  const plans = rows.map((items) => {
+    const kind = items[0].kind;
+    const inset = kind === 'tea' ? sideRoom : 0;
+    const slot = (W - 6 - inset * 2) / items.length;
+    const w = Math.round(Math.min(slot - 10, W * MAX_WIDTH[kind], H * (kind === 'tea' ? 0.3 : 0.22) * ASPECT[kind]));
+    return { items, inset, slot, w, h: Math.round(w / ASPECT[kind]) };
+  });
+
+  const room = cabinetTop - top - bandH;
+  const used = plans.reduce((sum, plan) => sum + plan.h + labelH, 0);
+  // Most of the slack goes to the cup's band, the rest as breathing space above each row;
+  // if it does not fit at all, everything shrinks together.
+  const slack = room - used;
+  const toBand = Math.max(0, slack * 0.62);
+  const band = bandH + toBand;
+  const gap = Math.max(0, (slack - toBand) / plans.length);
+  const squeeze = slack < 0 ? room / used : 1;
 
   const stations: Station[] = [];
   const shelves: RoomShelf[] = [];
   let y = top;
   let tableLine = cabinetTop - counterH;
-  // With only a few dispensers the shelf has room at both ends for the plant and the poster.
-  const sideRoom = rows[0].length <= 4 ? Math.round(W * 0.13) : 0;
 
-  rows.forEach((items, r) => {
-    const rowH = (avail * weights[r]) / total;
-    const base = Math.round(y + rowH - labelH);
-    const inset = items[0].kind === 'tea' ? sideRoom : 0;
-    const slot = (W - 6 - inset * 2) / items.length;
-    const tall = items[0].kind === 'tea';
-    const maxH = Math.min(rowH - labelH - 6, H * (tall ? 0.32 : 0.26));
-    let shelfTop = base;
+  plans.forEach((plan, r) => {
+    const h = Math.round(plan.h * squeeze);
+    const w = Math.round(plan.w * squeeze);
+    const base = Math.round(y + gap * (r === 0 ? 0.5 : 0.25) + h);
 
-    items.forEach((item, i) => {
-      const aspect = ASPECT[item.kind];
-      const w = Math.round(Math.min(slot - 10, maxH * aspect));
-      const h = Math.round(w / aspect);
-      const cx = Math.round(3 + inset + slot * (i + 0.5));
+    plan.items.forEach((item, i) => {
+      const cx = Math.round(3 + plan.inset + plan.slot * (i + 0.5));
       const option =
         item.kind === 'ice' || item.kind === 'sugar' ? undefined : getIngredient(categoryOf(item.kind), item.id);
-      shelfTop = Math.min(shelfTop, base - h);
       stations.push({
         key: `${item.kind}-${item.id}`,
         kind: item.kind,
@@ -183,19 +202,19 @@ export function layoutKitchen(config: DayConfig, W: number, H: number): KitchenL
         w,
         h,
         cx,
-        slot: Math.round(slot),
+        slot: Math.round(plan.slot),
         base,
         spout: item.kind === 'tea' ? Math.round(h * JAR_SPOUT) : Math.round(h * 0.2),
         dockY: base + cupH + 8,
       });
     });
 
-    shelves.push({ base, top: shelfTop, steel: !tall });
-    y += rowH;
+    shelves.push({ base, top: base - h, steel: plan.items[0].kind !== 'tea' });
+    y = base + Math.round(labelH * squeeze) + gap * (r === 0 ? 0.5 : 0.75);
     // The work top goes straight under the dispensers, so the cup only has a short lift.
     if (r === 0) {
-      tableLine = Math.round(y + bandH - counterH);
-      y += bandH;
+      tableLine = Math.round(y + band - counterH);
+      y += band;
     }
   });
 
@@ -204,7 +223,7 @@ export function layoutKitchen(config: DayConfig, W: number, H: number): KitchenL
     shelves,
     tableLine,
     // The rail hangs just under the dispensers, at the top of the cup's band.
-    railY: Math.round(tableLine - bandH + counterH + 4),
+    railY: Math.round(tableLine - band + counterH + 4),
     cabinetTop,
     sideRoom,
     cupW,
@@ -233,8 +252,12 @@ interface KitchenStationProps {
   onSugar: () => void;
   /** The pager must stop swiping while something is being dragged around the kitchen. */
   onDragging: (dragging: boolean) => void;
-  /** With no order picked, the shop's "Ly mới" card hangs on the rail instead. */
-  hasOrder: boolean;
+  /** The taken orders, which hang on the shop's rail. */
+  tickets: Ticket[];
+  selectedSlot: number | null;
+  selectedCustomer: Customer | null;
+  clock: number;
+  onSelectTicket: (slot: number) => void;
   /** Measured for the coin/toss effects. */
   cupRef: React.RefObject<View | null>;
 }
@@ -260,7 +283,11 @@ export function KitchenStation({
   onIce,
   onSugar,
   onDragging,
-  hasOrder,
+  tickets,
+  selectedSlot,
+  selectedCustomer,
+  clock,
+  onSelectTicket,
   cupRef,
 }: KitchenStationProps) {
   const layout = useMemo(() => layoutKitchen(config, W, H), [config, W, H]);
@@ -369,6 +396,10 @@ export function KitchenStation({
     transform: [{ translateX: cupX.value }, { translateY: cupY.value }],
   }));
 
+  // The note hangs from the rail down towards the work top; the pins sit beside it.
+  const noteW = Math.round(Math.min(W * 0.235, (tableLine - railY) * 0.55));
+  const noteH = Math.round(Math.min(noteW / ART.card, (tableLine - railY) * 0.95));
+  const pinSize = Math.round(Math.min(W * 0.11, (tableLine - railY) * 0.3));
   const hint = nudge.text || hintFor(docked, cup, build);
   // Freeze the pager while a tap is held, so a drifting finger can't swipe the page away. When the
   // tap is let go, the cup is put back down on the table a moment later.
@@ -413,19 +444,34 @@ export function KitchenStation({
         }
       })}
 
-      {/* Nothing to make yet: the shop's own note hangs on the rail. */}
-      {!hasOrder && (
-        <Image
-          source={CARD}
-          style={{
-            position: 'absolute',
-            left: Math.round(W * 0.06),
-            top: Math.round(tableLine - cupH - 16),
-            height: Math.round(cupH * 0.92),
-            width: Math.round(cupH * 0.92 * ART.card),
-          }}
+      {/* The order hangs on the rail, with the other tickets pegged up beside it. */}
+      <OrderNote
+        customer={selectedCustomer}
+        cup={cup}
+        config={config}
+        patience={
+          selectedCustomer
+            ? Math.max(0, 1 - (clock - (selectedCustomer.orderedAt ?? selectedCustomer.arrivedAt)) / selectedCustomer.patienceMs)
+            : 1
+        }
+        x={Math.round(W * 0.035)}
+        y={railY + 6}
+        width={Math.round(noteH * ART.card)}
+        height={noteH}
+      />
+      {tickets.map(({ slot, customer }, i) => (
+        <TicketPin
+          key={customer.id}
+          customer={customer}
+          cup={cup}
+          config={config}
+          selected={slot === selectedSlot}
+          size={pinSize}
+          x={W - 16 - (tickets.length - i) * (pinSize + 7)}
+          y={railY + 2}
+          onPress={() => onSelectTicket(slot)}
         />
-      )}
+      ))}
 
       {/* The cup: a thing on the table you pick up and carry to the taps. */}
       <Animated.View

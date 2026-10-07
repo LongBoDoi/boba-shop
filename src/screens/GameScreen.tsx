@@ -318,7 +318,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'center',
     gap: 10,
-    paddingVertical: 6,
+    paddingVertical: 3,
     backgroundColor: colors.primaryDark,
   },
   tab: {
@@ -326,7 +326,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 6,
     paddingHorizontal: 14,
-    paddingVertical: 4,
+    paddingVertical: 2,
     borderRadius: 14,
   },
   dot: {

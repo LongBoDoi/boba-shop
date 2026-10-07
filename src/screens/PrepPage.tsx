@@ -6,8 +6,7 @@ import { ICON_CUP, ICON_TRASH } from '../components/art/kitchenArt';
 import { Button } from '../components/Button';
 import { Point } from '../components/Effects';
 import { cupSizeFor, KitchenStation } from '../components/KitchenStation';
-import { OrderTicket } from '../components/OrderTicket';
-import { Ticket, TicketRail } from '../components/TicketRail';
+import { Ticket } from '../components/TicketRail';
 import { Drink, MIN_FILL } from '../game/ingredients';
 import { DayConfig } from '../game/levels';
 import { Customer, CupBuild } from '../game/reducer';
@@ -98,9 +97,6 @@ export function PrepPage({
 
   return (
     <View style={[styles.page, { width }]}>
-      <TicketRail tickets={tickets} selectedSlot={selectedSlot} cup={cup} config={config} clock={clock} onSelect={onSelectTicket} />
-      <OrderTicket customer={selectedCustomer} cup={cup} config={config} />
-
       <View
         style={styles.scene}
         onLayout={(event: LayoutChangeEvent) => {
@@ -121,7 +117,11 @@ export function PrepPage({
             onIce={onIce}
             onSugar={onSugar}
             onDragging={onDragging}
-            hasOrder={Boolean(selectedCustomer)}
+            tickets={tickets}
+            selectedSlot={selectedSlot}
+            selectedCustomer={selectedCustomer}
+            clock={clock}
+            onSelectTicket={onSelectTicket}
             cupRef={machineRef}
           />
         )}
@@ -144,7 +144,6 @@ const styles = StyleSheet.create({
   },
   scene: {
     flex: 1,
-    marginTop: 6,
     overflow: 'hidden',
   },
   actions: {

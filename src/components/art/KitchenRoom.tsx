@@ -112,6 +112,8 @@ export const KitchenRoom = memo(function KitchenRoom({
   const counterH = Math.max(12, Math.round(H * 0.03));
   const band = tableLine - railY; // the cup's band, rail to work top
   const railH = Math.max(9, Math.round(W * 0.035));
+  // the cluster of props standing at the right of the work top
+  const propRow = Math.min(band * 1.1, W * 0.44);
 
   const topShelf = shelves[0];
   const propW = Math.min(sideRoom, Math.round(W * 0.2));
@@ -190,9 +192,9 @@ export const KitchenRoom = memo(function KitchenRoom({
       />
 
       {/* ---- props standing on the work top */}
-      <Prop src={STRAWS} aspect={ART.straws} x={W - band * 0.52} bottom={tableLine + 1} w={band * 0.42} />
-      <Prop src={CHALKBOARD} aspect={ART.chalkboard} x={W - band * 0.98} bottom={tableLine + 1} w={band * 0.44} />
-      <Prop src={SUCCULENT} aspect={ART.succulent} x={W - band * 1.12} bottom={tableLine + 1} w={band * 0.17} />
+      <Prop src={STRAWS} aspect={ART.straws} x={W - propRow * 0.42} bottom={tableLine + 1} w={propRow * 0.36} />
+      <Prop src={CHALKBOARD} aspect={ART.chalkboard} x={W - propRow * 0.82} bottom={tableLine + 1} w={propRow * 0.38} />
+      <Prop src={SUCCULENT} aspect={ART.succulent} x={W - propRow * 0.94} bottom={tableLine + 1} w={propRow * 0.15} />
 
       {/* ---- the work top itself, with the cup's coaster on it */}
       <View style={{ position: 'absolute', left: 0, top: tableLine, width: W, height: counterH, backgroundColor: SHOP.wood }} />
