@@ -110,6 +110,25 @@ def blank_card(card):
     card.save(OUT / 'card-blank.png')
 
 
+def soften_glow(lamp):
+    """The lamp's light was painted over the sheet's grey, so it cut out as an opaque box.
+    Below the shade, how much brighter than that grey a pixel is becomes how opaque it is."""
+    px = lamp.load()
+    W, H = lamp.size
+    luma = lambda c: 0.299 * c[0] + 0.587 * c[1] + 0.114 * c[2]
+    pink = [y for y in range(H) for x in range(W) if px[x, y][3] > 100 and px[x, y][2] > px[x, y][1] + 10 and px[x, y][0] > 180]
+    rim = max(pink) if pink else int(H * 0.72)
+    grey = 183.0
+    for y in range(rim + 1, H):
+        for x in range(W):
+            c = px[x, y]
+            if not c[3]:
+                continue
+            a = (luma(c) - grey) / (255 - grey)
+            px[x, y] = (255, 243, 203, max(0, min(255, int(a * 235))))
+    return lamp
+
+
 def main():
     OUT.mkdir(parents=True, exist_ok=True)
 
@@ -139,7 +158,8 @@ def main():
     # the wall tiles at the sprite's own size, so it is cut down to the brick size we want
     wall = kit.crop((14, 24, 190, 169))
     wall.resize((96, 79), Image.LANCZOS).save(OUT / 'wall.png')
-    cut(kit, (324, 7, 432, 168), 'lamp.png')
+    lamp = kit.crop((324, 7, 432, 168))
+    soften_glow(lamp).crop(lamp.getbbox()).save(OUT / 'lamp.png')
     cut(kit, (440, 37, 634, 92), 'shelf.png')
     cut(kit, (9, 187, 220, 291), 'counter-steel.png')
     cut(kit, (385, 180, 631, 292), 'cabinet.png')

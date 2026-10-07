@@ -1,5 +1,6 @@
 import { memo } from 'react';
 import { Image, ImageSourcePropType, StyleSheet, View } from 'react-native';
+import Svg, { Defs, Ellipse, RadialGradient, Stop } from 'react-native-svg';
 
 import {
   ART,
@@ -66,6 +67,22 @@ interface KitchenRoomProps {
   cupH: number;
   /** Room either side of the dispensers for the plant and the poster. */
   sideRoom: number;
+}
+
+/** The warm pool a pendant throws on the wall under it. */
+function Lamplight({ x, y, r }: { x: number; y: number; r: number }) {
+  return (
+    <Svg style={{ position: 'absolute', left: x - r, top: y - r, width: r * 2, height: r * 2 }} pointerEvents="none">
+      <Defs>
+        <RadialGradient id={`lamp-${Math.round(x)}`} cx="50%" cy="50%" r="50%">
+          <Stop offset="0" stopColor="#FFDB78" stopOpacity={0.62} />
+          <Stop offset="0.45" stopColor="#FFE49C" stopOpacity={0.3} />
+          <Stop offset="1" stopColor="#FFEFC2" stopOpacity={0} />
+        </RadialGradient>
+      </Defs>
+      <Ellipse cx={r} cy={r} rx={r} ry={r} fill={`url(#lamp-${Math.round(x)})`} />
+    </Svg>
+  );
 }
 
 /** One sprite, placed by its width with its own aspect kept. */
@@ -136,8 +153,12 @@ export const KitchenRoom = memo(function KitchenRoom({
       )}
 
       {/* ---- pendant lamps, hanging from the ceiling in both corners */}
-      <Image source={LAMP} style={{ position: 'absolute', left: W * 0.025, top: 0, width: lampW, height: lampW / ART.lamp }} />
-      <Image source={LAMP} style={{ position: 'absolute', right: W * 0.025, top: 0, width: lampW, height: lampW / ART.lamp }} />
+      {[Math.round(W * 0.025), Math.round(W * 0.975 - lampW)].map((x) => (
+        <View key={x}>
+          <Lamplight x={x + lampW / 2} y={(lampW / ART.lamp) * 0.8} r={lampW * 1.15} />
+          <Image source={LAMP} style={{ position: 'absolute', left: x, top: 0, width: lampW, height: lampW / ART.lamp }} />
+        </View>
+      ))}
 
       {shelves.map((shelf, i) =>
         shelf.steel ? (
