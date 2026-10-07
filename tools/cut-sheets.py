@@ -11,9 +11,21 @@ script rather than the PNGs. Two things happen beyond plain cropping:
 * the glass of a dispenser — and the body of the cup — is cleared out, leaving a window the game
   draws the tea through, with the painted ticks, highlights and cat decal still on top of it.
 
-`jar.png`, `cup.png`, `cup-base.png` and the `pan-*.png` set are cut from a 1024px rendering of the
-kitchen sheet that we no longer have a copy of; they are checked in, and this script leaves them
-alone. Everything else here regenerates from tools/sheets/.
+The `pan-*.png` set is cut from a 1024px rendering of the kitchen sheet that we no longer have a
+copy of; they are checked in, and this script leaves them alone.
+
+Two other scripts cut the things the game used to draw for itself, and neither output is touched
+here:
+
+* `tools/cut-tea-jars.ps1` writes `jar-<tea>.png` — a whole dispenser per tea, glass and tea
+  together, off tools/sheets/kitchen.png;
+* `tools/cut-cup-design.ps1` writes `cup.png`, `cup-base.png` and `drink-<tea>.png` off
+  tools/sheets/cup-design.png, which is the same cup drawn twice, empty and full.
+
+The game used to draw its liquids itself and they never matched the design, so nothing is drawn
+now — they are simply the design.
+
+Everything else here regenerates from tools/sheets/.
 """
 
 from collections import deque

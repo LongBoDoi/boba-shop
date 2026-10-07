@@ -5,10 +5,80 @@
  * a window cleared out of them; the fractions for those are at the bottom of this file.
  */
 
+
 // ------------------------------------------------------------------ what you work with
-export const JAR = require('../../assets/kitchen/jar.png');
+/**
+ * A dispenser, full, one sprite per tea — the whole thing, glass and tea together, cut off the
+ * design sheet by `tools/cut-tea-jars.ps1`. The tea is not drawn in code: its oval surface, its
+ * even body and the way it runs to the foot behind the tap are all painted, and every attempt to
+ * reproduce them with a gradient came out wrong.
+ */
+/**
+ * The drink standing in a cup, cut off `tools/sheets/cup-design.png` by `tools/cut-cup-design.ps1`.
+ * As with the dispensers, none of it is drawn in code — these are the design's own *full* cup,
+ * glass and all, which is why the cup is drawn first and the drink laid over it rather than behind.
+ *
+ * It comes in two pieces because the level moves: `DRINK` is the glass filled to the brim and cut
+ * to the shape of the well, which the cup reveals from the bottom up, and `DRINK_TOP` is the oval
+ * surface alone, which the cup stands on that reveal line and stretches to however wide the glass
+ * is there. Revealing a sprite with the oval already in it would slice the oval off flat at every
+ * level but full. The cat is left out of both, because the cup underneath has its own.
+ */
+export const DRINK: Record<string, number> = {
+  black: require('../../assets/kitchen/drink-black.png'),
+  green: require('../../assets/kitchen/drink-green.png'),
+  thai: require('../../assets/kitchen/drink-thai.png'),
+  oolong: require('../../assets/kitchen/drink-oolong.png'),
+  taro: require('../../assets/kitchen/drink-taro.png'),
+  matcha: require('../../assets/kitchen/drink-matcha.png'),
+};
+export const DRINK_MILKY: Record<string, number> = {
+  black: require('../../assets/kitchen/drink-black-milky.png'),
+  green: require('../../assets/kitchen/drink-green-milky.png'),
+  thai: require('../../assets/kitchen/drink-thai-milky.png'),
+  oolong: require('../../assets/kitchen/drink-oolong-milky.png'),
+  taro: require('../../assets/kitchen/drink-taro-milky.png'),
+  matcha: require('../../assets/kitchen/drink-matcha-milky.png'),
+};
+
+export const DRINK_TOP: Record<string, number> = {
+  black: require('../../assets/kitchen/drink-black-top.png'),
+  green: require('../../assets/kitchen/drink-green-top.png'),
+  thai: require('../../assets/kitchen/drink-thai-top.png'),
+  oolong: require('../../assets/kitchen/drink-oolong-top.png'),
+  taro: require('../../assets/kitchen/drink-taro-top.png'),
+  matcha: require('../../assets/kitchen/drink-matcha-top.png'),
+};
+export const DRINK_MILKY_TOP: Record<string, number> = {
+  black: require('../../assets/kitchen/drink-black-milky-top.png'),
+  green: require('../../assets/kitchen/drink-green-milky-top.png'),
+  thai: require('../../assets/kitchen/drink-thai-milky-top.png'),
+  oolong: require('../../assets/kitchen/drink-oolong-milky-top.png'),
+  taro: require('../../assets/kitchen/drink-taro-milky-top.png'),
+  matcha: require('../../assets/kitchen/drink-matcha-milky-top.png'),
+};
+
+export const JAR_TEA: Record<string, number> = {
+  black: require('../../assets/kitchen/jar-black.png'),
+  green: require('../../assets/kitchen/jar-green.png'),
+  thai: require('../../assets/kitchen/jar-thai.png'),
+  oolong: require('../../assets/kitchen/jar-oolong.png'),
+  taro: require('../../assets/kitchen/jar-taro.png'),
+  matcha: require('../../assets/kitchen/jar-matcha.png'),
+};
 export const CUP_SPRITE = require('../../assets/kitchen/cup.png');
 export const CUP_BASE = require('../../assets/kitchen/cup-base.png');
+/**
+ * The cat printed on the *front* of the cup, cut out of the glass so it can be laid over the
+ * drink. Left in the glass it sits behind, and the drink pours straight over it.
+ */
+/**
+ * The cup's dark linework, cut out so it can be laid over the drink. The drink runs down to the
+ * foot of the glass and crosses the outline round the base; with the outline only underneath, the
+ * drink covers some of it and not the rest, which reads as stray marks down there.
+ */
+export const CUP_EDGE = require('../../assets/kitchen/cup-edge.png');
+export const CUP_DECAL = require('../../assets/kitchen/cup-decal.png');
 export const SCOOP = require('../../assets/kitchen/scoop.png');
 export const SYRUP = require('../../assets/kitchen/syrup.png');
 
@@ -82,8 +152,8 @@ export const ICON_CUP = require('../../assets/kitchen/icon-cup.png');
 
 /** Width ÷ height of every sprite, so nothing gets squashed by accident. */
 export const ART = {
-  jar: 191 / 321,
-  cup: 133 / 199,
+  jar: 116 / 205,
+  cup: 113 / 174,
   pan: 228 / 232,
   scoop: 102 / 64,
   milk: 99 / 157,
@@ -109,10 +179,8 @@ export const ART = {
 };
 
 // ------------------------------------------------------------------ where things line up
-/** The cleared glass of a dispenser, as fractions of its sprite. */
-export const JAR_WINDOW = { x: 24 / 191, y: 88 / 321, w: 157 / 191, h: 175 / 321 };
-/** How full a dispenser looks on the shelf, and how far down it lets go of the tea. */
-export const JAR_LEVEL = 0.86;
+/** How far down a dispenser its tap lets go of the tea. */
 export const JAR_SPOUT = 0.87;
 /** The bowl of the carried scoop — what you picked up is heaped here. */
 export const SCOOP_BOWL = { cx: 0.34, cy: 0.57, r: 0.17 };
+

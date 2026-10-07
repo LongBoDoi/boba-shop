@@ -65,7 +65,9 @@ src/components/art/     SVG illustrations: Character, IngredientIcon, ShopBackdr
                         kitchenArt.ts (the painted kitchen sprites + their geometry),
                         Counter, CounterTop, Tiles, ToppingShelf
 src/assets/kitchen/     the painted sprites themselves — generated, see "The kitchen's artwork"
-tools/                  cut-kitchen-sheet.py: cuts the asset sheet into those sprites
+tools/                  cut-sheets.py: cuts the asset sheets into those sprites
+                        cut-tea-jars.ps1: a whole dispenser per tea, off the kitchen sheet
+                        cut-cup-design.ps1: the cup and its drink, off the cup design
 src/motion.ts           shared animation timings/easings
 src/theme.ts            colours and font family names
 ```
@@ -96,9 +98,12 @@ there (`findStation` only considers teas), and only the docked one pours.
 - **Tea dispensers — carry the cup to them.** Drag the cup up under the spout to dock it,
   then press *and hold* (`useHoldPour`): how long you hold is how much goes in (`POUR_RATE` per second).
   The level rises live because the station owns the cup's liquid level as a shared value and the cup shows
-  the tea's colour while pouring, before `POUR` is even dispatched. The `Stream` is drawn over the whole
-  kitchen rather than inside the dispenser — otherwise the cup covers it — and it ends at the drink's
-  surface, so it visibly shortens as the cup fills. Letting go commits `POUR { category, optionId, amount }` and sets the cup back on its mat
+  the tea's colour while pouring, before `POUR` is even dispatched. The `Stream` is drawn across the
+  kitchen rather than inside the dispenser, and it ends at the drink's surface, so it visibly shortens
+  as the cup fills. It is drawn in **two halves split at the cup's lip** — `side="back"` before the cup
+  and `side="front"` after it — because neither alone is right: all in front and it runs down the
+  *outside* of the glass over the cat, all behind and tea still falling through open air is dimmed by
+  a cup it has not reached. Letting go commits `POUR { category, optionId, amount }` and sets the cup back on its mat
   (so a docked cup never ends up hiding a shelf).
 - **Everything else — carry it to the cup.** The topping pans, the ice pan, the syrup bottle, the milk
   cartons and the foam tubs are dragged: `useCarry` keeps what's in hand, draws the tool following the
@@ -116,22 +121,108 @@ shows no "added ✓" badges — the order slip is the checklist; machines only d
 drips tea down the side when the live level goes over the brim. The order slip (`OrderTicket`) is a compact
 strip above the room, so the whole scene is workspace.
 
+### Liquids are cut, never drawn
+**No tea or drink is rendered in code.** Both are sprites cut off the design — the dispensers from
+`tools/sheets/kitchen.png` by `tools/cut-tea-jars.ps1`, the cup and its drink from
+`tools/sheets/cup-design.png` by `tools/cut-cup-design.ps1` — and teas the design doesn't paint are
+those same sprites re-coloured, shading and all.
+
+It was drawn in code for a long time and never matched, through many rounds of it. The sheet's
+liquid sits under an **oval** surface, holds **one tone** the whole way down rather than any
+top-to-bottom gradient, shades **across** the glass instead, and runs to the very **foot** of it.
+Each of those had to be found the hard way. If a liquid looks wrong, fix the cut — do not reach for
+a gradient.
+
+The **cup** and its **drink** both come from `tools/sheets/cup-design.png` — the same cup drawn
+twice, empty and full — via `tools/cut-cup-design.ps1`. The glass is solved off the empty one, so
+it is genuinely see-through; the drink is the full one's own pixels, glass and all. That is why
+`KitchenCup` draws the cup *first* and lays the drink over it: wherever the drink covers, what you
+see is simply the design. The cat is printed on the **front** of the glass, so it is cut out of
+`cup.png` into `cup-decal.png` and drawn **last**, over the drink — leave it in the glass and the
+drink pours straight over it. The drink's own shape is the full cup's liquid footprint, base and
+all, found by hue rather than fitted to a path; `WELL` only clips the ice and toppings.
+
+The two cups on that sheet are drawn separately, not copies, so they differ everywhere. Don't try
+to find the liquid by subtracting one from the other — it reports the whole cup.
+
+Earlier versions solved the liquid back out from behind the glass and re-composited it under ours.
+Don't: it passes through two lots of error and comes out blotchy and off-colour.
+
+The drink ends where the design's own tea ends, at **y 162**, in the soft arc the sheet paints
+there. Carrying it further down into the glass's base — the obvious-looking fix for a flat-bottomed
+pour — only hangs a dark tapering wedge off the bottom of it, because below that the design is
+drawing the *foot*, which closes fast. Each row fills its **whole span** rather than testing pixel
+by pixel, so the glass's moulded ticks don't punch holes through it, and `cup-edge.png` — the
+glass's dark linework — is drawn **over** the drink, so the drink can't eat into the outline.
+
+Every body row is drawn from **one clean row** (y 66), stretched across whatever the glass holds
+there. The design's body is one tone from y 61 to 84, so nothing is lost; it matters at the other
+end, where the sheet's lowest rows carry the base's own bright rim and dark band. Those only read as
+a base seen through a full cup — revealed on their own as a shallow pour they become stacked discs
+with ledges between them.
+
+The drink is **two** sprites, because the level moves: `DRINK` is the glass filled to the brim and
+cut to the liquid's own footprint, revealed from the bottom up by an animated height, and
+`DRINK_TOP` is the surface alone, stood on that reveal line and stretched to however wide the glass
+is there. Revealing one sprite with the surface in it slices it off flat at every level but full.
+
+`DRINK_TOP` is a **whole ellipse**, ten rows above the line where the liquid meets the glass and
+twelve below, and three things about it are load-bearing:
+
+- the **shape is drawn, not masked** off the sheet. The far rim is painted nearly the colour of the
+  glass, so no test separates them cleanly and the arc comes out lopsided;
+- the colour is read **along the arc**, not straight across — down the middle the ellipse is at its
+  deepest and the sheet's rows map one for one, out at the sides they squeeze into fewer. Copied row
+  for row, the near rim's bright band runs across as a flat stripe and the surface reads as a disc
+  inside a disc;
+- the **lower half fades out** as it closes, melting into the body behind it instead of ending on a
+  rim of its own, and being an ellipse it closes faster than the glass's foot does — which is what
+  keeps it inside the walls at low fill, where the sprite is stretched to the width of the line all
+  the way down. `MIN_POUR` covers the rest: a pour never shows less than a tenth, because below that
+  the glass has nothing like twelve rows left under the surface.
+
+`pourLevel` is how that floor is reached, and it is **eased, not clamped** — the first `POUR_EASE`
+of the level is squeezed into the room above the floor. Clamped with a `Math.max`, the drink snaps
+to a tenth and then stands still for the ~180ms it takes to actually pour that much, which reads in
+the hand as the tap stalling before it gets going. Everything that follows the surface goes through
+it, the pour stream in `KitchenStation` included, or the stream ends where the drink isn't.
+
+The **"đủ" line** is the one guide printed on the glass, and it is a dashed **ring**, not a bar —
+`CUP_ROUND` gives it the same perspective as the surface, so pour to it and the drink's own surface
+ellipse lands straight on it. It is drawn as two arcs meeting at the ring's widest points, where the
+glass turns away: the near half is on this side of everything and stays sharp, and the far half is
+read **through** whatever is in the cup. Empty glass is clear, so it starts sharp too and only goes
+soft — `FeGaussianBlur`, with its filter region set by hand, because the default crops a line this
+thin off square at both ends — once the tea is over the line. That crossfade is two `FarGuide`
+layers under animated view styles rather than one element under `useAnimatedProps`, for the reason
+below.
+
+Both are plain `<Image>`s moved by `useAnimatedStyle`. An earlier attempt slid one taller sprite
+inside an SVG clip by animating the image's `y` through `useAnimatedProps`, which looked right in
+every mock-up and did not hold up in the app — the drink sat at the top of its own box and stopped
+short of the base. Keep the drink on view styles.
+
 ### The kitchen's artwork
 Nearly everything in the prep room is a **painted sprite**. `tools/cut-sheets.py` cuts
 `tools/sheets/*.png` into `src/assets/kitchen/`, and
 [kitchenArt.ts](src/components/art/kitchenArt.ts) is the only place that names those files. The
 sprites are generated — change the script (or the sheet), re-run it, never hand-edit a PNG. The one
-exception is `jar.png`, `cup.png`, `cup-base.png` and the `pan-*.png` set, which were cut from a
-1024px rendering of the kitchen sheet that no longer exists; they are checked in and the script
-leaves them alone.
+exception is the `pan-*.png` set, cut from a 1024px rendering of the kitchen sheet that no longer
+exists; they are checked in and the script leaves them alone. The dispensers and the cup have
+scripts of their own — see "Liquids are cut, never drawn".
 
 Anything that has to *move* is drawn against a window the script cleared out of the artwork, which
 keeps the painted ticks, highlights and the cat decal on top of it:
 
-- a **dispenser** is a block of tea inside `JAR_WINDOW` with `jar.png` over it; one sprite serves
-  every tea, tinted by the ingredient;
-- the **cup** is [KitchenCup](src/components/KitchenCup.tsx): a flat cream silhouette, then the
-  drink drawn in the sprite's own 133×199 space and **clipped to `WELL`** — the path round the
+- a **dispenser** is one whole sprite per tea, `JAR_TEA[id]`, glass and tea together, cut off the
+  design sheet by `tools/cut-tea-jars.ps1`. **The tea is not drawn in code.** It used to be — a
+  shape with a gradient behind an empty jar — and it never matched: on the sheet the tea sits under
+  an oval surface, holds one tone the whole way down, and runs to the foot of the glass behind the
+  tap. Reproducing that was a long series of near-misses, so don't; if a dispenser looks wrong, fix
+  the cut. Teas the sheet doesn't paint are the same sprite re-coloured, shading and all;
+- the **cup** is [KitchenCup](src/components/KitchenCup.tsx): a faint tint of its silhouette (the
+  cup is clear plastic, so this only lifts it off the room — backing it solidly reads as milky), then the
+  drink drawn in the sprite's own 185×237 space and **clipped to `WELL`** — the path round the
   inside of the glass — then `cup.png` over the top. The liquid is a gradient painting of itself
   inside a container whose height follows the level, so it is revealed from the bottom as the cup
   fills; the toppings and ice are the sheet's own pieces, placed low enough to clear the cat.

@@ -42,12 +42,17 @@ export const EMPTY_DRINK: Drink = {
 
 // Teas and toppings unlock in array order as the days go on.
 export const TEAS: Tea[] = [
-  { id: 'black', name: 'Hồng trà', color: '#6B3410', milkyColor: '#B8875F', price: 4 },
-  { id: 'green', name: 'Trà lài', color: '#B5BF4A', milkyColor: '#DDE3AE', price: 4 },
-  { id: 'thai', name: 'Trà Thái', color: '#E37B2C', milkyColor: '#F3B47E', price: 4 },
-  { id: 'oolong', name: 'Ô long', color: '#C0782E', milkyColor: '#E0B98A', price: 4 },
-  { id: 'taro', name: 'Khoai môn', color: '#A486CF', milkyColor: '#CDB9E6', price: 5 },
-  { id: 'matcha', name: 'Matcha', color: '#5F8F33', milkyColor: '#AECD8F', price: 5 },
+  // Hồng trà, Trà lài and Trà Thái are the bodies of the three dispensers on
+  // `tools/sheets/kitchen.png`, read between their highlight and shadow sides; Hồng trà's milky
+  // colour is that sheet's milk-tea cup. The other three are not drawn anywhere, so they are the
+  // old colours moved by the average shift the measured three needed (lighter and a little more
+  // saturated), each keeping its own relationship to its milky colour.
+  { id: 'black', name: 'Hồng trà', color: '#B26337', milkyColor: '#CE8B5E', price: 4 },
+  { id: 'green', name: 'Trà lài', color: '#91C23C', milkyColor: '#CCE3A3', price: 4 },
+  { id: 'thai', name: 'Trà Thái', color: '#FE7220', milkyColor: '#FFB081', price: 4 },
+  { id: 'oolong', name: 'Ô long', color: '#D48B40', milkyColor: '#E9C8A7', price: 4 },
+  { id: 'taro', name: 'Khoai môn', color: '#B8A0DB', milkyColor: '#E0D4F1', price: 5 },
+  { id: 'matcha', name: 'Matcha', color: '#72AD3B', milkyColor: '#C0DAA8', price: 5 },
 ];
 
 export const TOPPINGS: Topping[] = [
@@ -139,7 +144,7 @@ export function effectiveId(drink: Drink, category: CategoryId): string | null {
 }
 
 /** Fraction of the cup that must hold liquid before it can be served. */
-export const MIN_FILL = 0.6;
+export const MIN_FILL = 0.7;
 /** Fill at least this high without going over the brim for a "rót chuẩn" tip. */
 export const GOOD_FILL = 0.85;
 /** How much of the cup one second of holding a spigot pours. */

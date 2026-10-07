@@ -32,10 +32,8 @@ import { KitchenRoom, RoomShelf, SHOP } from './art/KitchenRoom';
 import {
   ART,
   FOAM,
-  JAR,
-  JAR_LEVEL,
   JAR_SPOUT,
-  JAR_WINDOW,
+  JAR_TEA,
   MILK,
   PAN,
   PIECE,
@@ -45,7 +43,7 @@ import {
   SCOOP_BOWL,
   SYRUP,
 } from './art/kitchenArt';
-import { KitchenCup, WELL_BOTTOM, WELL_RUN } from './KitchenCup';
+import { CUP_LIP, KitchenCup, pourLevel, WELL_BOTTOM, WELL_RUN } from './KitchenCup';
 import { OrderNote, TicketPin } from './OrderNote';
 import { Ticket } from './TicketRail';
 
@@ -484,6 +482,20 @@ export function KitchenStation({
         />
       ))}
 
+      {/* The half of the pour that is already inside the glass goes under the cup, so the glass
+          tints it and the cat covers it. The half still in open air is drawn after the cup. */}
+      {pouring && docked && (
+        <Stream
+          side="back"
+          x={docked.cx}
+          top={docked.y + docked.spout}
+          cupY={cupY}
+          cupH={cupH}
+          color={getIngredient(pouring.category, pouring.id)?.color ?? colors.ink}
+          level={level}
+        />
+      )}
+
       {/* The cup: a thing on the table you pick up and carry to the taps. It needs no shadow of
           its own — the coaster it stands in casts one. */}
       <Animated.View
@@ -504,11 +516,13 @@ export function KitchenStation({
         />
       </Animated.View>
 
+      {/* and the half still falling through open air, which nothing should dim */}
       {pouring && docked && (
         <Stream
+          side="front"
           x={docked.cx}
           top={docked.y + docked.spout}
-          cupTop={docked.dockY - cupH}
+          cupY={cupY}
           cupH={cupH}
           color={getIngredient(pouring.category, pouring.id)?.color ?? colors.ink}
           level={level}
@@ -998,25 +1012,34 @@ function useCarryGesture(station: Station, carry: Carry, press: SharedValue<numb
 }
 
 /**
- * The tea running out of a tap. It is drawn over the whole kitchen rather than inside the
- * dispenser, so it visibly falls *into* the cup, and it ends at the drink's surface — the stream
- * gets shorter as the cup fills, the way a real pour does.
+ * The tea running out of a tap. It is drawn across the kitchen rather than inside the dispenser,
+ * so it visibly falls *into* the cup, and it ends at the drink's surface — the stream gets shorter
+ * as the cup fills, the way a real pour does.
+ *
+ * It is drawn in two halves, split at the cup's lip, because neither side alone is right: all in
+ * front and it runs down the *outside* of the glass, over the cat; all behind and the falling tea
+ * is dimmed by a cup it has not reached yet. Above the lip it is in open air, so the `front` half
+ * goes over the cup; below it the tea is inside the glass, so the `back` half goes under, letting
+ * the glass tint it and the cat cover it. Each half clips to its own side of the lip, so the two
+ * never overlap and the stream is never drawn on itself.
  */
 function Stream({
   x,
   top,
-  cupTop,
+  cupY,
   cupH,
   color,
   level,
+  side,
   width = 6,
 }: {
   x: number;
   top: number;
-  cupTop: number;
+  cupY: SharedValue<number>;
   cupH: number;
   color: string;
   level: SharedValue<number>;
+  side: 'front' | 'back';
   width?: number;
 }) {
   const run = useSharedValue(0);
@@ -1026,40 +1049,64 @@ function Stream({
       run.set(0);
     };
   }, [run]);
+
+  // Both halves follow the cup where it actually is, not where it was sent: the cup is still
+  // gliding into its dock when a tap can first be held, and a split pinned to the dock would sit
+  // adrift of the glass for that moment.
+  const clipStyle = useAnimatedStyle(() => {
+    const lip = cupY.get() + CUP_LIP * cupH;
+    if (side === 'front') return { top, height: Math.max(0, lip - top) };
+    return { top: lip, height: Math.max(0, cupY.get() + cupH - lip) };
+  });
   const style = useAnimatedStyle(() => {
-    const surface = cupTop + (WELL_BOTTOM - Math.min(1, Math.max(0, level.get())) * WELL_RUN) * cupH;
-    return { height: Math.max(0, surface - top) * run.get(), opacity: Math.min(1, run.get() * 2.2) };
+    const lip = cupY.get() + CUP_LIP * cupH;
+    const clipTop = side === 'front' ? top : lip;
+    const surface = cupY.get() + (WELL_BOTTOM - pourLevel(Math.min(1, Math.max(0, level.get()))) * WELL_RUN) * cupH;
+    return {
+      top: top - clipTop,
+      height: Math.max(0, surface - top) * run.get(),
+      opacity: Math.min(1, run.get() * 2.2),
+    };
   });
 
   return (
-    <Animated.View pointerEvents="none" style={[{ position: 'absolute', left: x - width / 2, top, width }, style]}>
-      {/* the falling column, with the light down one side of it */}
-      <View style={[StyleSheet.absoluteFill, { backgroundColor: color, borderRadius: width * 0.5 }]} />
-      <View
-        style={{
-          position: 'absolute',
-          left: width * 0.16,
-          top: 0,
-          bottom: 0,
-          width: width * 0.26,
-          borderRadius: width,
-          backgroundColor: '#FFFFFF',
-          opacity: 0.32,
-        }}
-      />
-      {/* it leaves the spout as a fat drop */}
-      <View
-        style={{
-          position: 'absolute',
-          left: -width * 0.45,
-          right: -width * 0.45,
-          top: -width * 0.35,
-          height: width * 1.3,
-          borderRadius: width,
-          backgroundColor: color,
-        }}
-      />
-      <Ripple color={color} size={width * 3.4} />
+    <Animated.View
+      pointerEvents="none"
+      style={[{ position: 'absolute', left: 0, right: 0, overflow: 'hidden' }, clipStyle]}
+    >
+      <Animated.View
+        pointerEvents="none"
+        style={[{ position: 'absolute', left: x - width / 2, width }, style]}
+      >
+        {/* the falling column, with the light down one side of it */}
+        <View style={[StyleSheet.absoluteFill, { backgroundColor: color, borderRadius: width * 0.5 }]} />
+        <View
+          style={{
+            position: 'absolute',
+            left: width * 0.16,
+            top: 0,
+            bottom: 0,
+            width: width * 0.26,
+            borderRadius: width,
+            backgroundColor: '#FFFFFF',
+            opacity: 0.32,
+          }}
+        />
+        {/* it leaves the spout as a fat drop */}
+        <View
+          style={{
+            position: 'absolute',
+            left: -width * 0.45,
+            right: -width * 0.45,
+            top: -width * 0.35,
+            height: width * 1.3,
+            borderRadius: width,
+            backgroundColor: color,
+          }}
+        />
+        {/* the splash belongs where the tea lands, which is inside the cup */}
+        {side === 'back' && <Ripple color={color} size={width * 3.4} />}
+      </Animated.View>
     </Animated.View>
   );
 }
@@ -1121,10 +1168,6 @@ function TeaDispenser({
       onNudge(locked ? 'Ly đã có trà khác — bấm Đổ bỏ trước' : `Kéo ly xuống dưới vòi ${tea.name} trước`),
   });
 
-  // The jar is a painted sprite with its glass cleared out; the tea is drawn through that window.
-  const win = JAR_WINDOW;
-  const teaH = H * win.h * JAR_LEVEL;
-
   return (
     <Frame
       station={station}
@@ -1135,26 +1178,8 @@ function TeaDispenser({
       press={press}
       handlers={handlers}
     >
-      <View style={{ width: W, height: H }}>
-        <View
-          style={{
-            position: 'absolute',
-            left: W * win.x,
-            top: H * (win.y + win.h) - teaH,
-            width: W * win.w,
-            height: teaH,
-            backgroundColor: tea.color,
-            borderTopLeftRadius: W * 0.05,
-            borderTopRightRadius: W * 0.05,
-            borderBottomLeftRadius: W * 0.12,
-            borderBottomRightRadius: W * 0.12,
-          }}
-        >
-          <View style={styles.teaTop} />
-        </View>
-        <Image source={JAR} style={{ width: W, height: H }} />
-      </View>
-
+      {/* Glass and tea together, as the sheet paints them. */}
+      <Image source={JAR_TEA[station.id] ?? JAR_TEA.black} style={{ width: W, height: H }} />
     </Frame>
   );
 }
@@ -1363,11 +1388,6 @@ const styles = StyleSheet.create({
     position: 'absolute',
     left: 0,
     top: 0,
-  },
-  teaTop: {
-    height: 2.5,
-    backgroundColor: '#FFFFFF',
-    opacity: 0.3,
   },
   drop: {
     position: 'absolute',
