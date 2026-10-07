@@ -117,74 +117,38 @@ drips tea down the side when the live level goes over the brim. The order slip (
 strip above the room, so the whole scene is workspace.
 
 ### The kitchen's artwork
-The dispensers, the topping pans and the cup are **painted sprites**, cut from a single asset sheet by
-`tools/cut-kitchen-sheet.py` into `src/assets/kitchen/` and addressed through
-[kitchenArt.ts](src/components/art/kitchenArt.ts). The sprites are generated: change the script (or the
-sheet), re-run it, don't hand-edit the PNGs. Drop a new sheet at `tools/kitchen-sheet.png` first — it is
-not in the repo.
+Nearly everything in the prep room is a **painted sprite**. `tools/cut-sheets.py` cuts
+`tools/sheets/*.png` into `src/assets/kitchen/`, and
+[kitchenArt.ts](src/components/art/kitchenArt.ts) is the only place that names those files. The
+sprites are generated — change the script (or the sheet), re-run it, never hand-edit a PNG. The one
+exception is `jar.png`, `cup.png`, `cup-base.png` and the `pan-*.png` set, which were cut from a
+1024px rendering of the kitchen sheet that no longer exists; they are checked in and the script
+leaves them alone.
 
-Anything that has to *move* is drawn behind its sprite and shows through a window the script cleared out
-of the artwork, which keeps the painted highlights, ticks and the cat decal on top of it:
+Anything that has to *move* is drawn against a window the script cleared out of the artwork, which
+keeps the painted ticks, highlights and the cat decal on top of it:
 
-- a **dispenser** is a tinted block of tea inside `JAR_WINDOW`, with `jar.png` over it; one sprite serves
-  every tea;
-- the **cup** is [KitchenCup](src/components/KitchenCup.tsx): `cup-base.png` (a flat cream silhouette, so
-  the drink reads over a busy shelf), then the drink drawn in the sprite's own 133×199 coordinate space
-  and **clipped to `WELL`** — the path round the inside of the glass — then `cup.png` over the top. The
-  liquid is a full-height painting of itself inside a container whose height follows the level, so it is
-  revealed from the bottom as the cup fills; the pearls, jelly and ice are shaded SVG `Piece`s that sit
-  low enough to stay clear of the cat printed on the front. Nothing can escape the glass, because
-  everything is inside the clip. (The vector `Cup` is still what the tickets and customers use.)
-- the **carried scoop** is `scoop.png` with the pieces drawn into its bowl, so what is in your hand is
-  the same scoop that sits in the pan;
-- the **pans** are whole sprites, one per topping. Three were painted; the rest (grass jelly, red bean,
-  ice) are repainted from those by `repaint()`, which keeps the shading and leaves the red scoop alone.
+- a **dispenser** is a block of tea inside `JAR_WINDOW` with `jar.png` over it; one sprite serves
+  every tea, tinted by the ingredient;
+- the **cup** is [KitchenCup](src/components/KitchenCup.tsx): a flat cream silhouette, then the
+  drink drawn in the sprite's own 133×199 space and **clipped to `WELL`** — the path round the
+  inside of the glass — then `cup.png` over the top. The liquid is a gradient painting of itself
+  inside a container whose height follows the level, so it is revealed from the bottom as the cup
+  fills; the toppings and ice are the sheet's own pieces, placed low enough to clear the cat.
+  Nothing can escape the glass, because everything is inside the clip;
+- the **carried scoop** is `scoop.png` with the pieces heaped into its bowl, over the sprite —
+  the bowl is solid chrome, so anything behind it is invisible;
+- the **pans, cartons, syrup, foam tubs and every fitting** (wall, lamps, shelf, steel counter,
+  cabinets, rail, coaster, plant, poster, chalkboard, cup stack, straws, towel) are whole sprites
+  that [KitchenRoom](src/components/art/KitchenRoom.tsx) and the station place by the layout's
+  lines. Three pans and two pieces had no art of their own and are repainted from the ones that do,
+  by `repaint()`, which keeps the shading and leaves the red scoop alone.
 
-What is still hand-drawn — the room itself, the milk cartons, the syrup bottle, the foam tubs — matches
-the sheet's vocabulary: a dark `INK` outline, a shaded side, warm wood, pink grips, heart knobs
-(`heartPath`), wooden name plaques. Keep new equipment in that vocabulary rather than inventing a second
-style, or add it to the sheet.
+The layout follows `tools/sheets/reference.png`: lamps and tiled wall, the dispenser shelf (with
+the plant and the poster at its ends when there is room for them), the notes rail, the work top
+with the cup on its coaster, the stainless topping bar, then the pink cabinets. `layoutKitchen`
+reserves `sideRoom` at the ends of the dispenser shelf only while there are four teas or fewer.
 
-### Game rules worth knowing
-
-- **Manual order-taking, two stages.** Each `Customer` has a `status`: `requesting` (just walked up,
-  shows a notepad bubble, no recipe yet) or `ordered` (order taken, recipe revealed as a ticket). On the
-  Counter, tapping a `requesting` customer dispatches `TAKE_ORDER` → they become `ordered`; tapping an
-  `ordered` one jumps to their ticket on the Prep page. Only `ordered` customers are selectable/serveable.
-- **Two patience timers** (both in `DayConfig`): `orderPatienceMs` runs from `arrivedAt` while
-  `requesting` (leave annoyed if ignored); a fresh `patienceMs` runs from `orderedAt` while `ordered`
-  (leave if the drink is late). The order ring is gold on the Counter; the serve timer is the bar on each
-  prep ticket.
-- A day lasts 90 s of game time (`state.clock`, advanced by `TICK` every 100 ms from GameScreen,
-  paused while the opening sign or pause menu is up). After closing time no new customers come,
-  and the day ends once the counter is empty.
-- Categories unlock by day: tea + toppings (day 1), ice (2), milk (3), sugar (4), foam and
-  double toppings (5). More teas/toppings unlock through day 5.
-- Serving: 0 mistakes = full price + tip (faster since ordering = bigger tip), 1 mistake = half price,
-  2+ = no pay. Hitting `config.goal` passes the day; stars at 1×, 1.3×, 1.6× the goal.
-- **Pouring is a mini-game.** `state.build` (`CupBuild`) tracks the cup as a physical thing: `fill` 0–1,
-  `spilled`, `iceScoops`, `sugarPumps`. Serving needs a tea **and** `fill >= MIN_FILL`; filling into the
-  clean-pour band (`GOOD_FILL`) without going over pays an extra coin ("Rót chuẩn!"), while holding past
-  the brim sets `spilled` — right drink, half price, no tip, and it doesn't count as perfect.
-- **One tea per cup.** Once something is poured, the other dispensers are locked (dimmed) until the cup is
-  tipped out with "Đổ bỏ"; same for milk, foam and toppings, since nothing comes back out of a cup.
-- **You only ever add things**, so "không đá / không sữa / không kem / 0% đường" is simply never adding any:
-  `effectiveId` maps a `null` category to its `DEFAULT_ID`, and `categoryMatches` compares those.
-- A customer stays in their counter slot from `requesting` through to being served (taking the order does
-  not free the slot).
-
-### How animations get their events
-
-The reducer stays pure; the UI animates from state:
-- `state.departures` keeps each leaving customer for 1.3 s (outcome, money, the cup they got).
-  On the Counter page `CustomerStage` plays the exit (the customer carries the served cup off);
-  on the Prep page `EffectsLayer` plays the sale reward — confetti and coins that spring from the
-  machine to the HUD wallet — each keyed by the departure id so it plays once on mount. (There is no
-  cross-page flying cup: the customer and the machine now live on different pages.)
-- `state.cupId` changes when a cup leaves the station (new cup glides in, keyed by it);
-  `state.discarded` drives the throw-away toss.
-- Effects aim using measured positions (`measureInWindow`): the HUD wallet reports itself, and
-  `PrepPage` reports its machine/bin positions up to `GameScreen` through `onGeometry`.
 
 ## Conventions
 

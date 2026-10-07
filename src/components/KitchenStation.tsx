@@ -10,7 +10,6 @@ import Animated, {
   withRepeat,
   withTiming,
 } from 'react-native-reanimated';
-import Svg, { Circle, Defs, Ellipse, Path, RadialGradient, Rect, Stop } from 'react-native-svg';
 
 import {
   CategoryId,
@@ -29,10 +28,24 @@ import { DayConfig } from '../game/levels';
 import { CupBuild } from '../game/reducer';
 import { DURATION, ease, timing } from '../motion';
 import { colors, fonts } from '../theme';
-import { shade } from './art/Character';
-import { heartPath, KitchenRoom, RoomShelf, SHOP } from './art/KitchenRoom';
-import { ART_ASPECT, CARD, JAR, JAR_LEVEL, JAR_SPOUT, JAR_WINDOW, PAN, SCOOP, SCOOP_BOWL } from './art/kitchenArt';
-import { KitchenCup, Piece, WELL_BOTTOM, WELL_RUN } from './KitchenCup';
+import { KitchenRoom, RoomShelf, SHOP } from './art/KitchenRoom';
+import {
+  ART,
+  CARD,
+  FOAM,
+  JAR,
+  JAR_LEVEL,
+  JAR_SPOUT,
+  JAR_WINDOW,
+  MILK,
+  PAN,
+  PIECE,
+  PIECE_ART,
+  SCOOP,
+  SCOOP_BOWL,
+  SYRUP,
+} from './art/kitchenArt';
+import { KitchenCup, WELL_BOTTOM, WELL_RUN } from './KitchenCup';
 
 // --------------------------------------------------------------------------- layout
 
@@ -66,6 +79,10 @@ export interface KitchenLayout {
   shelves: RoomShelf[];
   /** The work top in the middle of the room — where the cup rests between jobs. */
   tableLine: number;
+  /** The shop's notes rail, across the top of the cup's band. */
+  railY: number;
+  /** Room at each end of the dispenser shelf for the plant and the poster. */
+  sideRoom: number;
   /** Where the pink cabinet doors along the bottom start. */
   cabinetTop: number;
   cupW: number;
@@ -76,17 +93,13 @@ export interface KitchenLayout {
 
 /** How wide each piece of equipment is relative to its height. */
 const ASPECT: Record<StationKind, number> = {
-  tea: ART_ASPECT.jar,
-  milk: 0.52,
-  topping: ART_ASPECT.pan,
-  ice: ART_ASPECT.pan,
-  sugar: 0.5,
-  foam: 0.88,
+  tea: ART.jar,
+  milk: ART.milk,
+  topping: ART.pan,
+  ice: ART.pan,
+  sugar: ART.syrup,
+  foam: ART.foam,
 };
-
-/** The sheet outlines every object in this dark warm grey — hand-drawn pieces match it. */
-const INK = '#5C5660';
-const INK_SOFT = '#8A8290';
 
 
 const EQUIPMENT_NAMES: Record<string, string> = {
@@ -98,7 +111,7 @@ const EQUIPMENT_NAMES: Record<string, string> = {
 export function cupSizeFor(W: number, H: number) {
   const width = Math.round(Math.max(42, Math.min(62, W * 0.15, H * 0.17)));
   // The cup sprite is this much taller than it is wide.
-  const height = Math.round(width / ART_ASPECT.cup);
+  const height = Math.round(width / ART.cup);
   return { width, height };
 }
 
@@ -113,7 +126,7 @@ export function layoutKitchen(config: DayConfig, W: number, H: number): KitchenL
   // Headroom for the pendant lamps, a wooden name plaque under each machine, cabinets at the foot.
   const top = Math.max(34, Math.round(H * 0.085));
   const labelH = 17;
-  const cabinetH = Math.max(30, Math.round(H * 0.085));
+  const cabinetH = Math.max(34, Math.round(H * 0.11));
   const cabinetTop = H - cabinetH;
   const counterH = Math.max(11, Math.round(H * 0.028));
   // The band the cup lives in: room to stand on the work top and to be lifted up to a tap.
@@ -139,11 +152,14 @@ export function layoutKitchen(config: DayConfig, W: number, H: number): KitchenL
   const shelves: RoomShelf[] = [];
   let y = top;
   let tableLine = cabinetTop - counterH;
+  // With only a few dispensers the shelf has room at both ends for the plant and the poster.
+  const sideRoom = rows[0].length <= 4 ? Math.round(W * 0.13) : 0;
 
   rows.forEach((items, r) => {
     const rowH = (avail * weights[r]) / total;
     const base = Math.round(y + rowH - labelH);
-    const slot = (W - 6) / items.length;
+    const inset = items[0].kind === 'tea' ? sideRoom : 0;
+    const slot = (W - 6 - inset * 2) / items.length;
     const tall = items[0].kind === 'tea';
     const maxH = Math.min(rowH - labelH - 6, H * (tall ? 0.32 : 0.26));
     let shelfTop = base;
@@ -152,7 +168,7 @@ export function layoutKitchen(config: DayConfig, W: number, H: number): KitchenL
       const aspect = ASPECT[item.kind];
       const w = Math.round(Math.min(slot - 10, maxH * aspect));
       const h = Math.round(w / aspect);
-      const cx = Math.round(3 + slot * (i + 0.5));
+      const cx = Math.round(3 + inset + slot * (i + 0.5));
       const option =
         item.kind === 'ice' || item.kind === 'sugar' ? undefined : getIngredient(categoryOf(item.kind), item.id);
       shelfTop = Math.min(shelfTop, base - h);
@@ -187,7 +203,10 @@ export function layoutKitchen(config: DayConfig, W: number, H: number): KitchenL
     stations,
     shelves,
     tableLine,
+    // The rail hangs just under the dispensers, at the top of the cup's band.
+    railY: Math.round(tableLine - bandH + counterH + 4),
     cabinetTop,
+    sideRoom,
     cupW,
     cupH,
     homeX: Math.round(W / 2 - cupW / 2),
@@ -245,7 +264,7 @@ export function KitchenStation({
   cupRef,
 }: KitchenStationProps) {
   const layout = useMemo(() => layoutKitchen(config, W, H), [config, W, H]);
-  const { stations, shelves, tableLine, cabinetTop, cupW, cupH, homeX, homeY } = layout;
+  const { stations, shelves, tableLine, railY, cabinetTop, sideRoom, cupW, cupH, homeX, homeY } = layout;
 
   const cupX = useSharedValue(homeX);
   const cupY = useSharedValue(homeY);
@@ -368,7 +387,9 @@ export function KitchenStation({
         height={H}
         shelves={shelves}
         tableLine={tableLine}
+        railY={railY}
         cabinetTop={cabinetTop}
+        sideRoom={sideRoom}
         cupH={cupH}
         matX={homeX - Math.round(cupW * 0.34)}
         matW={Math.round(cupW * 1.68)}
@@ -401,7 +422,7 @@ export function KitchenStation({
             left: Math.round(W * 0.06),
             top: Math.round(tableLine - cupH - 16),
             height: Math.round(cupH * 0.92),
-            width: Math.round(cupH * 0.92 * ART_ASPECT.card),
+            width: Math.round(cupH * 0.92 * ART.card),
           }}
         />
       )}
@@ -598,7 +619,7 @@ function useCarry({
   const show = useSharedValue(0);
   const tip = useSharedValue(0);
   const [held, setHeld] = useState<Station | null>(null);
-  const size = Math.round(cupW * 0.95);
+  const size = Math.round(cupW * 1.2);
 
   // Everything the drop needs to decide, kept fresh without rebuilding the gesture mid-drag.
   const latest = useRef({ cup, build, maxToppings, cupW, cupH, homeX, homeY, size, onScoop, onIce, onSugar, onPour, onNudge });
@@ -719,99 +740,71 @@ function useCarry({
   return { begin, move, drop, node };
 }
 
-/** What a station puts in your hand: a scoop, the syrup bottle, a carton of milk, a spoon of foam. */
+/** What a station puts in your hand: the shop's scoop, a carton, or the syrup bottle. */
 function Tool({ station, size }: { station: Station; size: number }) {
   const S = size;
   if (station.kind === 'sugar') {
-    return (
-      <Svg width={S} height={S} viewBox="0 0 24 24">
-        <Rect x={7} y={5} width={10} height={16} rx={4} fill="#FFF8EA" stroke="#E4D2AE" strokeWidth={1.2} />
-        <Rect x={8.5} y={9} width={7} height={11} rx={3} fill="#EFAE2B" />
-        <Rect x={9.5} y={1.5} width={5} height={4} rx={1.5} fill={SHOP.woodEdge} />
-        <Path d="M14.5 3.5 h4 l1 2 h-5 Z" fill={SHOP.pinkGrip} />
-      </Svg>
-    );
+    return <Image source={SYRUP} style={{ width: S * 0.62, height: (S * 0.62) / ART.syrup }} />;
   }
   if (station.kind === 'milk') {
-    const oat = station.id === 'oat';
-    return (
-      <Svg width={S} height={S} viewBox="0 0 24 24">
-        <Path
-          d="M5 7 L12 2.5 L19 7 V21.5 H5 Z"
-          fill={oat ? '#F3E6CD' : '#FFFFFF'}
-          stroke="#D8CCBE"
-          strokeWidth={1.3}
-          strokeLinejoin="round"
-        />
-        <Path d="M5 7 L12 2.5 L19 7 Z" fill={oat ? '#C08E4F' : '#5AA9E6'} />
-        <Rect x={5} y={11} width={14} height={4.5} fill={oat ? '#C08E4F' : '#5AA9E6'} opacity={0.9} />
-        <Rect x={7} y={12.4} width={10} height={1.6} rx={0.8} fill="#FFFFFF" opacity={0.75} />
-      </Svg>
-    );
+    return <Image source={MILK[station.id] ?? MILK.whole} style={{ width: S * 0.7, height: (S * 0.7) / ART.milk }} />;
   }
-  // Toppings, ice and foam are carried over in the shop's own scoop, holding what you picked up.
-  const piece = station.kind === 'topping' ? (getIngredient('toppings', station.id) as Topping) : undefined;
-  // The scoop sprite is taller than it is wide; everything it holds is placed in that same box.
-  const SH = S / ART_ASPECT.scoop;
-  const bowlR = S * SCOOP_BOWL.r;
-  const bowl = { x: S * SCOOP_BOWL.cx, y: SH * SCOOP_BOWL.cy };
+
+  // A scoop of something: the pieces are heaped in its bowl, with the scoop drawn over them.
+  const SH = S / ART.scoop;
+  const bowl = { x: S * SCOOP_BOWL.cx, y: SH * SCOOP_BOWL.cy, r: S * SCOOP_BOWL.r };
+  const art = station.kind === 'ice' ? 'ice' : station.id;
+  const piece = PIECE[art];
+  // a small heap, wider than it is tall — the bowl is a shallow one
+  const spread =
+    station.kind === 'ice'
+      ? [
+          [-0.46, 0.06],
+          [0.46, 0.08],
+          [0, -0.3],
+        ]
+      : [
+          [-0.62, 0.1],
+          [0, 0.14],
+          [0.62, 0.08],
+          [-0.32, -0.24],
+          [0.32, -0.22],
+        ];
+  const r = bowl.r * (station.kind === 'ice' ? 0.62 : 0.52);
+
   return (
     <View style={{ width: S, height: SH }}>
-      <Svg style={StyleSheet.absoluteFill} width={S} height={SH}>
-        {/* the chrome bowl, which the sprite only outlines */}
-        <Ellipse cx={S * 0.35} cy={SH * 0.76} rx={S * 0.33} ry={SH * 0.19} fill="#DCE3E8" stroke="#A9B2BA" strokeWidth={1.2} />
-        <Defs>
-          {piece && (
-            <RadialGradient id={`tg-${station.key}`} cx="35%" cy="30%" r="75%">
-              <Stop offset="0" stopColor={shade(piece.color, 30)} />
-              <Stop offset="1" stopColor={shade(piece.color, -22)} />
-            </RadialGradient>
-          )}
-        </Defs>
-        {piece &&
-          [
-            [-0.62, -0.1],
-            [0.04, -0.06],
-            [0.66, -0.04],
-            [-0.32, -0.55],
-            [0.34, -0.52],
-            [0, -0.95],
-          ].map(([fx, fy], i) => (
-            <Piece
-              key={i}
-              x={bowl.x + fx * bowlR}
-              y={bowl.y + fy * bowlR}
-              r={bowlR * 0.4}
-              topping={piece}
-              fill={`url(#tg-${station.key})`}
-            />
-          ))}
-        {station.kind === 'ice' &&
-          [
-            [-0.5, -0.12],
-            [0.5, -0.08],
-            [0, -0.62],
-          ].map(([fx, fy], i) => (
-            <Rect
-              key={i}
-              x={bowl.x + fx * bowlR - bowlR * 0.3}
-              y={bowl.y + fy * bowlR - bowlR * 0.3}
-              width={bowlR * 0.72}
-              height={bowlR * 0.72}
-              rx={bowlR * 0.14}
-              fill="#F2FBFF"
-              stroke="#A8D6EE"
-              strokeWidth={1.2}
-            />
-          ))}
-        {station.kind === 'foam' && (
-          <>
-            <Ellipse cx={bowl.x} cy={bowl.y - bowlR * 0.45} rx={bowlR * 0.95} ry={bowlR * 0.6} fill={station.color} stroke={shade(station.color, -16)} strokeWidth={1.2} />
-            <Ellipse cx={bowl.x - bowlR * 0.3} cy={bowl.y - bowlR * 0.6} rx={bowlR * 0.34} ry={bowlR * 0.18} fill="#FFFFFF" opacity={0.6} />
-          </>
-        )}
-      </Svg>
-      <Image source={SCOOP} style={{ width: S, height: SH }} />
+      <Image source={SCOOP} style={{ position: 'absolute', left: 0, top: 0, width: S, height: SH }} />
+      {station.kind === 'foam' ? (
+        <View
+          style={{
+            position: 'absolute',
+            left: bowl.x - bowl.r,
+            top: bowl.y - bowl.r * 0.95,
+            width: bowl.r * 2,
+            height: bowl.r * 1.5,
+            borderRadius: bowl.r,
+            backgroundColor: station.color,
+            borderWidth: 1.4,
+            borderColor: SHOP.ink,
+          }}
+        />
+      ) : (
+        piece &&
+        spread.map(([fx, fy], i) => (
+          <Image
+            key={i}
+            source={piece}
+            style={{
+              position: 'absolute',
+              left: bowl.x + fx * bowl.r - r,
+              top: bowl.y + fy * bowl.r - r / (PIECE_ART[art] ?? 1),
+              width: r * 2,
+              height: (r * 2) / (PIECE_ART[art] ?? 1),
+            }}
+          />
+        ))
+      )}
     </View>
   );
 }
@@ -1117,9 +1110,6 @@ function TeaDispenser({
 /** A carton you pick up off the shelf and tip into the cup. */
 function MilkCarton({ station, cup, carry }: EquipProps) {
   const { w: W, h: H } = station;
-  const oat = station.id === 'oat';
-  const body = oat ? '#F3E6CD' : '#FFFFFF';
-  const band = oat ? '#C08E4F' : '#5AA9E6';
   const locked = cup.milk !== null && cup.milk !== station.id;
   const press = useSharedValue(1);
   const handlers = useCarryGesture(station, carry, press);
@@ -1128,45 +1118,12 @@ function MilkCarton({ station, cup, carry }: EquipProps) {
     <Frame
       station={station}
       locked={locked}
-      label={oat ? 'Yến mạch' : 'Sữa tươi'}
+      label={station.id === 'oat' ? 'Yến mạch' : 'Sữa tươi'}
       accessibilityLabel={`Hộp ${station.name} — kéo vào ly`}
       press={press}
       handlers={handlers}
     >
-      <Svg width={W} height={H}>
-        {/* gable-top carton */}
-        <Path
-          d={`M${W * 0.12} ${H * 0.26} L${W * 0.5} ${H * 0.06} L${W * 0.88} ${H * 0.26} V${H * 0.97} H${W * 0.12} Z`}
-          fill={body}
-          stroke={INK}
-          strokeWidth={2.2}
-          strokeLinejoin="round"
-        />
-        {/* the shaded side, the way the painted pieces are lit from the left */}
-        <Path d={`M${W * 0.66} ${H * 0.18} L${W * 0.88} ${H * 0.26} V${H * 0.97} H${W * 0.66} Z`} fill="#000000" opacity={0.08} />
-        <Path
-          d={`M${W * 0.12} ${H * 0.26} L${W * 0.5} ${H * 0.06} L${W * 0.88} ${H * 0.26} Z`}
-          fill={band}
-          stroke={INK}
-          strokeWidth={2.2}
-          strokeLinejoin="round"
-        />
-        <Rect x={W * 0.12} y={H * 0.45} width={W * 0.76} height={H * 0.2} fill={band} opacity={0.92} />
-        <Rect x={W * 0.2} y={H * 0.5} width={W * 0.6} height={H * 0.04} rx={2} fill="#FFFFFF" opacity={0.8} />
-        <Rect x={W * 0.2} y={H * 0.57} width={W * 0.38} height={H * 0.03} rx={2} fill="#FFFFFF" opacity={0.6} />
-        <Path d={heartPath(W * 0.5, H * 0.78, W * 0.13)} fill={band} opacity={0.55} />
-        {/* screw cap on the gable */}
-        <Rect
-          x={W * 0.56}
-          y={H * 0.11}
-          width={W * 0.18}
-          height={H * 0.08}
-          rx={2.5}
-          fill={shade(band, -18)}
-          stroke={INK}
-          strokeWidth={1.8}
-        />
-      </Svg>
+      <Image source={MILK[station.id] ?? MILK.whole} style={{ width: W, height: H }} />
     </Frame>
   );
 }
@@ -1231,17 +1188,13 @@ function IceChest({ station, build, carry }: EquipProps) {
   );
 }
 
-// --------------------------------------------------------------------------- syrup pump
+// --------------------------------------------------------------------------- syrup and foam
 
 function SyrupPump({ station, build, carry }: EquipProps) {
   const { w: W, h: H } = station;
   const press = useSharedValue(1);
   const handlers = useCarryGesture(station, carry, press);
   const pumps = build.sugarPumps;
-
-  const bottleY = H * 0.26;
-  const bottleH = H * 0.6;
-  const syrup = bottleH * 0.78;
 
   return (
     <Frame
@@ -1251,50 +1204,19 @@ function SyrupPump({ station, build, carry }: EquipProps) {
       press={press}
       handlers={handlers}
     >
-      <Svg width={W} height={H}>
-        {/* a little wooden coaster, like everything else on this counter */}
-        <Rect x={0} y={H * 0.84} width={W} height={H * 0.14} rx={4} fill={SHOP.wood} stroke={INK} strokeWidth={2} />
-        <Rect x={W * 0.04} y={H * 0.85} width={W * 0.92} height={H * 0.035} rx={3} fill={SHOP.woodTop} />
-
-        {/* glass syrup bottle */}
-        <Rect
-          x={W * 0.08}
-          y={bottleY}
-          width={W * 0.84}
-          height={bottleH}
-          rx={W * 0.18}
-          fill="#FFF8EA"
-          stroke={INK}
-          strokeWidth={2.2}
-        />
-        <Rect x={W * 0.13} y={bottleY + bottleH - syrup} width={W * 0.74} height={syrup - 2} rx={W * 0.14} fill="#EFAE2B" />
-        <Rect x={W * 0.2} y={bottleY + 5} width={W * 0.1} height={bottleH * 0.55} rx={W * 0.05} fill="#FFFFFF" opacity={0.45} />
-        <Rect x={W * 0.14} y={bottleY + bottleH * 0.46} width={W * 0.72} height={bottleH * 0.22} rx={2} fill="#FFFDF6" opacity={0.92} />
-        <Path d={heartPath(W * 0.5, bottleY + bottleH * 0.57, W * 0.1)} fill="#F6C56B" />
-
-        {/* wooden collar and a pink pump head */}
-        <Rect x={W * 0.24} y={H * 0.16} width={W * 0.52} height={H * 0.11} rx={3} fill={SHOP.woodEdge} stroke={INK} strokeWidth={2} />
-        <Rect x={W * 0.42} y={H * 0.07} width={W * 0.16} height={H * 0.11} rx={2} fill="#C8D0D4" stroke={INK} strokeWidth={1.6} />
-        <Rect x={W * 0.28} y={H * 0.02} width={W * 0.46} height={H * 0.07} rx={3.5} fill={SHOP.pinkGrip} stroke={INK} strokeWidth={2} />
-
-        {/* dose pips */}
+      <Image source={SYRUP} style={{ width: W, height: H }} />
+      {/* how sweet the cup is already */}
+      <View style={[styles.pips, { top: H * 0.92, width: W }]}>
         {[0, 1, 2].map((i) => (
-          <Circle
+          <View
             key={i}
-            cx={W * 0.26 + i * W * 0.24}
-            cy={H * 0.91}
-            r={W * 0.07}
-            fill={i < pumps ? '#C98A1E' : '#FFF3D9'}
-            stroke={INK_SOFT}
-            strokeWidth={1}
+            style={[styles.pip, { width: W * 0.14, height: W * 0.14, backgroundColor: i < pumps ? '#C98A1E' : '#FFF3D9' }]}
           />
         ))}
-      </Svg>
+      </View>
     </Frame>
   );
 }
-
-// --------------------------------------------------------------------------- foam tubs
 
 function FoamTub({ station, cup, carry }: EquipProps) {
   const { w: W, h: H } = station;
@@ -1302,10 +1224,6 @@ function FoamTub({ station, cup, carry }: EquipProps) {
   const inCup = cup.foam === station.id;
   const press = useSharedValue(1);
   const handlers = useCarryGesture(station, carry, press);
-
-  const color = option?.color ?? '#FFF0C9';
-  const tubY = H * 0.3;
-  const tubH = H * 0.66;
 
   return (
     <Frame
@@ -1316,40 +1234,7 @@ function FoamTub({ station, cup, carry }: EquipProps) {
       press={press}
       handlers={handlers}
     >
-      <Svg width={W} height={H}>
-        {/* stainless tub */}
-        <Path
-          d={`M${W * 0.12} ${tubY} h${W * 0.76} l${-W * 0.07} ${tubH} h${-W * 0.62} Z`}
-          fill="#E3E9ED"
-          stroke={INK}
-          strokeWidth={2.2}
-          strokeLinejoin="round"
-        />
-        <Path d={`M${W * 0.66} ${tubY} h${W * 0.22} l${-W * 0.07} ${tubH} h${-W * 0.19} Z`} fill="#000000" opacity={0.07} />
-        <Rect x={W * 0.06} y={tubY - H * 0.045} width={W * 0.88} height={H * 0.065} rx={3} fill="#D5DDE3" stroke={INK} strokeWidth={2} />
-        <Rect x={W * 0.1} y={tubY - H * 0.03} width={W * 0.8} height={H * 0.02} rx={2} fill={SHOP.steelTop} />
-        {/* whipped dome, swirled */}
-        <Path
-          d={`M${W * 0.14} ${tubY} q${W * 0.16} ${-H * 0.16} ${W * 0.36} ${-H * 0.02} q${W * 0.14} ${-H * 0.1} ${W * 0.36} ${H * 0.02} Z`}
-          fill={color}
-          stroke={INK}
-          strokeWidth={2}
-          strokeLinejoin="round"
-        />
-        <Path d={`M${W * 0.28} ${tubY - H * 0.045} q${W * 0.1} ${-H * 0.03} ${W * 0.2} 0`} stroke="#FFFFFF" strokeWidth={1.4} fill="none" opacity={0.7} />
-        {/* label band */}
-        <Rect x={W * 0.2} y={tubY + tubH * 0.38} width={W * 0.56} height={tubH * 0.24} rx={2.5} fill="#FFFFFF" opacity={0.9} stroke={INK_SOFT} strokeWidth={1.2} />
-        <Path d={heartPath(W * 0.48, tubY + tubH * 0.5, W * 0.07)} fill={SHOP.pink} />
-      </Svg>
-
-      <View style={[styles.tool, { left: W * 0.04, top: -H * 0.12 }]}>
-        <Svg width={W * 0.44} height={H * 0.56} viewBox="0 0 24 30">
-          <Rect x={10.2} y={0} width={4.4} height={17} rx={2.2} fill={SHOP.pinkGrip} stroke={INK} strokeWidth={1.4} />
-          <Rect x={11.2} y={2} width={1.2} height={11} rx={0.6} fill="#FFFFFF" opacity={0.4} />
-          <Ellipse cx={12} cy={23} rx={6.8} ry={5} fill="#E3E9ED" stroke={INK} strokeWidth={1.6} />
-          <Ellipse cx={12} cy={21.6} rx={5.2} ry={3.2} fill={color} />
-        </Svg>
-      </View>
+      <Image source={FOAM[station.id] ?? FOAM.cheese} style={{ width: W, height: H }} />
     </Frame>
   );
 }
@@ -1397,6 +1282,18 @@ const styles = StyleSheet.create({
   },
   tool: {
     position: 'absolute',
+  },
+  pips: {
+    position: 'absolute',
+    left: 0,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 3,
+  },
+  pip: {
+    borderRadius: 99,
+    borderWidth: 1,
+    borderColor: SHOP.woodEdge,
   },
   carried: {
     position: 'absolute',

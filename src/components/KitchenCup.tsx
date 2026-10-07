@@ -1,21 +1,22 @@
 import { useEffect, useId } from 'react';
 import { Image, StyleSheet, View } from 'react-native';
 import Animated, { SharedValue, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
-import Svg, { Circle, ClipPath, Defs, Ellipse, G, LinearGradient, Path, RadialGradient, Rect, Stop } from 'react-native-svg';
+import Svg, {
+  ClipPath,
+  Defs,
+  Ellipse,
+  G,
+  Image as SvgImage,
+  LinearGradient,
+  Path,
+  Rect,
+  Stop,
+} from 'react-native-svg';
 
-import {
-  Drink,
-  getIngredient,
-  GOOD_FILL,
-  ICE_LEVELS,
-  MIN_FILL,
-  Tea,
-  Topping,
-  TOPPINGS,
-} from '../game/ingredients';
+import { Drink, getIngredient, GOOD_FILL, ICE_LEVELS, MIN_FILL, Tea } from '../game/ingredients';
 import { DURATION, timing } from '../motion';
 import { shade } from './art/Character';
-import { CUP_BASE, CUP_SPRITE } from './art/kitchenArt';
+import { CUP_BASE, CUP_SPRITE, PIECE, PIECE_ART } from './art/kitchenArt';
 
 /**
  * The cup on the prep bench: the painted sprite with the drink poured *inside* it. Everything the
@@ -31,25 +32,25 @@ export const WELL_TOP = 34 / ART.h;
 export const WELL_BOTTOM = 193 / ART.h;
 export const WELL_RUN = WELL_BOTTOM - WELL_TOP;
 
-/** Where the ice floats, and where the toppings pile up — both in sprite units. */
+/** Where the ice floats and where the toppings pile up, in sprite units. */
 const ICE_SPOTS = [
-  { x: 36, y: 132, r: 15, turn: -12 },
-  { x: 76, y: 120, r: 13, turn: 14 },
-  { x: 58, y: 152, r: 14, turn: 6 },
-  { x: 92, y: 148, r: 12, turn: -8 },
+  { x: 34, y: 128, r: 17 },
+  { x: 78, y: 118, r: 15 },
+  { x: 56, y: 150, r: 16 },
+  { x: 94, y: 146, r: 14 },
 ];
 const PILE = [
-  { x: 36, y: 182 },
-  { x: 54, y: 184 },
+  { x: 34, y: 181 },
+  { x: 53, y: 184 },
   { x: 72, y: 184 },
-  { x: 90, y: 182 },
-  { x: 45, y: 169 },
-  { x: 63, y: 171 },
-  { x: 81, y: 169 },
-  { x: 54, y: 157 },
-  { x: 72, y: 157 },
+  { x: 91, y: 181 },
+  { x: 44, y: 168 },
+  { x: 63, y: 170 },
+  { x: 82, y: 168 },
+  { x: 53, y: 156 },
+  { x: 72, y: 156 },
 ];
-const PIECE_R = 9.5;
+const PIECE_R = 11;
 
 interface KitchenCupProps {
   drink: Drink;
@@ -65,7 +66,6 @@ export function KitchenCup({ drink, width, height, level }: KitchenCupProps) {
   const milk = drink.milk && drink.milk !== 'none' ? getIngredient('milk', drink.milk) : undefined;
   const foam = drink.foam && drink.foam !== 'none' ? getIngredient('foam', drink.foam) : undefined;
   const ice = ICE_LEVELS.find((option) => option.id === drink.ice);
-  const toppings = drink.toppings.map((id) => TOPPINGS.find((t) => t.id === id)).filter(Boolean) as Topping[];
 
   const scale = height / ART.h;
   const padBottom = (1 - WELL_BOTTOM) * height;
@@ -95,14 +95,24 @@ export function KitchenCup({ drink, width, height, level }: KitchenCupProps) {
                 <ClipPath id={`well-${uid}`}>
                   <Path d={WELL} />
                 </ClipPath>
-                <LinearGradient id={`depth-${uid}`} x1="0" y1="0" x2="0" y2="1">
-                  <Stop offset="0" stopColor="#000000" stopOpacity={0} />
-                  <Stop offset="1" stopColor="#000000" stopOpacity={0.18} />
+                <LinearGradient id={`body-${uid}`} x1="0" y1="0" x2="0" y2="1">
+                  <Stop offset="0" stopColor={shade(tea.color, 14)} />
+                  <Stop offset="0.45" stopColor={tea.color} />
+                  <Stop offset="1" stopColor={shade(tea.color, -16)} />
+                </LinearGradient>
+                <LinearGradient id={`sheen-${uid}`} x1="0" y1="0" x2="1" y2="0">
+                  <Stop offset="0" stopColor="#FFFFFF" stopOpacity={0.2} />
+                  <Stop offset="0.3" stopColor="#FFFFFF" stopOpacity={0} />
+                  <Stop offset="0.86" stopColor="#FFFFFF" stopOpacity={0} />
+                  <Stop offset="1" stopColor="#FFFFFF" stopOpacity={0.14} />
                 </LinearGradient>
               </Defs>
               <G clipPath={`url(#well-${uid})`}>
-                <Rect x={0} y={0} width={ART.w} height={ART.h} fill={tea.color} />
-                <Rect x={0} y={0} width={ART.w} height={ART.h} fill={`url(#depth-${uid})`} />
+                <Rect x={0} y={0} width={ART.w} height={ART.h} fill={`url(#body-${uid})`} />
+                <Rect x={0} y={0} width={ART.w} height={ART.h} fill={`url(#sheen-${uid})`} />
+                {/* the surface catches the light */}
+                <Rect x={0} y={0} width={ART.w} height={5} fill="#FFFFFF" opacity={0.3} />
+                <Rect x={0} y={5} width={ART.w} height={3} fill="#FFFFFF" opacity={0.12} />
               </G>
             </Svg>
           </View>
@@ -118,9 +128,14 @@ export function KitchenCup({ drink, width, height, level }: KitchenCupProps) {
                 <ClipPath id={`wellm-${uid}`}>
                   <Path d={WELL} />
                 </ClipPath>
+                <LinearGradient id={`milky-${uid}`} x1="0" y1="0" x2="0" y2="1">
+                  <Stop offset="0" stopColor={shade(tea.milkyColor, 10)} />
+                  <Stop offset="1" stopColor={shade(tea.milkyColor, -14)} />
+                </LinearGradient>
               </Defs>
               <G clipPath={`url(#wellm-${uid})`}>
-                <Rect x={0} y={0} width={ART.w} height={ART.h} fill={tea.milkyColor} />
+                <Rect x={0} y={0} width={ART.w} height={ART.h} fill={`url(#milky-${uid})`} />
+                <Rect x={0} y={0} width={ART.w} height={5} fill="#FFFFFF" opacity={0.3} />
               </G>
             </Svg>
           </Animated.View>
@@ -133,43 +148,35 @@ export function KitchenCup({ drink, width, height, level }: KitchenCupProps) {
           <ClipPath id={`wellp-${uid}`}>
             <Path d={WELL} />
           </ClipPath>
-          {toppings.map((topping) => (
-            <RadialGradient key={topping.id} id={`g-${topping.id}-${uid}`} cx="35%" cy="30%" r="75%">
-              <Stop offset="0" stopColor={shade(topping.color, 30)} />
-              <Stop offset="1" stopColor={shade(topping.color, -22)} />
-            </RadialGradient>
-          ))}
         </Defs>
         <G clipPath={`url(#wellp-${uid})`}>
           {ice &&
             ICE_SPOTS.slice(0, ice.cubes).map((spot, i) => (
-              <G key={i} transform={`rotate(${spot.turn} ${spot.x} ${spot.y})`}>
-                <Rect
-                  x={spot.x - spot.r / 2}
-                  y={spot.y - spot.r / 2}
-                  width={spot.r}
-                  height={spot.r}
-                  rx={2.5}
-                  fill="#F2FBFF"
-                  fillOpacity={0.9}
-                  stroke="#A8D6EE"
-                  strokeWidth={1.4}
-                />
-                <Rect x={spot.x - spot.r / 2 + 2} y={spot.y - spot.r / 2 + 2} width={spot.r * 0.3} height={spot.r * 0.5} rx={1} fill="#FFFFFF" opacity={0.75} />
-              </G>
+              <SvgImage
+                key={i}
+                href={PIECE.ice}
+                x={spot.x - spot.r}
+                y={spot.y - spot.r / PIECE_ART.ice}
+                width={spot.r * 2}
+                height={(spot.r * 2) / PIECE_ART.ice}
+                opacity={0.92}
+                preserveAspectRatio="xMidYMid meet"
+              />
             ))}
 
-          {toppings.length > 0 &&
+          {drink.toppings.length > 0 &&
             PILE.map((spot, i) => {
-              const topping = toppings[i % toppings.length];
+              const id = drink.toppings[i % drink.toppings.length];
+              const aspect = PIECE_ART[id] ?? 1;
               return (
-                <Piece
+                <SvgImage
                   key={i}
-                  x={spot.x}
-                  y={spot.y}
-                  r={PIECE_R}
-                  topping={topping}
-                  fill={`url(#g-${topping.id}-${uid})`}
+                  href={PIECE[id]}
+                  x={spot.x - PIECE_R}
+                  y={spot.y - PIECE_R / aspect}
+                  width={PIECE_R * 2}
+                  height={(PIECE_R * 2) / aspect}
+                  preserveAspectRatio="xMidYMid meet"
                 />
               );
             })}
@@ -205,25 +212,6 @@ export function KitchenCup({ drink, width, height, level }: KitchenCupProps) {
 
       <Image source={CUP_SPRITE} style={[styles.layer, { width, height }]} />
     </View>
-  );
-}
-
-/** One pearl or one jelly cube, shaded the way the painted ones are. */
-export function Piece({ x, y, r, topping, fill }: { x: number; y: number; r: number; topping: Topping; fill: string }) {
-  const rim = shade(topping.color, -38);
-  if (topping.shape === 'pearl') {
-    return (
-      <G>
-        <Circle cx={x} cy={y} r={r} fill={fill} stroke={rim} strokeWidth={1.2} />
-        <Ellipse cx={x - r * 0.3} cy={y - r * 0.38} rx={r * 0.3} ry={r * 0.22} fill="#FFFFFF" opacity={0.85} />
-      </G>
-    );
-  }
-  return (
-    <G transform={`rotate(${(x % 7) - 3} ${x} ${y})`}>
-      <Rect x={x - r} y={y - r} width={r * 2} height={r * 2} rx={r * 0.26} fill={fill} stroke={rim} strokeWidth={1.2} />
-      <Rect x={x - r * 0.72} y={y - r * 0.72} width={r * 0.7} height={r * 0.5} rx={1} fill="#FFFFFF" opacity={0.6} />
-    </G>
   );
 }
 
