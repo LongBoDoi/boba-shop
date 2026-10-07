@@ -7,6 +7,8 @@ import { colors } from '../../theme';
 interface KitchenBackdropProps {
   width: number;
   height: number;
+  /** Top of the wooden work surface; the kitchen's layout decides where that falls. */
+  counterY?: number;
 }
 
 // The same wood tones the front counter uses, so the two pages read as one shop.
@@ -20,11 +22,11 @@ const SEAM = '#7A5230';
  * screens feels like turning around inside one shop. The equipment that stocks this wall is the tappable
  * `KitchenStation` drawn on top; this component only paints the room around it.
  */
-export const KitchenBackdrop = memo(function KitchenBackdrop({ width: w, height: h }: KitchenBackdropProps) {
+export const KitchenBackdrop = memo(function KitchenBackdrop({ width: w, height: h, counterY: given }: KitchenBackdropProps) {
   if (w <= 0 || h <= 0) return null;
   const stripe = 22;
   const awningH = Math.max(7, Math.round(h * 0.026));
-  const counterY = Math.round(h * 0.66); // top of the wooden work counter the cup/recipe sit on
+  const counterY = Math.round(given ?? h * 0.66); // top of the wooden work counter
   const slab = Math.max(8, Math.round(h * 0.028));
 
   return (

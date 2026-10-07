@@ -11,7 +11,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import Svg, { Defs, LinearGradient, Path, Rect, Stop } from 'react-native-svg';
 
-import { Drink, getIngredient, ICE_LEVELS, Tea, TOPPINGS } from '../game/ingredients';
+import { Drink, getIngredient, GOOD_FILL, ICE_LEVELS, MIN_FILL, Tea, TOPPINGS } from '../game/ingredients';
 import { DURATION, timing } from '../motion';
 import { colors, fonts } from '../theme';
 
@@ -29,6 +29,18 @@ interface CupProps {
    * background (flying, held) use a straight, rounded body instead.
    */
   tapered?: boolean;
+  /**
+   * How full the cup is (0–1) when the liquid level is a real quantity — the cup being poured.
+   * Left out, the cup shows a stock level for whatever is in it (tickets, finished drinks).
+   */
+  fill?: number;
+  /**
+   * Lets the station drive the level directly while a spigot is held open, so the liquid rises
+   * with the hold instead of jumping when the pour is committed.
+   */
+  levelSv?: SharedValue<number>;
+  /** Draw the "đủ" line and the brim line on the glass — the pouring mini-game's target. */
+  marks?: boolean;
 }
 
 const ICE_SPOTS = [
@@ -47,7 +59,18 @@ function useChangeCount(value: string | null, enabled: boolean) {
   return tracked.count;
 }
 
-export const Cup = memo(function Cup({ drink, width, backgroundColor, straw, sealed, animated, tapered = true }: CupProps) {
+export const Cup = memo(function Cup({
+  drink,
+  width,
+  backgroundColor,
+  straw,
+  sealed,
+  animated,
+  tapered = true,
+  fill,
+  levelSv,
+  marks,
+}: CupProps) {
   const height = Math.round(width * 1.3);
   const strawRise = straw ? Math.round(height * 0.2) : 0;
   const rimHeight = Math.max(3, Math.round(width * 0.07));
@@ -64,14 +87,16 @@ export const Cup = memo(function Cup({ drink, width, backgroundColor, straw, sea
 
   const baseColor = tea?.color ?? milk?.color;
   const milkyColor = tea ? tea.milkyColor : milk?.color;
-  const targetLevel = tea ? 0.72 : milk ? 0.3 : 0;
+  // A cup being built knows exactly how much went in; elsewhere a stock level just looks right.
+  const targetLevel = fill !== undefined ? fill : tea ? 0.72 : milk ? 0.3 : 0;
 
-  const level = useSharedValue(targetLevel);
+  const own = useSharedValue(targetLevel);
+  // While the station owns the level (a spigot is being held), it animates it instead.
+  const level = levelSv ?? own;
   useEffect(() => {
-    level.value = animated
-      ? withDelay(150, withTiming(targetLevel, timing(600)))
-      : targetLevel;
-  }, [animated, level, targetLevel]);
+    if (levelSv) return;
+    own.value = animated ? withDelay(150, withTiming(targetLevel, timing(600))) : targetLevel;
+  }, [animated, own, levelSv, targetLevel]);
 
   const milkiness = useSharedValue(milk ? 1 : 0);
   useEffect(() => {
@@ -82,9 +107,9 @@ export const Cup = memo(function Cup({ drink, width, backgroundColor, straw, sea
   const milkPours = useChangeCount(drink.milk === 'none' ? null : drink.milk, !!animated);
   const sugarDrops = useChangeCount(drink.sweetness, !!animated);
 
-  const liquidStyle = useAnimatedStyle(() => ({ height: level.value * bodyHeight }));
+  const liquidStyle = useAnimatedStyle(() => ({ height: Math.min(1, level.value) * bodyHeight }));
   const milkStyle = useAnimatedStyle(() => ({ opacity: milkiness.value }));
-  const foamStyle = useAnimatedStyle(() => ({ bottom: level.value * bodyHeight - 3 }));
+  const foamStyle = useAnimatedStyle(() => ({ bottom: Math.min(0.88, level.value) * bodyHeight - 3 }));
 
   const particle = Math.max(3, width * 0.11);
   const perRow = Math.max(1, Math.floor((width - inset * 2) / (particle * 1.05)));
@@ -192,6 +217,20 @@ export const Cup = memo(function Cup({ drink, width, backgroundColor, straw, sea
             <PourStream key={`milk-${milkPours}`} color={milk.color} cupWidth={width} width={streamWidth} length={pourLength} />
           )}
           {sugarDrops > 0 && <SugarFall key={`sugar-${sugarDrops}`} width={width} fall={bodyHeight * 0.7} />}
+
+          {marks && (
+            <>
+              {/* "enough tea" line — the cup can't be served below it */}
+              <View style={[styles.mark, { bottom: MIN_FILL * bodyHeight, borderColor: colors.bad }]} />
+              {/* the clean-pour band: fill into it without going over the brim for a tip */}
+              <View
+                style={[
+                  styles.goodBand,
+                  { bottom: GOOD_FILL * bodyHeight, height: (1 - GOOD_FILL) * bodyHeight },
+                ]}
+              />
+            </>
+          )}
 
           {detailed && (
             <View
@@ -488,6 +527,23 @@ const styles = StyleSheet.create({
     top: '15%',
     left: '20%',
     backgroundColor: 'rgba(255,255,255,0.55)',
+  },
+  mark: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    height: 0,
+    borderTopWidth: 1.5,
+    borderStyle: 'dashed',
+    opacity: 0.75,
+  },
+  goodBand: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    borderTopWidth: 1.5,
+    borderTopColor: colors.good,
+    backgroundColor: 'rgba(63,165,107,0.12)',
   },
   gloss: {
     position: 'absolute',

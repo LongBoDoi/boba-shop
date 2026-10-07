@@ -43,9 +43,11 @@ some networks reset), prefix the command: `NODE_OPTIONS="--dns-result-order=ipv4
 ```
 App.tsx                 fonts (Baloo 2), useReducer game state, phase switching + fade transition
 src/game/               pure game logic, no React
-  reducer.ts            GameState, actions (START_DAY, TICK, TAKE_ORDER, PICK, SERVE, CLEAR_CUP…), scoring
+  reducer.ts            GameState + CupBuild, actions (START_DAY, TICK, TAKE_ORDER, POUR, SCOOP,
+                        ICE_SCOOP, SUGAR_PUMP, SERVE, CLEAR_CUP…), scoring
   levels.ts             getDayConfig(day): unlock schedule, order/serve patience, spawn rate, goal; describeUnlocks
-  ingredients.ts        all ingredients (Vietnamese names, colours, prices), Drink type, categories
+  ingredients.ts        all ingredients (Vietnamese names, colours, prices), Drink type, categories,
+                        and the hands-on constants (MIN_FILL, GOOD_FILL, POUR_RATE, DEFAULT_ID…)
   orders.ts             random order generation, price, evaluateDrink (perfect/close/wrong)
   customers.ts          random customer looks (hair, skin, shirt, accessory) and names
   random.ts             seeded RNG; the seed lives in state so the reducer stays pure
@@ -53,8 +55,8 @@ src/game/               pure game logic, no React
 src/screens/            TitleScreen, DayEndScreen, and the in-play screens:
   GameScreen.tsx        orchestrator: HUD, the two-page swipe pager + tab indicator, effects/opening/pause overlays
   CounterPage.tsx       page 1 — the customer stage (take orders here)
-  PrepPage.tsx          page 2 — ticket rail; the KitchenStation of tappable equipment around the cup on
-                        a table in the middle; the recipe; serve/clear. Set on a shared KitchenBackdrop.
+  PrepPage.tsx          page 2 — ticket rail; the order slip; the KitchenStation (the room you work in);
+                        serve/clear. Set on a shared KitchenBackdrop.
 src/components/         Cup (layered, animated), CustomerStage, TicketRail, OrderTicket, KitchenStation,
                         Hud, Effects (coins/confetti/toss), OpeningSign…
 src/components/art/     SVG illustrations: Character, IngredientIcon, ShopBackdrop (customer wall),
@@ -76,23 +78,26 @@ Both pages deliberately share one visual world so swiping feels like turning aro
 the Counter uses `ShopBackdrop` and the Prep room uses `KitchenBackdrop`, and both draw the same pink
 striped wall, scalloped awning and warm wooden counter (same wood tones as `CounterTop`).
 
-**The kitchen equipment IS the ingredient selector** — there is no card panel. `KitchenStation`
-(`src/components/KitchenStation.tsx`) lays the prep station out as real equipment arranged around the cup,
-which sits on a little wooden table in the middle (rendered by `PrepPage` as `CupTable`, keeping the
-geometry ref). It has four shelf bands (only those whose categories are unlocked show):
-- **Tea** — a row of beverage dispensers, one per `config.options.tea`; tap to pour that tea (pour effect),
-  `PICK('tea', id)`. Selected shows a ✓.
-- **Toppings** — a row of bins with scoops, one per `config.options.toppings`; tap to toggle, `PICK` (the
-  reducer toggles, capped at `maxToppings`), scoop effect, ✓ when in the cup.
-- **Equipment** (ice/sugar/milk/foam) — one piece each, which **cycles** on tap via `nextInCycle` so every
-  value incl. explicit `'none'` is reachable (matching is strict `===`, so `null` ≠ `'none'`): the ice chest
-  cycles less→regular→none (cubes shown build up — "amount depends on taps"), the syrup pump 30→50→100→0,
-  the milk carton whole→oat→none, the foam tub cheese→brulee→none. Each shows its current state (and reads
-  neutral, not crossed, while still unset).
+**The drink is made by hand, not picked from a list.** `KitchenStation`
+(`src/components/KitchenStation.tsx`) is a room, not a menu: shelves of real equipment above, a wooden prep
+table along the bottom, and **the cup is a physical object you drag around it** (`PanResponder`; the pager
+is frozen via `onDragging` while you hold it). `layoutKitchen(config, w, h)` places everything absolutely —
+one row of tea dispensers, one of topping bins, one of ice/sugar/milk/foam — and gives each station a
+**dock**: the spot the cup is held while that machine runs into it. Dropping the cup still standing on the
+table sends it home; lifting it up to a machine docks it there (`findStation`), and only the docked machine
+responds — tapping any other one just nudges ("Kéo ly tới đây").
 
-The cup animates every add itself (`Cup` plays pours/drops as the drink changes). The selected order's recipe
-(`OrderTicket`) sits beside the cup in the middle band. Bands measure their own height (via `SizeContext`) so
-equipment scales to the day's density.
+- **Tea dispensers / milk cartons** — press *and hold* (`useHoldPour`): how long you hold is how much goes
+  in (`POUR_RATE` per second). The level rises live because the station owns the cup's liquid level as a
+  shared value (`Cup`'s `levelSv`/`fill`/`marks` props) and the cup shows the tea's colour while pouring
+  even before `POUR` is dispatched. Release commits `POUR { category, optionId, amount }`.
+- **Topping bins / foam tubs** — one tap is one scoop, with the scoop lifting and tipping into the cup.
+- **Ice chest** — a tap is a scoop of two cubes (`ICE_SCOOP`); **syrup pump** — a tap is one pump
+  (`SUGAR_PUMP`). The amount is how many times you worked it, shown on the machine itself.
+
+`Cup` draws the "đủ" line (`MIN_FILL`) and the clean-pour band (`GOOD_FILL`) on the glass, and the station
+drips tea down the side when the live level goes over the brim. The order slip (`OrderTicket`) is a compact
+strip above the room, so the whole scene is workspace.
 
 ### Game rules worth knowing
 
@@ -111,8 +116,15 @@ equipment scales to the day's density.
   double toppings (5). More teas/toppings unlock through day 5.
 - Serving: 0 mistakes = full price + tip (faster since ordering = bigger tip), 1 mistake = half price,
   2+ = no pay. Hitting `config.goal` passes the day; stars at 1×, 1.3×, 1.6× the goal.
-- Serving requires a tea. Ingredients are added by operating the kitchen equipment (see "The two pages").
-  A customer stays in their counter slot from `requesting` through to being served (taking the order does
+- **Pouring is a mini-game.** `state.build` (`CupBuild`) tracks the cup as a physical thing: `fill` 0–1,
+  `spilled`, `iceScoops`, `sugarPumps`. Serving needs a tea **and** `fill >= MIN_FILL`; filling into the
+  clean-pour band (`GOOD_FILL`) without going over pays an extra coin ("Rót chuẩn!"), while holding past
+  the brim sets `spilled` — right drink, half price, no tip, and it doesn't count as perfect.
+- **One tea per cup.** Once something is poured, the other dispensers are locked (dimmed) until the cup is
+  tipped out with "Đổ bỏ"; same for milk, foam and toppings, since nothing comes back out of a cup.
+- **You only ever add things**, so "không đá / không sữa / không kem / 0% đường" is simply never adding any:
+  `effectiveId` maps a `null` category to its `DEFAULT_ID`, and `categoryMatches` compares those.
+- A customer stays in their counter slot from `requesting` through to being served (taking the order does
   not free the slot).
 
 ### How animations get their events

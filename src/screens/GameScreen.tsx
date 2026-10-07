@@ -18,7 +18,6 @@ import { EffectsGeometry, EffectsLayer, Point } from '../components/Effects';
 import { Hud } from '../components/Hud';
 import { OpeningSign } from '../components/OpeningSign';
 import { Ticket } from '../components/TicketRail';
-import { CategoryId } from '../game/ingredients';
 import { describeUnlocks } from '../game/levels';
 import { GameAction, GameState } from '../game/reducer';
 import { timing } from '../motion';
@@ -42,6 +41,8 @@ export function GameScreen({ state, dispatch }: GameScreenProps) {
   const [opening, setOpening] = useState(true);
   const [page, setPage] = useState(0);
   const [measureToken, setMeasureToken] = useState(0);
+  // The pager must let go while the cup is being dragged around the kitchen.
+  const [dragging, setDragging] = useState(false);
 
   useEffect(() => {
     if (paused || opening) return;
@@ -115,13 +116,28 @@ export function GameScreen({ state, dispatch }: GameScreenProps) {
     },
     [dispatch],
   );
-  const pick = useCallback(
-    (category: CategoryId, optionId: string) => {
+  const pour = useCallback(
+    (category: 'tea' | 'milk', optionId: string, amount: number) => {
       tapHaptic();
-      dispatch({ type: 'PICK', category, optionId });
+      dispatch({ type: 'POUR', category, optionId, amount });
     },
     [dispatch],
   );
+  const scoop = useCallback(
+    (category: 'toppings' | 'foam', optionId: string) => {
+      tapHaptic();
+      dispatch({ type: 'SCOOP', category, optionId });
+    },
+    [dispatch],
+  );
+  const iceScoop = useCallback(() => {
+    tapHaptic();
+    dispatch({ type: 'ICE_SCOOP' });
+  }, [dispatch]);
+  const sugarPump = useCallback(() => {
+    tapHaptic();
+    dispatch({ type: 'SUGAR_PUMP' });
+  }, [dispatch]);
   const finishOpening = useCallback(() => setOpening(false), []);
 
   // Layout, for aiming the flying coins and the toss (all relative to the root view).
@@ -155,7 +171,11 @@ export function GameScreen({ state, dispatch }: GameScreenProps) {
 
   const intro =
     state.day === 1
-      ? ['Chạm vào khách ở Quầy để nhận order.', 'Vuốt sang Pha chế ➜ để làm ly rồi bấm Phục vụ!']
+      ? [
+          'Chạm vào khách ở Quầy để nhận order.',
+          'Vuốt sang Pha chế ➜, kéo ly xuống dưới bình trà.',
+          'Nhấn giữ vòi để rót — phải tới vạch "đủ", đừng để tràn!',
+        ]
       : describeUnlocks(state.day);
 
   return (
@@ -177,6 +197,7 @@ export function GameScreen({ state, dispatch }: GameScreenProps) {
           ref={pagerRef}
           horizontal
           pagingEnabled
+          scrollEnabled={!dragging}
           showsHorizontalScrollIndicator={false}
           scrollEventThrottle={16}
           onScroll={onScroll}
@@ -197,6 +218,7 @@ export function GameScreen({ state, dispatch }: GameScreenProps) {
             width={width}
             config={config}
             cup={state.cup}
+            build={state.build}
             cupId={state.cupId}
             tickets={tickets}
             selectedSlot={state.selectedSlot}
@@ -205,7 +227,11 @@ export function GameScreen({ state, dispatch }: GameScreenProps) {
             measureToken={measureToken}
             onGeometry={setPrep}
             onSelectTicket={selectTicket}
-            onPick={pick}
+            onPour={pour}
+            onScoop={scoop}
+            onIce={iceScoop}
+            onSugar={sugarPump}
+            onDragging={setDragging}
             onClear={() => dispatch({ type: 'CLEAR_CUP' })}
             onServe={() => dispatch({ type: 'SERVE' })}
             machineRef={machineRef}

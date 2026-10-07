@@ -1,4 +1,4 @@
-import { BUILD_ORDER, CategoryId, Drink, EMPTY_DRINK, getIngredient, selectedIds } from './ingredients';
+import { BUILD_ORDER, CategoryId, Drink, effectiveId, EMPTY_DRINK, getIngredient, selectedIds } from './ingredients';
 import { DayConfig } from './levels';
 import { Rng } from './random';
 
@@ -53,7 +53,8 @@ export function categoryMatches(cup: Drink, order: Drink, category: CategoryId):
       order.toppings.every((id) => cup.toppings.includes(id))
     );
   }
-  return cup[category] === order[category];
+  // "Never added" counts as the none/0 option, so not scooping ice *is* "không đá".
+  return effectiveId(cup, category) === effectiveId(order, category);
 }
 
 /** One wrong category is "close" (half price); two or more is refused. */

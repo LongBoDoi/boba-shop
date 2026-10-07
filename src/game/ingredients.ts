@@ -118,3 +118,45 @@ export function describeSelection(drink: Drink, category: CategoryId): string {
   if (names.length > 0) return names.join(' + ');
   return category === 'toppings' ? 'Không topping' : '—';
 }
+
+// --------------------------------------------------------------------------- building a cup by hand
+
+/**
+ * What a category means when nothing was ever added. The player only ever *adds* to the cup —
+ * a cup nobody scooped ice into simply is "không đá" — so matching compares these values.
+ */
+export const DEFAULT_ID: Partial<Record<CategoryId, string>> = {
+  ice: 'none',
+  milk: 'none',
+  foam: 'none',
+  sweetness: '0',
+};
+
+/** The id a cup effectively has in a category, treating "never added" as the none/0 option. */
+export function effectiveId(drink: Drink, category: CategoryId): string | null {
+  if (category === 'toppings') return null;
+  return drink[category] ?? DEFAULT_ID[category] ?? null;
+}
+
+/** Fraction of the cup that must hold liquid before it can be served. */
+export const MIN_FILL = 0.6;
+/** Fill at least this high without going over the brim for a "rót chuẩn" tip. */
+export const GOOD_FILL = 0.85;
+/** How much of the cup one second of holding a spigot pours. */
+export const POUR_RATE = 0.55;
+/** Holding past this is just spilling on the floor — the pour animation stops here. */
+export const MAX_POUR = 1.25;
+
+/** One scoop of ice is two cubes: one scoop = ít đá, two = đá thường. */
+export const MAX_ICE_SCOOPS = 2;
+export function iceLevelForScoops(scoops: number): string | null {
+  if (scoops <= 0) return null;
+  return scoops === 1 ? 'less' : 'regular';
+}
+
+/** Each pump of syrup is one step sweeter. */
+export const SUGAR_STEPS = ['30', '50', '100'];
+export function sweetnessForPumps(pumps: number): string | null {
+  if (pumps <= 0) return null;
+  return SUGAR_STEPS[Math.min(pumps, SUGAR_STEPS.length) - 1];
+}

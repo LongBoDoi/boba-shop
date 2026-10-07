@@ -1,5 +1,14 @@
 import { CustomerLook, generateLook, NAMES } from './customers';
-import { CategoryId, Drink, EMPTY_DRINK } from './ingredients';
+import {
+  Drink,
+  EMPTY_DRINK,
+  GOOD_FILL,
+  iceLevelForScoops,
+  MAX_ICE_SCOOPS,
+  MIN_FILL,
+  SUGAR_STEPS,
+  sweetnessForPumps,
+} from './ingredients';
 import { DayConfig, getDayConfig } from './levels';
 import { formatMoney } from './money';
 import { drinkPrice, evaluateDrink, generateOrder } from './orders';
@@ -47,6 +56,21 @@ export interface Departure {
   at: number;
 }
 
+/**
+ * How the cup on the table was physically built: the drink is poured and scooped by hand, so the
+ * cup tracks how full it is and how many scoops/pumps went in — not just which options were picked.
+ */
+export interface CupBuild {
+  /** How much of the cup holds liquid, 0–1. Must reach `MIN_FILL` before it can be served. */
+  fill: number;
+  /** Poured past the brim at some point, so the drink is messy: no tip. */
+  spilled: boolean;
+  iceScoops: number;
+  sugarPumps: number;
+}
+
+const EMPTY_BUILD: CupBuild = { fill: 0, spilled: false, iceScoops: 0, sugarPumps: 0 };
+
 export interface DayStats {
   served: number;
   perfect: number;
@@ -65,11 +89,12 @@ export interface GameState {
   slots: (Customer | null)[];
   selectedSlot: number | null;
   cup: Drink;
+  /** The physical state of that cup: how full it is, scoops, pumps, spills. */
+  build: CupBuild;
   /** Changes whenever the cup leaves the station (served or thrown away), so the UI can bring in a fresh one. */
   cupId: number;
   /** The last cup thrown in the bin, for the toss animation. */
   discarded: { id: number; drink: Drink } | null;
-  activeCategory: CategoryId;
   nextSpawnAt: number;
   nextId: number;
   stats: DayStats;
@@ -85,8 +110,12 @@ export type GameAction =
   | { type: 'TICK'; dt: number }
   | { type: 'TAKE_ORDER'; slot: number }
   | { type: 'SELECT_SLOT'; slot: number }
-  | { type: 'SET_CATEGORY'; category: CategoryId }
-  | { type: 'PICK'; category: CategoryId; optionId: string }
+  /** Held a spigot open over the cup: `amount` is the fraction of the cup that ran in. */
+  | { type: 'POUR'; category: 'tea' | 'milk'; optionId: string; amount: number }
+  /** One scoop/spoon of a solid straight into the cup. */
+  | { type: 'SCOOP'; category: 'toppings' | 'foam'; optionId: string }
+  | { type: 'ICE_SCOOP' }
+  | { type: 'SUGAR_PUMP' }
   | { type: 'CLEAR_CUP' }
   | { type: 'SERVE' };
 
@@ -113,9 +142,9 @@ function buildDay(day: number, seed: number): GameState {
     slots: Array.from({ length: config.slots }, () => null),
     selectedSlot: null,
     cup: EMPTY_DRINK,
+    build: EMPTY_BUILD,
     cupId: 1,
     discarded: null,
-    activeCategory: config.categories[0],
     nextSpawnAt: FIRST_CUSTOMER_AT_MS,
     nextId: 1,
     stats: { served: 0, perfect: 0, missed: 0, tips: 0 },
@@ -141,10 +170,14 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       return isActive(state) && state.slots[action.slot]?.status === 'ordered'
         ? { ...state, selectedSlot: action.slot }
         : state;
-    case 'SET_CATEGORY':
-      return isActive(state) ? { ...state, activeCategory: action.category } : state;
-    case 'PICK':
-      return isActive(state) ? pick(state, action.category, action.optionId) : state;
+    case 'POUR':
+      return isActive(state) ? pour(state, action.category, action.optionId, action.amount) : state;
+    case 'SCOOP':
+      return isActive(state) ? scoop(state, action.category, action.optionId) : state;
+    case 'ICE_SCOOP':
+      return isActive(state) ? iceScoop(state) : state;
+    case 'SUGAR_PUMP':
+      return isActive(state) ? sugarPump(state) : state;
     case 'CLEAR_CUP':
       return isActive(state) ? clearCup(state) : state;
     case 'SERVE':
@@ -259,77 +292,101 @@ function takeOrder(state: GameState, slot: number): GameState {
   };
 }
 
-function isFilled(cup: Drink, category: CategoryId) {
-  return category === 'toppings' ? cup.toppings.length > 0 : cup[category] !== null;
-}
-
-function nextCategory(categories: CategoryId[], current: CategoryId, cup: Drink): CategoryId {
-  const start = categories.indexOf(current);
-  for (let step = 1; step < categories.length; step++) {
-    const candidate = categories[(start + step) % categories.length];
-    if (!isFilled(cup, candidate)) return candidate;
-  }
-  return current;
-}
-
-function pick(state: GameState, category: CategoryId, optionId: string): GameState {
-  const { config } = state;
-  let cup: Drink;
-  let categoryDone = true;
-
-  if (category === 'toppings') {
-    const alreadyIn = state.cup.toppings.includes(optionId);
-    // Tapping a topping toggles it; going over the limit drops the oldest one.
-    const toppings = alreadyIn
-      ? state.cup.toppings.filter((id) => id !== optionId)
-      : [...state.cup.toppings, optionId].slice(-config.maxToppings);
-    cup = { ...state.cup, toppings };
-    categoryDone = !alreadyIn && toppings.length >= config.maxToppings;
-  } else {
-    cup = { ...state.cup, [category]: optionId };
-  }
-
+/**
+ * Run a spigot into the cup. Only one kind of tea (or milk) fits in a cup: once something is
+ * poured, the rest of that container's taps are locked until the cup is emptied. Holding past the
+ * brim spills — the extra is lost and the drink loses its tip.
+ */
+function pour(state: GameState, category: 'tea' | 'milk', optionId: string, amount: number): GameState {
+  if (amount <= 0) return state;
+  const poured = state.cup[category];
+  if (poured !== null && poured !== optionId) return state;
+  const raw = state.build.fill + amount;
   return {
     ...state,
-    cup,
-    activeCategory: categoryDone ? nextCategory(config.categories, category, cup) : category,
+    cup: { ...state.cup, [category]: optionId },
+    build: {
+      ...state.build,
+      fill: Math.min(1, raw),
+      spilled: state.build.spilled || raw > 1.02,
+    },
   };
 }
 
-function isCupEmpty(cup: Drink) {
-  return cup.toppings.length === 0 && Object.values(cup).every((value) => !value || Array.isArray(value));
+/** A scoop of topping or a spoon of foam. Nothing comes back out of a cup — empty it to restart. */
+function scoop(state: GameState, category: 'toppings' | 'foam', optionId: string): GameState {
+  if (category === 'foam') {
+    if (state.cup.foam !== null) return state;
+    return { ...state, cup: { ...state.cup, foam: optionId } };
+  }
+  const { toppings } = state.cup;
+  if (toppings.includes(optionId) || toppings.length >= state.config.maxToppings) return state;
+  return { ...state, cup: { ...state.cup, toppings: [...toppings, optionId] } };
+}
+
+function iceScoop(state: GameState): GameState {
+  if (state.build.iceScoops >= MAX_ICE_SCOOPS) return state;
+  const iceScoops = state.build.iceScoops + 1;
+  return { ...state, build: { ...state.build, iceScoops }, cup: { ...state.cup, ice: iceLevelForScoops(iceScoops) } };
+}
+
+function sugarPump(state: GameState): GameState {
+  if (state.build.sugarPumps >= SUGAR_STEPS.length) return state;
+  const sugarPumps = state.build.sugarPumps + 1;
+  return {
+    ...state,
+    build: { ...state.build, sugarPumps },
+    cup: { ...state.cup, sweetness: sweetnessForPumps(sugarPumps) },
+  };
+}
+
+function isCupEmpty(state: GameState) {
+  const { cup } = state;
+  return (
+    state.build.fill === 0 &&
+    cup.toppings.length === 0 &&
+    Object.values(cup).every((value) => !value || Array.isArray(value))
+  );
 }
 
 function clearCup(state: GameState): GameState {
-  if (isCupEmpty(state.cup)) return state;
+  if (isCupEmpty(state)) return state;
   return {
     ...state,
     cup: EMPTY_DRINK,
+    build: EMPTY_BUILD,
     cupId: state.cupId + 1,
     discarded: { id: state.nextId, drink: state.cup },
     nextId: state.nextId + 1,
-    activeCategory: state.config.categories[0],
   };
 }
 
 function serve(state: GameState): GameState {
   const slot = state.selectedSlot;
   const customer = slot === null ? null : state.slots[slot];
-  if (slot === null || !customer || !state.cup.tea) return state;
+  // A cup is only a drink once there's enough liquid in it.
+  if (slot === null || !customer || !state.cup.tea || state.build.fill < MIN_FILL) return state;
 
   const { quality } = evaluateDrink(state.cup, customer.order, state.config.categories);
   const price = drinkPrice(customer.order);
   const orderedAt = customer.orderedAt ?? customer.arrivedAt;
   const patienceLeft = Math.max(0, 1 - (state.clock - orderedAt) / customer.patienceMs);
+  const neat = !state.build.spilled;
 
   let earned = 0;
   let tip = 0;
   let text: string;
   let tone: Tone;
-  if (quality === 'perfect') {
-    tip = Math.max(1, Math.round(patienceLeft * MAX_TIP));
+  if (quality === 'perfect' && !neat) {
+    // Right drink, but it was poured over the brim: half price, no tip.
+    earned = Math.ceil(price / 2);
+    text = `Tràn ly… +${formatMoney(earned)}`;
+    tone = 'ok';
+  } else if (quality === 'perfect') {
+    // Filling close to the brim without spilling is a clean pour, and worth an extra coin.
+    tip = Math.max(1, Math.round(patienceLeft * MAX_TIP)) + (state.build.fill >= GOOD_FILL ? 1 : 0);
     earned = price + tip;
-    text = `Hoàn hảo! +${formatMoney(earned)}`;
+    text = state.build.fill >= GOOD_FILL ? `Rót chuẩn! +${formatMoney(earned)}` : `Hoàn hảo! +${formatMoney(earned)}`;
     tone = 'good';
   } else if (quality === 'close') {
     earned = Math.ceil(price / 2);
@@ -347,8 +404,8 @@ function serve(state: GameState): GameState {
     slots,
     coins: state.coins + earned,
     cup: EMPTY_DRINK,
+    build: EMPTY_BUILD,
     cupId: state.cupId + 1,
-    activeCategory: state.config.categories[0],
     selectedSlot: resolveSelection(slots, null),
     nextId: state.nextId + 2,
     feedback: [
@@ -362,7 +419,7 @@ function serve(state: GameState): GameState {
     stats: {
       ...state.stats,
       served: state.stats.served + 1,
-      perfect: state.stats.perfect + (quality === 'perfect' ? 1 : 0),
+      perfect: state.stats.perfect + (quality === 'perfect' && neat ? 1 : 0),
       tips: state.stats.tips + tip,
     },
   };
