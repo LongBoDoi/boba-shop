@@ -107,7 +107,7 @@ export const KitchenRoom = memo(function KitchenRoom({
 }: KitchenRoomProps) {
   if (W <= 0 || H <= 0) return null;
 
-  const lampW = Math.max(34, Math.round(W * 0.13));
+  const lampW = Math.max(32, Math.round(W * 0.125));
   const shelfH = Math.max(10, Math.round(W * 0.042));
   const counterH = Math.max(12, Math.round(H * 0.03));
   const band = tableLine - railY; // the cup's band, rail to work top
@@ -125,24 +125,19 @@ export const KitchenRoom = memo(function KitchenRoom({
       <Image source={WALL} resizeMode="repeat" style={{ position: 'absolute', left: 0, top: 0, width: W, height: cabinetTop }} />
       <View style={{ position: 'absolute', left: 0, top: 0, width: W, height: cabinetTop, backgroundColor: '#FFF6E9', opacity: 0.4 }} />
 
-      {/* ---- pendant lamps in the corners */}
-      <Image
-        source={LAMP}
-        style={{ position: 'absolute', left: -lampW * 0.12, top: -lampW * 0.22, width: lampW, height: lampW / ART.lamp }}
-      />
-      <Image
-        source={LAMP}
-        style={{ position: 'absolute', right: -lampW * 0.12, top: -lampW * 0.22, width: lampW, height: lampW / ART.lamp }}
-      />
 
       {/* ---- the dispenser shelf, dressed either side */}
       {showProps && (
         <>
           <Prop src={PLANT} aspect={ART.plant} x={-propW * 0.3} bottom={topShelf.base + 2} w={propW * 1.25} />
-          <Prop src={POSTER} aspect={ART.poster} x={W - propW * 0.95} bottom={topShelf.base - propW * 1.15} w={propW * 0.78} />
+          <Prop src={POSTER} aspect={ART.poster} x={W - propW * 1.0} bottom={topShelf.base - propW * 1.02} w={propW * 0.74} />
           <Prop src={CUP_STACK} aspect={ART.cupStack} x={W - propW * 0.92} bottom={topShelf.base + 2} w={propW * 0.72} />
         </>
       )}
+
+      {/* ---- pendant lamps, hanging from the ceiling in both corners */}
+      <Image source={LAMP} style={{ position: 'absolute', left: W * 0.025, top: 0, width: lampW, height: lampW / ART.lamp }} />
+      <Image source={LAMP} style={{ position: 'absolute', right: W * 0.025, top: 0, width: lampW, height: lampW / ART.lamp }} />
 
       {shelves.map((shelf, i) =>
         shelf.steel ? (
