@@ -146,6 +146,8 @@ export const GOOD_FILL = 0.85;
 export const POUR_RATE = 0.55;
 /** Holding this long past the brim is pure waste; the tea keeps running over until then. */
 export const MAX_POUR = 2.2;
+/** Tipping a carton of milk into the cup adds this much — leave it room, or it goes over. */
+export const MILK_SPLASH = 0.18;
 
 /** One scoop of ice is two cubes: one scoop = ít đá, two = đá thường. */
 export const MAX_ICE_SCOOPS = 2;

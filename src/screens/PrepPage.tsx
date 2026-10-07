@@ -1,11 +1,10 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { LayoutChangeEvent, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { KitchenBackdrop } from '../components/art/KitchenBackdrop';
 import { Button } from '../components/Button';
 import { Point } from '../components/Effects';
-import { cupSizeFor, KitchenStation, layoutKitchen } from '../components/KitchenStation';
+import { cupSizeFor, KitchenStation } from '../components/KitchenStation';
 import { OrderTicket } from '../components/OrderTicket';
 import { Ticket, TicketRail } from '../components/TicketRail';
 import { Drink, MIN_FILL } from '../game/ingredients';
@@ -82,11 +81,6 @@ export function PrepPage({
         ? 'Chưa đủ trà — rót tới vạch'
         : `Phục vụ ${selectedCustomer.name} ➜`;
   const cupWidth = scene.width > 0 ? cupSizeFor(scene.width, scene.height).width : 56;
-  // The room's woodwork has to line up with the shelves the kitchen lays out.
-  const counterY = useMemo(
-    () => (scene.height > 0 ? layoutKitchen(config, scene.width, scene.height).counterTop : 0),
-    [config, scene.width, scene.height],
-  );
 
   // Report where the cup and bin sit (window coordinates) whenever the layout or page changes,
   // so the effects overlay can aim coins and the toss. Re-measured when measureToken bumps.
@@ -114,23 +108,20 @@ export function PrepPage({
         }}
       >
         {scene.height > 0 && (
-          <>
-            <KitchenBackdrop width={scene.width} height={scene.height} counterY={counterY} />
-            <KitchenStation
-              width={scene.width}
-              height={scene.height}
-              config={config}
-              cup={cup}
-              build={build}
-              cupId={cupId}
-              onPour={onPour}
-              onScoop={onScoop}
-              onIce={onIce}
-              onSugar={onSugar}
-              onDragging={onDragging}
-              cupRef={machineRef}
-            />
-          </>
+          <KitchenStation
+            width={scene.width}
+            height={scene.height}
+            config={config}
+            cup={cup}
+            build={build}
+            cupId={cupId}
+            onPour={onPour}
+            onScoop={onScoop}
+            onIce={onIce}
+            onSugar={onSugar}
+            onDragging={onDragging}
+            cupRef={machineRef}
+          />
         )}
       </View>
 

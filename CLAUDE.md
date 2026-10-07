@@ -56,11 +56,12 @@ src/screens/            TitleScreen, DayEndScreen, and the in-play screens:
   GameScreen.tsx        orchestrator: HUD, the two-page swipe pager + tab indicator, effects/opening/pause overlays
   CounterPage.tsx       page 1 — the customer stage (take orders here)
   PrepPage.tsx          page 2 — ticket rail; the order slip; the KitchenStation (the room you work in);
-                        serve/clear. Set on a shared KitchenBackdrop.
+                        serve/clear. The room's own art comes with the station.
 src/components/         Cup (layered, animated), CustomerStage, TicketRail, OrderTicket, KitchenStation,
                         Hud, Effects (coins/confetti/toss), OpeningSign…
 src/components/art/     SVG illustrations: Character, IngredientIcon, ShopBackdrop (customer wall),
-                        KitchenBackdrop (prep room: shared awning/wall/wood counter),
+                        KitchenRoom (prep room: tiled wall, pendant lamps, shelves, cabinets;
+                        exports the SHOP palette + heartPath used by the equipment art),
                         Counter, CounterTop, Tiles, ToppingShelf
 src/motion.ts           shared animation timings/easings
 src/theme.ts            colours and font family names
@@ -74,30 +75,33 @@ Pha chế = # tickets to make); tapping a tab scrolls the pager (swiping is the 
 `PrepPage` is off-screen until swiped to, it re-measures its machine/bin positions when the parent bumps
 its `measureToken` on scroll-settle, and reports them up via `onGeometry` for the effects overlay.
 
-Both pages deliberately share one visual world so swiping feels like turning around inside one shop:
-the Counter uses `ShopBackdrop` and the Prep room uses `KitchenBackdrop`, and both draw the same pink
-striped wall, scalloped awning and warm wooden counter (same wood tones as `CounterTop`).
+The two pages share one shop's palette — warm wood, cream tile and the shop's pink — so swiping feels
+like turning around inside it. The Counter uses `ShopBackdrop`; the kitchen is `KitchenRoom`, drawn by
+`KitchenStation` itself (it needs the same shelf lines the layout computes) and themed from the `SHOP`
+palette it exports.
 
 **The drink is made by hand, not picked from a list.** `KitchenStation`
-(`src/components/KitchenStation.tsx`) is a room, not a menu: shelves of real equipment above, a wooden prep
-table along the bottom, and **the cup is a physical object you drag around it** (`PanResponder`; the pager
-is frozen via `onDragging` while you hold it). `layoutKitchen(config, w, h)` places everything absolutely —
-one row of tea dispensers, one of topping bins, one of ice/sugar/milk/foam — and gives each station a
-**dock**: the spot the cup is held while that tap runs into it. Dropping the cup still standing on the
-table sends it home; lifting it to a *pouring* station docks it there (`findStation` only considers those),
-and only the docked one pours.
+(`src/components/KitchenStation.tsx`) is a room, not a menu, and **the cup is a physical object you drag
+around it** (`PanResponder`; the pager is frozen via `onDragging` while you hold it).
+`layoutKitchen(config, w, h)` places everything absolutely, top to bottom: a wooden shelf of glass tea
+dispensers, then the **work top** with the cup's coaster through the middle, then the stainless topping
+bar and the ice/sugar/milk/foam counter, then the pink cabinet doors (the hint pill sits on them). Each
+dispenser gets a **dock**: the spot the cup is held while that tap runs into it, just under its shelf.
+Dropping the cup still standing on the work top sends it home; lifting it up to a dispenser docks it
+there (`findStation` only considers teas), and only the docked one pours.
 
-- **Tea dispensers / milk cartons — carry the cup to them.** Drag the cup up under the spout to dock it,
+- **Tea dispensers — carry the cup to them.** Drag the cup up under the spout to dock it,
   then press *and hold* (`useHoldPour`): how long you hold is how much goes in (`POUR_RATE` per second).
   The level rises live because the station owns the cup's liquid level as a shared value (`Cup`'s
   `levelSv`/`fill`/`marks` props) and the cup shows the tea's colour while pouring, before `POUR` is even
   dispatched. Letting go commits `POUR { category, optionId, amount }` and sets the cup back on its mat
   (so a docked cup never ends up hiding a shelf).
-- **Everything else — carry it to the cup.** Topping bins, the ice chest, the syrup bottle and the foam
-  tubs are dragged: `useCarry` keeps what's in hand, draws the tool following the finger above everything
-  else, and on release either tips it into the cup (`SCOOP` / `ICE_SCOOP` / `SUGAR_PUMP`) or puts it back.
-  The cup doesn't move for these — drop onto it wherever it stands. Ice and syrup show how many scoops or
-  pumps went in on the machine itself.
+- **Everything else — carry it to the cup.** The topping pans, the ice pan, the syrup bottle, the milk
+  cartons and the foam tubs are dragged: `useCarry` keeps what's in hand, draws the tool following the
+  finger above everything else, and on release either tips it into the cup (`SCOOP` / `ICE_SCOOP` /
+  `SUGAR_PUMP`, or `POUR` of `MILK_SPLASH` for a carton) or puts it back. The cup doesn't move for these —
+  drop onto it wherever it stands. Ice and syrup show how many scoops or pumps went in on the machine
+  itself. Milk takes room in the cup, so a cup filled to the brim with tea has nowhere to put it.
 
 **All of this is the raw responder API (`GRABBY`), not `Pressable`**: a `Pressable` cancels its press when
 the finger drifts or the browser decides it was a long-press, which cut pours short. These gestures end
@@ -107,6 +111,11 @@ shows no "added ✓" badges — the order slip is the checklist; machines only d
 `Cup` draws the "đủ" line (`MIN_FILL`) and the clean-pour band (`GOOD_FILL`) on the glass, and the station
 drips tea down the side when the live level goes over the brim. The order slip (`OrderTicket`) is a compact
 strip above the room, so the whole scene is workspace.
+
+The art is deliberately chunky and shop-like: jars with wooden lids and heart knobs, chrome taps with a
+heart button, wooden name plaques under every machine, stainless pans with pink-handled scoops, a cup with
+the shop's cat on it standing on a wooden coaster. Keep new equipment in that vocabulary (`SHOP` colours,
+`heartPath`) rather than inventing a second style.
 
 ### Game rules worth knowing
 

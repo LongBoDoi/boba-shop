@@ -1,4 +1,4 @@
-import { Fragment, ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { GestureResponderHandlers, PanResponder, StyleSheet, Text, View } from 'react-native';
 import Animated, {
   Easing,
@@ -17,6 +17,7 @@ import {
   getIngredient,
   MAX_ICE_SCOOPS,
   MAX_POUR,
+  MILK_SPLASH,
   MIN_FILL,
   POUR_RATE,
   SUGAR_STEPS,
@@ -28,21 +29,12 @@ import { CupBuild } from '../game/reducer';
 import { DURATION, ease, timing } from '../motion';
 import { colors, fonts } from '../theme';
 import { shade } from './art/Character';
+import { heartPath, KitchenRoom, RoomShelf, SHOP } from './art/KitchenRoom';
 import { Cup } from './Cup';
 
 // --------------------------------------------------------------------------- layout
 
 type StationKind = 'tea' | 'milk' | 'topping' | 'ice' | 'sugar' | 'foam';
-
-/** Tea and milk are poured into the cup; everything else is carried over to it. */
-const IS_POURED: Record<StationKind, boolean> = {
-  tea: true,
-  milk: true,
-  topping: false,
-  ice: false,
-  sugar: false,
-  foam: false,
-};
 
 interface Station {
   key: string;
@@ -67,17 +59,13 @@ interface Station {
   dockY: number;
 }
 
-interface Shelf {
-  base: number;
-}
-
 export interface KitchenLayout {
   stations: Station[];
-  shelves: Shelf[];
-  /** Top of the wooden work surface the whole lower kitchen stands on. */
-  counterTop: number;
-  /** The prep table's surface — where the cup rests between jobs. */
+  shelves: RoomShelf[];
+  /** The work top in the middle of the room — where the cup rests between jobs. */
   tableLine: number;
+  /** Where the pink cabinet doors along the bottom start. */
+  cabinetTop: number;
   cupW: number;
   cupH: number;
   homeX: number;
@@ -86,12 +74,12 @@ export interface KitchenLayout {
 
 /** How wide each piece of equipment is relative to its height. */
 const ASPECT: Record<StationKind, number> = {
-  tea: 0.6,
+  tea: 0.66,
   milk: 0.52,
-  topping: 0.92,
-  ice: 1.06,
-  sugar: 0.46,
-  foam: 0.84,
+  topping: 1.12,
+  ice: 1.12,
+  sugar: 0.5,
+  foam: 0.88,
 };
 
 const EQUIPMENT_NAMES: Record<string, string> = {
@@ -107,16 +95,21 @@ export function cupSizeFor(W: number, H: number) {
 }
 
 /**
- * Arrange the kitchen: shelves of equipment above, a clear prep table along the bottom. Pouring
- * stations also get a dock — the spot the cup is held while that tap runs into it.
+ * Arrange the kitchen the way the shop is laid out: the tea dispensers on a wooden shelf at the
+ * top, the work top with the cup's coaster through the middle, then the topping bar and the rest of
+ * the equipment below, and the cabinet doors along the very bottom. The dispensers get a dock — the
+ * spot the cup is held while that tap runs into it.
  */
 export function layoutKitchen(config: DayConfig, W: number, H: number): KitchenLayout {
   const { width: cupW, height: cupH } = cupSizeFor(W, H);
-  // The table is a band along the bottom: the cup rests on its surface, hints sit on the wood.
-  const tableLine = H - Math.max(22, Math.round(H * 0.055));
-  // The awning hangs over the top of the room, so the top shelf starts under it.
-  const top = 18;
-  const labelH = 13;
+  // Headroom for the pendant lamps, a wooden name plaque under each machine, cabinets at the foot.
+  const top = Math.max(34, Math.round(H * 0.085));
+  const labelH = 17;
+  const cabinetH = Math.max(30, Math.round(H * 0.085));
+  const cabinetTop = H - cabinetH;
+  const counterH = Math.max(11, Math.round(H * 0.028));
+  // The band the cup lives in: room to stand on the work top and to be lifted up to a tap.
+  const bandH = cupH + 24 + counterH;
 
   const has = (c: CategoryId) => config.categories.includes(c);
   const rows: { id: string; kind: StationKind }[][] = [
@@ -130,28 +123,31 @@ export function layoutKitchen(config: DayConfig, W: number, H: number): KitchenL
     ],
   ].filter((row) => row.length > 0);
 
-  // Everything sits above the table, leaving a clear band for the cup to stand in.
-  const avail = tableLine - cupH - 16 - top;
-  const weights = rows.map((row) => (row[0].kind === 'tea' ? 1.3 : 1));
+  const avail = cabinetTop - top - bandH;
+  const weights = rows.map((row) => (row[0].kind === 'tea' ? 1.25 : 1));
   const total = weights.reduce((a, b) => a + b, 0);
 
   const stations: Station[] = [];
-  const shelves: Shelf[] = [];
+  const shelves: RoomShelf[] = [];
   let y = top;
+  let tableLine = cabinetTop - counterH;
 
   rows.forEach((items, r) => {
     const rowH = (avail * weights[r]) / total;
     const base = Math.round(y + rowH - labelH);
     const slot = (W - 6) / items.length;
-    const maxH = rowH - labelH - 6;
+    const tall = items[0].kind === 'tea';
+    const maxH = Math.min(rowH - labelH - 6, H * (tall ? 0.32 : 0.26));
+    let shelfTop = base;
 
     items.forEach((item, i) => {
       const aspect = ASPECT[item.kind];
-      const w = Math.round(Math.min(slot - 8, maxH * aspect));
+      const w = Math.round(Math.min(slot - 10, maxH * aspect));
       const h = Math.round(w / aspect);
       const cx = Math.round(3 + slot * (i + 0.5));
       const option =
         item.kind === 'ice' || item.kind === 'sugar' ? undefined : getIngredient(categoryOf(item.kind), item.id);
+      shelfTop = Math.min(shelfTop, base - h);
       stations.push({
         key: `${item.kind}-${item.id}`,
         kind: item.kind,
@@ -165,21 +161,25 @@ export function layoutKitchen(config: DayConfig, W: number, H: number): KitchenL
         cx,
         slot: Math.round(slot),
         base,
-        spout: item.kind === 'tea' ? Math.round(h * 0.72) : item.kind === 'milk' ? Math.round(h * 0.2) : h,
-        dockY: base + cupH + 6,
+        spout: item.kind === 'tea' ? Math.round(h * 0.8) : Math.round(h * 0.2),
+        dockY: base + cupH + 8,
       });
     });
 
-    shelves.push({ base });
+    shelves.push({ base, top: shelfTop, steel: !tall });
     y += rowH;
+    // The work top goes straight under the dispensers, so the cup only has a short lift.
+    if (r === 0) {
+      tableLine = Math.round(y + bandH - counterH);
+      y += bandH;
+    }
   });
 
   return {
     stations,
     shelves,
-    // The work surface starts just under the lowest shelf of equipment.
-    counterTop: Math.round((shelves[shelves.length - 1]?.base ?? top) + 12),
     tableLine,
+    cabinetTop,
     cupW,
     cupH,
     homeX: Math.round(W / 2 - cupW / 2),
@@ -234,7 +234,7 @@ export function KitchenStation({
   cupRef,
 }: KitchenStationProps) {
   const layout = useMemo(() => layoutKitchen(config, W, H), [config, W, H]);
-  const { stations, shelves, tableLine, cupW, cupH, homeX, homeY } = layout;
+  const { stations, shelves, tableLine, cabinetTop, cupW, cupH, homeX, homeY } = layout;
 
   const cupX = useSharedValue(homeX);
   const cupY = useSharedValue(homeY);
@@ -267,8 +267,8 @@ export function KitchenStation({
     const grab = { x: homeX, y: homeY };
     const settle = () => {
       onDragging(false);
-      // Left standing on the table it goes home; lifted up to a tap it docks there.
-      const lifted = cupY.get() + cupH < tableLine - 2;
+      // Left standing on the work top it goes home; lifted up to a tap it docks there.
+      const lifted = cupY.get() + cupH < tableLine - 10;
       const found = lifted ? findStation(stations, cupX.get(), cupY.get(), cupW, cupH) : null;
       if (found) {
         setDock({ cupId, key: found.key });
@@ -326,6 +326,7 @@ export function KitchenStation({
     onScoop,
     onIce,
     onSugar,
+    onPour,
     onDragging,
     onNudge: nudge.show,
   });
@@ -351,13 +352,15 @@ export function KitchenStation({
 
   return (
     <View style={StyleSheet.absoluteFill}>
-      <Furniture
+      <KitchenRoom
         width={W}
         height={H}
         shelves={shelves}
         tableLine={tableLine}
-        matX={homeX - Math.round(cupW * 0.3)}
-        matW={Math.round(cupW * 1.6)}
+        cabinetTop={cabinetTop}
+        cupH={cupH}
+        matX={homeX - Math.round(cupW * 0.34)}
+        matW={Math.round(cupW * 1.68)}
       />
 
       {stations.map((station) => {
@@ -366,7 +369,7 @@ export function KitchenStation({
           case 'tea':
             return <TeaDispenser key={station.key} {...props} onPour={onPour} />;
           case 'milk':
-            return <MilkCarton key={station.key} {...props} onPour={onPour} />;
+            return <MilkCarton key={station.key} {...props} />;
           case 'topping':
             return <ToppingBin key={station.key} {...props} max={config.maxToppings} />;
           case 'ice':
@@ -409,6 +412,7 @@ export function KitchenStation({
             marks
           />
         </FreshCup>
+        <CatDecal cupW={cupW} cupH={cupH} />
         <Spill
           level={level}
           cupW={cupW}
@@ -419,7 +423,7 @@ export function KitchenStation({
 
       {carry.node}
 
-      <View style={[styles.hintRow, { bottom: Math.max(2, (H - tableLine) / 2 - 9) }]} pointerEvents="none">
+      <View style={[styles.hintRow, { top: cabinetTop + Math.max(3, (H - cabinetTop - 18) / 2) }]} pointerEvents="none">
         <View style={styles.hint}>
           <Text style={styles.hintText} numberOfLines={2}>
             {hint}
@@ -435,9 +439,10 @@ function findStation(stations: Station[], x: number, y: number, cupW: number, cu
   let best: Station | null = null;
   let bestScore = Infinity;
   for (const station of stations) {
-    if (!IS_POURED[station.kind]) continue;
+    // Only the dispensers are poured from; everything else is carried over to the cup.
+    if (station.kind !== 'tea') continue;
     const dx = Math.abs(x + cupW / 2 - station.cx) / (station.slot / 2 + cupW * 0.3);
-    const dy = Math.abs(y - (station.base + 6)) / (cupH * 0.85);
+    const dy = Math.abs(y - (station.base + 8)) / (cupH * 0.9);
     if (dx > 1 || dy > 1) continue;
     if (dx + dy < bestScore) {
       bestScore = dx + dy;
@@ -449,16 +454,32 @@ function findStation(stations: Station[], x: number, y: number, cupW: number, cu
 
 function hintFor(station: Station | null, cup: Drink, build: CupBuild): string {
   if (station) {
-    if (station.kind === 'tea') {
-      if (cup.tea && cup.tea !== station.id) return 'Ly đã có trà khác — Đổ bỏ rồi rót lại';
-      if (build.fill < MIN_FILL) return `Nhấn giữ vòi: rót ${station.name} tới vạch`;
-      return 'Đủ trà rồi — giữ thêm sẽ tràn';
-    }
-    if (cup.milk && cup.milk !== station.id) return 'Ly đã có loại sữa khác rồi';
-    return `Nhấn giữ để rót ${station.name}`;
+    if (cup.tea && cup.tea !== station.id) return 'Ly đã có trà khác — Đổ bỏ rồi rót lại';
+    if (build.fill < MIN_FILL) return `Nhấn giữ vòi: rót ${station.name} tới vạch`;
+    return 'Đủ trà rồi — giữ thêm sẽ tràn';
   }
   if (build.fill < MIN_FILL) return 'Kéo ly tới bình trà rồi nhấn giữ vòi';
   return 'Kéo topping, đá, đường… thả thẳng vào ly';
+}
+
+/** The shop's cat printed on the side of every cup. */
+function CatDecal({ cupW, cupH }: { cupW: number; cupH: number }) {
+  const s = Math.round(cupW * 0.42);
+  return (
+    <View pointerEvents="none" style={{ position: 'absolute', left: (cupW - s) / 2, top: cupH * 0.44, opacity: 0.92 }}>
+      <Svg width={s} height={s} viewBox="0 0 24 24">
+        <Path d="M6.4 8 L5.6 3.6 L9.6 6 Z" fill="#F6E6D4" stroke="#C8A98C" strokeWidth={1.1} strokeLinejoin="round" />
+        <Path d="M17.6 8 L18.4 3.6 L14.4 6 Z" fill="#F6E6D4" stroke="#C8A98C" strokeWidth={1.1} strokeLinejoin="round" />
+        <Circle cx={12} cy={13} r={7.6} fill="#F6E6D4" stroke="#C8A98C" strokeWidth={1.1} />
+        <Circle cx={9.2} cy={12} r={1.15} fill="#6B5143" />
+        <Circle cx={14.8} cy={12} r={1.15} fill="#6B5143" />
+        <Path d="M10.8 15 q1.2 1.2 2.4 0" stroke="#6B5143" strokeWidth={1.1} fill="none" strokeLinecap="round" />
+        <Circle cx={12} cy={16.9} r={1.5} fill="#3A2318" />
+        <Circle cx={9} cy={17.9} r={1.2} fill="#3A2318" />
+        <Circle cx={15} cy={17.9} r={1.2} fill="#3A2318" />
+      </Svg>
+    </View>
+  );
 }
 
 /** A short message that fades back to the normal hint. */
@@ -553,6 +574,7 @@ function useCarry({
   onScoop,
   onIce,
   onSugar,
+  onPour,
   onDragging,
   onNudge,
 }: {
@@ -568,6 +590,7 @@ function useCarry({
   onScoop: KitchenStationProps['onScoop'];
   onIce: () => void;
   onSugar: () => void;
+  onPour: KitchenStationProps['onPour'];
   onDragging: (dragging: boolean) => void;
   onNudge: (message: string) => void;
 }): Carry {
@@ -579,9 +602,9 @@ function useCarry({
   const size = Math.round(cupW * 0.95);
 
   // Everything the drop needs to decide, kept fresh without rebuilding the gesture mid-drag.
-  const latest = useRef({ cup, build, maxToppings, cupW, cupH, homeX, homeY, size, onScoop, onIce, onSugar, onNudge });
+  const latest = useRef({ cup, build, maxToppings, cupW, cupH, homeX, homeY, size, onScoop, onIce, onSugar, onPour, onNudge });
   useEffect(() => {
-    latest.current = { cup, build, maxToppings, cupW, cupH, homeX, homeY, size, onScoop, onIce, onSugar, onNudge };
+    latest.current = { cup, build, maxToppings, cupW, cupH, homeX, homeY, size, onScoop, onIce, onSugar, onPour, onNudge };
   });
 
   const origin = useRef({ x: 0, y: 0, station: null as Station | null });
@@ -615,8 +638,17 @@ function useCarry({
     onDragging(false);
     const station = origin.current.station;
     if (!station) return;
-    const { cup: now, build: made, maxToppings: max, onScoop: scoop, onIce: ice, onSugar: sugar, onNudge: nudge, size: s } =
-      latest.current;
+    const {
+      cup: now,
+      build: made,
+      maxToppings: max,
+      onScoop: scoop,
+      onIce: ice,
+      onSugar: sugar,
+      onPour: tipIn,
+      onNudge: nudge,
+      size: s,
+    } = latest.current;
 
     // Is the business end of the tool over the cup? The cup may still be gliding back to its mat,
     // so either where it is now or where it's heading counts.
@@ -649,6 +681,11 @@ function useCarry({
       case 'foam':
         if (now.foam) return putBack('Ly đã có kem');
         scoop('foam', station.id);
+        break;
+      case 'milk':
+        if (now.milk && now.milk !== station.id) return putBack('Ly đã có loại sữa khác');
+        if (made.fill >= 1) return putBack('Ly đầy rồi — chừa chỗ cho sữa');
+        tipIn('milk', station.id, MILK_SPLASH);
         break;
       case 'ice':
         if (made.iceScoops >= MAX_ICE_SCOOPS) return putBack('Đá đã đầy ly');
@@ -683,7 +720,7 @@ function useCarry({
   return { begin, move, drop, node };
 }
 
-/** What a station puts in your hand: a scoop of pearls, a scoop of ice, the syrup bottle, a spoon. */
+/** What a station puts in your hand: a scoop, the syrup bottle, a carton of milk, a spoon of foam. */
 function Tool({ station, size }: { station: Station; size: number }) {
   const S = size;
   if (station.kind === 'sugar') {
@@ -691,18 +728,37 @@ function Tool({ station, size }: { station: Station; size: number }) {
       <Svg width={S} height={S} viewBox="0 0 24 24">
         <Rect x={7} y={5} width={10} height={16} rx={4} fill="#FFF8EA" stroke="#E4D2AE" strokeWidth={1.2} />
         <Rect x={8.5} y={9} width={7} height={11} rx={3} fill="#EFAE2B" />
-        <Rect x={9.5} y={1.5} width={5} height={4} rx={1.5} fill="#C98A3A" />
-        <Path d="M14.5 3.5 h4 l1 2 h-5 Z" fill="#A9712B" />
+        <Rect x={9.5} y={1.5} width={5} height={4} rx={1.5} fill={SHOP.woodEdge} />
+        <Path d="M14.5 3.5 h4 l1 2 h-5 Z" fill={SHOP.pinkGrip} />
+      </Svg>
+    );
+  }
+  if (station.kind === 'milk') {
+    const oat = station.id === 'oat';
+    return (
+      <Svg width={S} height={S} viewBox="0 0 24 24">
+        <Path
+          d="M5 7 L12 2.5 L19 7 V21.5 H5 Z"
+          fill={oat ? '#F3E6CD' : '#FFFFFF'}
+          stroke="#D8CCBE"
+          strokeWidth={1.3}
+          strokeLinejoin="round"
+        />
+        <Path d="M5 7 L12 2.5 L19 7 Z" fill={oat ? '#C08E4F' : '#5AA9E6'} />
+        <Rect x={5} y={11} width={14} height={4.5} fill={oat ? '#C08E4F' : '#5AA9E6'} opacity={0.9} />
+        <Rect x={7} y={12.4} width={10} height={1.6} rx={0.8} fill="#FFFFFF" opacity={0.75} />
       </Svg>
     );
   }
   const cold = station.kind === 'ice';
   const piece = station.kind === 'topping' ? (getIngredient('toppings', station.id) as Topping | undefined) : undefined;
-  const fill = cold ? '#EAF7FD' : station.kind === 'foam' ? '#F2EFEA' : '#D4D9DE';
-  const edge = cold ? '#A3CADD' : '#B3B9C0';
+  const fill = cold ? '#EAF7FD' : station.kind === 'foam' ? '#F2EFEA' : '#DDE3E8';
+  const edge = cold ? '#A3CADD' : SHOP.steelEdge;
   return (
     <Svg width={S} height={S} viewBox="0 0 24 24">
-      <Rect x={10.6} y={0} width={2.8} height={12} rx={1.4} fill="#8F9794" />
+      <Rect x={10.4} y={0} width={3.2} height={11} rx={1.6} fill={SHOP.pinkGrip} />
+      <Rect x={11.1} y={1} width={1} height={8} rx={0.5} fill="#FFFFFF" opacity={0.45} />
+      <Rect x={9.9} y={10} width={4.2} height={2.4} rx={1} fill="#C3CBD2" />
       <Path d="M4 12 h16 a2 2 0 0 1 2 2 v1.5 a10 7 0 0 1 -20 0 v-1.5 a2 2 0 0 1 2 -2 Z" fill={fill} stroke={edge} strokeWidth={1} />
       {cold && (
         <>
@@ -726,70 +782,6 @@ function Tool({ station, size }: { station: Station; size: number }) {
           ),
         )}
     </Svg>
-  );
-}
-
-// --------------------------------------------------------------------------- the room
-
-/** Shelves, their brackets, and the wooden prep table the cup lives on. */
-function Furniture({
-  width: W,
-  height: H,
-  shelves,
-  tableLine,
-  matX,
-  matW,
-}: {
-  width: number;
-  height: number;
-  shelves: Shelf[];
-  tableLine: number;
-  matX: number;
-  matW: number;
-}) {
-  return (
-    <View style={StyleSheet.absoluteFill} pointerEvents="none">
-      <Svg width={W} height={H}>
-        <Defs>
-          <LinearGradient id="ksTable" x1="0" y1="0" x2="0" y2="1">
-            <Stop offset="0" stopColor={colors.counterLight} />
-            <Stop offset="1" stopColor={colors.counterEdge} />
-          </LinearGradient>
-        </Defs>
-
-        {shelves.map(({ base }, i) => (
-          <Fragment key={i}>
-            {/* steel shelf with a lip, on wall brackets */}
-            <Rect x={0} y={base} width={W} height={6} rx={2} fill="#E4D3C2" />
-            <Rect x={0} y={base} width={W} height={2} fill="#FFF6EC" opacity={0.9} />
-            <Rect x={0} y={base + 5} width={W} height={3} fill="#C9B19C" />
-            {[0.16, 0.5, 0.84].map((at) => (
-              <Path key={at} d={`M${W * at - 4.5} ${base + 8} h9 l-4.5 5.5 Z`} fill="#C9B19C" opacity={0.6} />
-            ))}
-          </Fragment>
-        ))}
-
-        {/* the rubber mat the cup stands on between jobs */}
-        <Rect x={matX} y={tableLine - 11} width={matW} height={14} rx={7} fill={colors.counterDark} opacity={0.16} />
-        <Rect
-          x={matX + 4}
-          y={tableLine - 9}
-          width={matW - 8}
-          height={10}
-          rx={5}
-          fill="none"
-          stroke={colors.counterDark}
-          strokeWidth={1.2}
-          strokeDasharray="4 4"
-          opacity={0.3}
-        />
-
-        {/* the prep table's front edge */}
-        <Rect x={0} y={tableLine} width={W} height={H - tableLine} fill="url(#ksTable)" />
-        <Rect x={0} y={tableLine} width={W} height={3} fill="#FFF0DC" opacity={0.9} />
-        <Rect x={0} y={tableLine + 6} width={W} height={1.5} fill={colors.counterDark} opacity={0.25} />
-      </Svg>
-    </View>
   );
 }
 
@@ -818,9 +810,9 @@ interface FrameProps {
 }
 
 /**
- * Every machine is a touch target with its name under it; the one the cup is held at glows. The
- * gestures are PanResponders rather than presses, so a finger that drifts (or a browser's
- * long-press) can never cut a pour short.
+ * Every machine is a touch target with its name on a little wooden plaque below it; the one the cup
+ * is held at glows. The gestures are raw responders rather than presses, so a finger that drifts (or
+ * a browser's long-press) can never cut a pour short.
  */
 function Frame({ station, active, label, locked, accessibilityLabel, press, handlers, children }: FrameProps) {
   const style = useAnimatedStyle(() => ({ transform: [{ scale: press.value }] }));
@@ -983,11 +975,15 @@ function TeaDispenser({
       onNudge(locked ? 'Ly đã có trà khác — bấm Đổ bỏ trước' : `Kéo ly xuống dưới vòi ${tea.name} trước`),
   });
 
-  const lever = useAnimatedStyle(() => ({ transform: [{ rotate: pouring ? '-26deg' : '0deg' }] }));
+  // The heart handle on the tap tips over while the tea runs.
+  const lever = useAnimatedStyle(() => ({ transform: [{ rotate: pouring ? '-24deg' : '0deg' }] }));
 
-  const tankY = H * 0.08;
-  const tankH = H * 0.56;
-  const liquidY = tankY + tankH * 0.14;
+  const lidY = H * 0.05;
+  const lidH = H * 0.1;
+  const jarY = lidY + lidH * 0.72;
+  const jarH = H * 0.66;
+  const jarBottom = jarY + jarH;
+  const teaY = jarY + jarH * 0.12;
 
   return (
     <Frame
@@ -1002,112 +998,109 @@ function TeaDispenser({
       <Svg width={W} height={H}>
         <Defs>
           <LinearGradient id={`gl-${station.key}`} x1="0" y1="0" x2="1" y2="0">
-            <Stop offset="0" stopColor="#FFFFFF" stopOpacity={0.55} />
-            <Stop offset="0.45" stopColor="#FFFFFF" stopOpacity={0.08} />
-            <Stop offset="1" stopColor="#FFFFFF" stopOpacity={0.45} />
+            <Stop offset="0" stopColor="#FFFFFF" stopOpacity={0.3} />
+            <Stop offset="0.35" stopColor="#FFFFFF" stopOpacity={0.02} />
+            <Stop offset="1" stopColor="#FFFFFF" stopOpacity={0.22} />
           </LinearGradient>
         </Defs>
 
-        {/* stand: two legs over a drip tray, so a cup fits under the tap */}
-        <Rect x={W * 0.16} y={H * 0.64} width={W * 0.1} height={H * 0.3} fill="#B9C0BD" />
-        <Rect x={W * 0.74} y={H * 0.64} width={W * 0.1} height={H * 0.3} fill="#B9C0BD" />
-        <Rect x={W * 0.08} y={H * 0.92} width={W * 0.84} height={H * 0.06} rx={2} fill="#8F9794" />
-        <Rect x={W * 0.14} y={H * 0.88} width={W * 0.72} height={H * 0.045} rx={1.5} fill="#D7DEDB" />
-        {[0.3, 0.5, 0.7].map((at) => (
-          <Rect key={at} x={W * at} y={H * 0.885} width={1.4} height={H * 0.035} fill="#A9B2AF" />
+        {/* chunky wooden base the jar stands on */}
+        <Rect x={0} y={H * 0.82} width={W} height={H * 0.17} rx={4} fill={SHOP.wood} />
+        <Rect x={0} y={H * 0.82} width={W} height={H * 0.045} rx={3} fill={SHOP.woodTop} />
+        <Rect x={0} y={H * 0.955} width={W} height={H * 0.035} rx={3} fill={SHOP.woodEdge} />
+
+        {/* the glass jar, with the tea sitting in it */}
+        <Rect
+          x={W * 0.08}
+          y={jarY}
+          width={W * 0.84}
+          height={jarH}
+          rx={W * 0.14}
+          fill={SHOP.glass}
+          stroke={SHOP.glassEdge}
+          strokeWidth={1.6}
+        />
+        <Rect x={W * 0.11} y={teaY} width={W * 0.78} height={jarBottom - teaY - 2} rx={W * 0.12} fill={tea.color} />
+        <Rect x={W * 0.11} y={teaY} width={W * 0.78} height={2.5} fill="#FFFFFF" opacity={0.3} />
+        {/* measuring ticks down the side */}
+        {[0.3, 0.42, 0.54, 0.66].map((at) => (
+          <Rect key={at} x={W * 0.72} y={jarY + jarH * at} width={W * 0.12} height={1.6} rx={0.8} fill="#FFFFFF" opacity={0.55} />
         ))}
+        <Rect x={W * 0.08} y={jarY} width={W * 0.84} height={jarH} rx={W * 0.14} fill={`url(#gl-${station.key})`} />
+        <Rect x={W * 0.17} y={jarY + jarH * 0.12} width={W * 0.08} height={jarH * 0.5} rx={W * 0.04} fill="#FFFFFF" opacity={0.5} />
 
-        {/* glass tank with the tea in it */}
-        <Rect x={W * 0.1} y={tankY} width={W * 0.8} height={tankH} rx={W * 0.1} fill="#EFF5F4" stroke="#C7D4D1" strokeWidth={1.4} />
-        <Rect x={W * 0.13} y={liquidY} width={W * 0.74} height={tankY + tankH - liquidY - 2} rx={W * 0.08} fill={tea.color} />
-        <Rect x={W * 0.13} y={liquidY} width={W * 0.74} height={2.5} fill="#FFFFFF" opacity={0.35} />
-        <Rect x={W * 0.1} y={tankY} width={W * 0.8} height={tankH} rx={W * 0.1} fill={`url(#gl-${station.key})`} />
-        {/* front label */}
-        <Rect x={W * 0.22} y={tankY + tankH * 0.56} width={W * 0.56} height={tankH * 0.26} rx={3} fill="#FFFDF6" opacity={0.92} />
-        <Rect x={W * 0.28} y={tankY + tankH * 0.64} width={W * 0.44} height={2} rx={1} fill={shade(tea.color, -10)} opacity={0.7} />
-        <Rect x={W * 0.28} y={tankY + tankH * 0.7} width={W * 0.3} height={2} rx={1} fill={shade(tea.color, -10)} opacity={0.5} />
+        {/* wooden lid with a heart knob */}
+        <Rect x={W * 0.03} y={lidY} width={W * 0.94} height={lidH} rx={lidH * 0.42} fill={SHOP.wood} />
+        <Rect x={W * 0.03} y={lidY} width={W * 0.94} height={lidH * 0.38} rx={lidH * 0.3} fill={SHOP.woodTop} />
+        <Rect x={W * 0.03} y={lidY + lidH * 0.72} width={W * 0.94} height={lidH * 0.28} rx={lidH * 0.14} fill={SHOP.woodEdge} />
+        <Path d={heartPath(W * 0.5, lidY - H * 0.012, W * 0.11)} fill={SHOP.woodEdge} />
+        <Path d={heartPath(W * 0.5, lidY - H * 0.016, W * 0.085)} fill={SHOP.wood} />
 
-        {/* lid and knob */}
-        <Rect x={W * 0.06} y={tankY - H * 0.055} width={W * 0.88} height={H * 0.07} rx={3} fill="#AFB8B5" />
-        <Rect x={W * 0.06} y={tankY - H * 0.055} width={W * 0.88} height={H * 0.022} rx={3} fill="#D6DEDB" />
-        <Rect x={W * 0.43} y={tankY - H * 0.1} width={W * 0.14} height={H * 0.05} rx={3} fill="#9AA3A0" />
-
-        {/* chrome tap body */}
-        <Rect x={W * 0.4} y={tankY + tankH - 1} width={W * 0.2} height={H * 0.08} rx={2} fill="#CBD2CF" />
-        <Rect x={W * 0.44} y={tankY + tankH + H * 0.06} width={W * 0.12} height={H * 0.05} rx={2} fill="#A8B0AD" />
+        {/* the tap: a dark body with a heart button, and a chrome spout under it */}
+        <Rect x={W * 0.36} y={jarBottom - jarH * 0.2} width={W * 0.28} height={jarH * 0.16} rx={3} fill={SHOP.handle} />
+        <Path d={heartPath(W * 0.5, jarBottom - jarH * 0.12, W * 0.07)} fill="#FFB3C8" />
+        <Rect x={W * 0.42} y={jarBottom - jarH * 0.05} width={W * 0.16} height={H * 0.07} rx={3} fill="#C8D0D4" />
+        <Rect x={W * 0.44} y={jarBottom + H * 0.02} width={W * 0.12} height={H * 0.04} rx={2} fill="#A9B2B8" />
+        <Rect x={W * 0.45} y={jarBottom - jarH * 0.04} width={W * 0.04} height={H * 0.05} rx={2} fill="#FFFFFF" opacity={0.5} />
       </Svg>
 
-      {/* the lever you hold */}
-      <Animated.View style={[styles.lever, { left: W * 0.56, top: H * 0.6 }, lever]}>
-        <Svg width={W * 0.34} height={H * 0.1}>
-          <Rect x={0} y={H * 0.028} width={W * 0.3} height={H * 0.035} rx={H * 0.018} fill="#8F9794" />
-          <Circle cx={W * 0.29} cy={H * 0.045} r={H * 0.028} fill={colors.primaryDark} />
+      {/* the handle you hold down */}
+      <Animated.View style={[styles.lever, { left: W * 0.6, top: jarBottom - jarH * 0.21 }, lever]}>
+        <Svg width={W * 0.3} height={H * 0.1}>
+          <Rect x={0} y={H * 0.025} width={W * 0.22} height={H * 0.03} rx={H * 0.015} fill={SHOP.handle} />
+          <Path d={heartPath(W * 0.24, H * 0.04, W * 0.07)} fill={SHOP.pinkGrip} />
         </Svg>
       </Animated.View>
 
-      <Stream x={W / 2} top={station.spout} length={station.base - station.y - station.spout + 7} color={tea.color} on={pouring} />
+      <Stream
+        x={W / 2}
+        top={station.spout}
+        length={station.base - station.y - station.spout + 10}
+        color={tea.color}
+        on={pouring}
+      />
     </Frame>
   );
 }
 
 // --------------------------------------------------------------------------- milk cartons
 
-function MilkCarton({
-  station,
-  active,
-  cup,
-  build,
-  level,
-  onNudge,
-  onPouring,
-  onPour,
-}: EquipProps & { onPour: KitchenStationProps['onPour'] }) {
+/** A carton you pick up off the shelf and tip into the cup. */
+function MilkCarton({ station, cup, carry }: EquipProps) {
   const { w: W, h: H } = station;
   const oat = station.id === 'oat';
   const body = oat ? '#F3E6CD' : '#FFFFFF';
   const band = oat ? '#C08E4F' : '#5AA9E6';
   const locked = cup.milk !== null && cup.milk !== station.id;
   const press = useSharedValue(1);
-  const { pouring, handlers } = useHoldPour({
-    enabled: active && !locked,
-    fill: build.fill,
-    level,
-    press,
-    onStart: (running) => onPouring(running ? { category: 'milk', id: station.id } : null),
-    onCommit: (amount) => onPour('milk', station.id, amount),
-    onBlocked: () => onNudge(locked ? 'Ly đã có loại sữa khác' : 'Kéo ly xuống dưới hộp sữa trước'),
-  });
-  const tip = useAnimatedStyle(() => ({ transform: [{ rotate: pouring ? '-24deg' : '0deg' }] }));
+  const handlers = useCarryGesture(station, carry, press);
 
   return (
     <Frame
       station={station}
-      active={active}
       locked={locked}
       label={oat ? 'Yến mạch' : 'Sữa tươi'}
-      accessibilityLabel={`Hộp ${station.name}`}
+      accessibilityLabel={`Hộp ${station.name} — kéo vào ly`}
       press={press}
       handlers={handlers}
     >
-      <Animated.View style={[{ width: W, height: H }, tip]}>
-        <Svg width={W} height={H}>
-          {/* gable-top carton */}
-          <Path
-            d={`M${W * 0.12} ${H * 0.26} L${W * 0.5} ${H * 0.06} L${W * 0.88} ${H * 0.26} V${H * 0.97} H${W * 0.12} Z`}
-            fill={body}
-            stroke="#D8CCBE"
-            strokeWidth={1.4}
-            strokeLinejoin="round"
-          />
-          <Path d={`M${W * 0.12} ${H * 0.26} L${W * 0.5} ${H * 0.06} L${W * 0.88} ${H * 0.26} Z`} fill={band} />
-          <Rect x={W * 0.12} y={H * 0.45} width={W * 0.76} height={H * 0.2} fill={band} opacity={0.9} />
-          <Rect x={W * 0.2} y={H * 0.5} width={W * 0.6} height={H * 0.04} rx={2} fill="#FFFFFF" opacity={0.75} />
-          <Rect x={W * 0.2} y={H * 0.57} width={W * 0.38} height={H * 0.03} rx={2} fill="#FFFFFF" opacity={0.55} />
-          {/* screw cap on the gable */}
-          <Rect x={W * 0.56} y={H * 0.12} width={W * 0.16} height={H * 0.07} rx={2} fill={shade(band, -18)} />
-        </Svg>
-      </Animated.View>
-      <Stream x={W * 0.16} top={station.spout} length={station.base - station.y - station.spout + 7} color="#F7F4EC" on={pouring} />
+      <Svg width={W} height={H}>
+        {/* gable-top carton */}
+        <Path
+          d={`M${W * 0.12} ${H * 0.26} L${W * 0.5} ${H * 0.06} L${W * 0.88} ${H * 0.26} V${H * 0.97} H${W * 0.12} Z`}
+          fill={body}
+          stroke="#D8CCBE"
+          strokeWidth={1.4}
+          strokeLinejoin="round"
+        />
+        <Path d={`M${W * 0.12} ${H * 0.26} L${W * 0.5} ${H * 0.06} L${W * 0.88} ${H * 0.26} Z`} fill={band} />
+        <Rect x={W * 0.12} y={H * 0.45} width={W * 0.76} height={H * 0.2} fill={band} opacity={0.9} />
+        <Rect x={W * 0.2} y={H * 0.5} width={W * 0.6} height={H * 0.04} rx={2} fill="#FFFFFF" opacity={0.75} />
+        <Rect x={W * 0.2} y={H * 0.57} width={W * 0.38} height={H * 0.03} rx={2} fill="#FFFFFF" opacity={0.55} />
+        <Path d={heartPath(W * 0.5, H * 0.76, W * 0.12)} fill={band} opacity={0.5} />
+        {/* screw cap on the gable */}
+        <Rect x={W * 0.56} y={H * 0.12} width={W * 0.16} height={H * 0.07} rx={2} fill={shade(band, -18)} />
+      </Svg>
     </Frame>
   );
 }
@@ -1122,19 +1115,6 @@ function ToppingBin({ station, cup, max, carry }: EquipProps & { max: number }) 
   const press = useSharedValue(1);
   const handlers = useCarryGesture(station, carry, press);
 
-  const binY = H * 0.2;
-  const binH = H * 0.78;
-  const pearl = option.shape === 'pearl';
-  const piece = W * 0.15;
-  const mound = [
-    [0.26, 0.42],
-    [0.44, 0.3],
-    [0.62, 0.4],
-    [0.35, 0.22],
-    [0.55, 0.2],
-    [0.73, 0.26],
-  ];
-
   return (
     <Frame
       station={station}
@@ -1145,48 +1125,96 @@ function ToppingBin({ station, cup, max, carry }: EquipProps & { max: number }) 
       handlers={handlers}
     >
       <Svg width={W} height={H}>
-        {/* lid, hinged open at the back */}
-        <Path
-          d={`M${W * 0.06} ${binY} l${W * 0.1} ${-H * 0.16} h${W * 0.78} l${-W * 0.1} ${H * 0.16} Z`}
-          fill="#F6EADD"
-          stroke="#DCC9B6"
-          strokeWidth={1.2}
-        />
-        {/* bin body */}
-        <Rect x={W * 0.06} y={binY} width={W * 0.88} height={binH} rx={4} fill="#FFFDF6" stroke="#E0CDBA" strokeWidth={1.4} />
-        <Rect x={W * 0.06} y={binY} width={W * 0.88} height={binH * 0.2} fill="#EFE0CF" />
-        {/* the topping itself, mounded up inside */}
-        {mound.map(([fx, fy], i) =>
-          pearl ? (
-            <Circle key={i} cx={W * fx + piece / 2} cy={binY + binH * fy} r={piece / 2} fill={option.color} stroke="rgba(0,0,0,0.18)" strokeWidth={0.8} />
-          ) : (
-            <Rect
-              key={i}
-              x={W * fx}
-              y={binY + binH * fy - piece / 2}
-              width={piece}
-              height={piece}
-              rx={1.5}
-              fill={option.color}
-              stroke="rgba(0,0,0,0.18)"
-              strokeWidth={0.8}
-            />
-          ),
-        )}
-        {/* name plate */}
-        <Rect x={W * 0.16} y={binY + binH * 0.66} width={W * 0.68} height={binH * 0.24} rx={2.5} fill="#FFFFFF" opacity={0.9} />
-        <Rect x={W * 0.24} y={binY + binH * 0.73} width={W * 0.42} height={2} rx={1} fill={colors.inkSoft} opacity={0.5} />
+        <Pan W={W} H={H} />
+        <Pieces W={W} H={H} color={option.color} shape={option.shape} />
       </Svg>
-
-      {/* the scoop resting in the bin, waiting to be picked up */}
-      <View style={[styles.tool, { right: -W * 0.02, top: -H * 0.03 }]}>
-        <Svg width={W * 0.4} height={H * 0.44} viewBox="0 0 24 26">
-          <Rect x={10.5} y={0} width={3} height={13} rx={1.5} fill="#8F9794" />
-          <Path d="M4 13 h16 a2 2 0 0 1 2 2 v2 a10 7 0 0 1 -20 0 v-2 a2 2 0 0 1 2 -2 Z" fill="#D4D9DE" stroke="#A9B0B8" strokeWidth={1} />
-          <Path d="M5 17 h14 a9 5 0 0 1 -14 0 Z" fill={option.color} opacity={0.9} />
-        </Svg>
-      </View>
+      <PanScoop station={station} fill={option.color} />
     </Frame>
+  );
+}
+
+/** A stainless pan dropped into the topping bar. */
+function Pan({ W, H }: { W: number; H: number }) {
+  return (
+    <>
+      <Rect x={0} y={H * 0.26} width={W} height={H * 0.72} rx={6} fill="#D6DDE3" stroke={SHOP.steelEdge} strokeWidth={1.6} />
+      <Rect x={0} y={H * 0.26} width={W} height={H * 0.1} rx={5} fill={SHOP.steelTop} />
+      <Rect
+        x={W * 0.09}
+        y={H * 0.38}
+        width={W * 0.82}
+        height={H * 0.52}
+        rx={4}
+        fill={SHOP.steelDeep}
+        stroke="#7D888F"
+        strokeWidth={1}
+      />
+    </>
+  );
+}
+
+/** The topping itself, heaped up in the pan. */
+function Pieces({ W, H, color, shape }: { W: number; H: number; color: string; shape: 'pearl' | 'cube' }) {
+  const r = W * 0.085;
+  const spots = [
+    [0.2, 0.52],
+    [0.38, 0.47],
+    [0.56, 0.5],
+    [0.74, 0.54],
+    [0.29, 0.65],
+    [0.47, 0.62],
+    [0.65, 0.65],
+    [0.2, 0.76],
+    [0.38, 0.78],
+    [0.56, 0.77],
+    [0.74, 0.75],
+  ];
+  return (
+    <>
+      {spots.map(([fx, fy], i) =>
+        shape === 'pearl' ? (
+          <Circle key={i} cx={W * fx + r} cy={H * fy} r={r} fill={color} stroke="rgba(0,0,0,0.22)" strokeWidth={0.7} />
+        ) : (
+          <Rect
+            key={i}
+            x={W * fx}
+            y={H * fy - r}
+            width={r * 2}
+            height={r * 2}
+            rx={1.6}
+            fill={color}
+            stroke="rgba(0,0,0,0.22)"
+            strokeWidth={0.7}
+          />
+        ),
+      )}
+      {spots
+        .filter((_, i) => i % 3 === 0)
+        .map(([fx, fy], i) => (
+          <Circle key={`s${i}`} cx={W * fx + r * 0.6} cy={H * fy - r * 0.4} r={r * 0.3} fill="#FFFFFF" opacity={0.45} />
+        ))}
+    </>
+  );
+}
+
+/** The scoop that lives in a pan: chrome bowl buried in the topping, pink handle sticking out. */
+function PanScoop({ station, fill }: { station: Station; fill: string }) {
+  const { w: W, h: H } = station;
+  return (
+    <View pointerEvents="none" style={[styles.tool, { left: W * 0.47, top: -H * 0.06 }]}>
+      <Svg width={W * 0.44} height={H * 0.95} viewBox="0 0 22 40">
+        <Rect x={11} y={1} width={5} height={20} rx={2.5} fill={SHOP.pinkGrip} transform="rotate(16 13 11)" />
+        <Rect x={12.2} y={3} width={1.3} height={13} rx={0.6} fill="#FFFFFF" opacity={0.4} transform="rotate(16 13 11)" />
+        <Rect x={6.6} y={19} width={6} height={3.2} rx={1.4} fill="#C3CBD2" transform="rotate(16 9.5 20)" />
+        <Path
+          d="M1.5 22 h13 a1.8 1.8 0 0 1 1.8 1.8 v1.6 a8.2 6.4 0 0 1 -16.6 0 v-1.6 a1.8 1.8 0 0 1 1.8 -1.8 Z"
+          fill="#E3E9ED"
+          stroke={SHOP.steelEdge}
+          strokeWidth={1}
+        />
+        <Path d="M2.4 25.4 h11.6 a7.4 4.6 0 0 1 -11.6 0 Z" fill={fill} opacity={0.9} />
+      </Svg>
+    </View>
   );
 }
 
@@ -1197,14 +1225,16 @@ function IceChest({ station, build, carry }: EquipProps) {
   const press = useSharedValue(1);
   const handlers = useCarryGesture(station, carry, press);
 
-  const boxY = H * 0.26;
-  const boxH = H * 0.7;
   const cubes = [
-    [0.2, 0.3],
-    [0.42, 0.22],
-    [0.62, 0.3],
-    [0.34, 0.46],
-    [0.56, 0.46],
+    [0.18, 0.5],
+    [0.4, 0.46],
+    [0.62, 0.5],
+    [0.28, 0.66],
+    [0.5, 0.64],
+    [0.7, 0.68],
+    [0.2, 0.79],
+    [0.44, 0.8],
+    [0.66, 0.81],
   ];
 
   return (
@@ -1216,53 +1246,35 @@ function IceChest({ station, build, carry }: EquipProps) {
       handlers={handlers}
     >
       <Svg width={W} height={H}>
-        {/* open lid */}
-        <Path
-          d={`M${W * 0.04} ${boxY} l${W * 0.12} ${-H * 0.18} h${W * 0.8} l${-W * 0.12} ${H * 0.18} Z`}
-          fill="#D3E9F4"
-          stroke="#A3CADD"
-          strokeWidth={1.2}
-        />
-        {/* chest */}
-        <Rect x={W * 0.04} y={boxY} width={W * 0.92} height={boxH} rx={6} fill="#E8F6FC" stroke="#A3CADD" strokeWidth={1.5} />
-        <Rect x={W * 0.04} y={boxY} width={W * 0.92} height={boxH * 0.22} fill="#D7EDF7" />
-        {/* cubes inside */}
+        <Pan W={W} H={H} />
         {cubes.map(([fx, fy], i) => (
           <Rect
             key={i}
             x={W * fx}
-            y={boxY + boxH * fy}
+            y={H * fy - W * 0.08}
             width={W * 0.17}
             height={W * 0.17}
             rx={2.5}
-            fill="#F2FBFF"
-            stroke="#9FD3EF"
+            fill="#F4FCFF"
+            stroke="#A8D6EE"
             strokeWidth={1}
           />
         ))}
-        {/* latch + how many scoops went in the cup */}
-        <Rect x={W * 0.42} y={boxY + boxH * 0.72} width={W * 0.16} height={boxH * 0.16} rx={2} fill="#B6D7E6" />
+        {/* how many scoops already went in the cup */}
         {[0, 1].map((i) => (
           <Circle
             key={i}
-            cx={W * 0.36 + i * W * 0.28}
-            cy={boxY + boxH * 0.93}
-            r={W * 0.055}
+            cx={W * 0.4 + i * W * 0.2}
+            cy={H * 0.32}
+            r={W * 0.045}
             fill={i < build.iceScoops ? colors.sky : '#FFFFFF'}
-            stroke="#A3CADD"
+            stroke={SHOP.steelEdge}
             strokeWidth={1}
           />
         ))}
       </Svg>
 
-      <View style={[styles.tool, { right: -W * 0.04, top: -H * 0.1 }]}>
-        <Svg width={W * 0.42} height={H * 0.48} viewBox="0 0 24 26">
-          <Rect x={10.5} y={0} width={3} height={13} rx={1.5} fill="#8F9794" />
-          <Path d="M4 13 h16 a2 2 0 0 1 2 2 v2 a10 7 0 0 1 -20 0 v-2 a2 2 0 0 1 2 -2 Z" fill="#EAF7FD" stroke="#A3CADD" strokeWidth={1} />
-          <Rect x={7} y={14} width={5} height={5} rx={1} fill="#FFFFFF" stroke="#9FD3EF" strokeWidth={0.8} />
-          <Rect x={13} y={15} width={4} height={4} rx={1} fill="#FFFFFF" stroke="#9FD3EF" strokeWidth={0.8} />
-        </Svg>
-      </View>
+      <PanScoop station={station} fill="#DCF2FC" />
     </Frame>
   );
 }
@@ -1275,9 +1287,9 @@ function SyrupPump({ station, build, carry }: EquipProps) {
   const handlers = useCarryGesture(station, carry, press);
   const pumps = build.sugarPumps;
 
-  const bottleY = H * 0.3;
-  const bottleH = H * 0.68;
-  const syrup = bottleH * 0.8;
+  const bottleY = H * 0.26;
+  const bottleH = H * 0.6;
+  const syrup = bottleH * 0.78;
 
   return (
     <Frame
@@ -1288,26 +1300,44 @@ function SyrupPump({ station, build, carry }: EquipProps) {
       handlers={handlers}
     >
       <Svg width={W} height={H}>
-        {/* bottle */}
-        <Rect x={W * 0.12} y={bottleY} width={W * 0.76} height={bottleH} rx={W * 0.16} fill="#FFF8EA" stroke="#E4D2AE" strokeWidth={1.4} />
-        <Rect x={W * 0.16} y={bottleY + bottleH - syrup} width={W * 0.68} height={syrup - 2} rx={W * 0.12} fill="#EFAE2B" />
-        <Rect x={W * 0.22} y={bottleY + 5} width={W * 0.1} height={bottleH * 0.62} rx={W * 0.05} fill="#FFFFFF" opacity={0.45} />
-        <Rect x={W * 0.18} y={bottleY + bottleH * 0.5} width={W * 0.64} height={bottleH * 0.2} rx={2} fill="#FFFDF6" opacity={0.9} />
-        {/* collar + pump head */}
-        <Rect x={W * 0.3} y={H * 0.2} width={W * 0.4} height={H * 0.12} rx={2} fill="#D9C49A" />
+        {/* a little wooden coaster, like everything else on this counter */}
+        <Rect x={0} y={H * 0.84} width={W} height={H * 0.14} rx={4} fill={SHOP.wood} />
+        <Rect x={0} y={H * 0.84} width={W} height={H * 0.04} rx={3} fill={SHOP.woodTop} />
+
+        {/* glass syrup bottle */}
+        <Rect
+          x={W * 0.08}
+          y={bottleY}
+          width={W * 0.84}
+          height={bottleH}
+          rx={W * 0.18}
+          fill="#FFF8EA"
+          stroke="#E4D2AE"
+          strokeWidth={1.4}
+        />
+        <Rect x={W * 0.13} y={bottleY + bottleH - syrup} width={W * 0.74} height={syrup - 2} rx={W * 0.14} fill="#EFAE2B" />
+        <Rect x={W * 0.2} y={bottleY + 5} width={W * 0.1} height={bottleH * 0.55} rx={W * 0.05} fill="#FFFFFF" opacity={0.45} />
+        <Rect x={W * 0.14} y={bottleY + bottleH * 0.46} width={W * 0.72} height={bottleH * 0.22} rx={2} fill="#FFFDF6" opacity={0.92} />
+        <Path d={heartPath(W * 0.5, bottleY + bottleH * 0.57, W * 0.1)} fill="#F6C56B" />
+
+        {/* wooden collar and a pink pump head */}
+        <Rect x={W * 0.26} y={H * 0.17} width={W * 0.48} height={H * 0.1} rx={3} fill={SHOP.woodEdge} />
+        <Rect x={W * 0.42} y={H * 0.07} width={W * 0.16} height={H * 0.11} rx={2} fill="#C8D0D4" />
+        <Rect x={W * 0.3} y={H * 0.03} width={W * 0.42} height={H * 0.06} rx={3} fill={SHOP.pinkGrip} />
+
         {/* dose pips */}
         {[0, 1, 2].map((i) => (
-          <Circle key={i} cx={W * 0.28 + i * W * 0.22} cy={bottleY + bottleH * 0.86} r={W * 0.07} fill={i < pumps ? '#C98A1E' : '#FFF3D9'} />
+          <Circle
+            key={i}
+            cx={W * 0.26 + i * W * 0.24}
+            cy={H * 0.91}
+            r={W * 0.07}
+            fill={i < pumps ? '#C98A1E' : '#FFF3D9'}
+            stroke={SHOP.woodEdge}
+            strokeWidth={0.8}
+          />
         ))}
       </Svg>
-
-      <View style={[styles.tool, { left: W * 0.12, top: H * 0.06 }]}>
-        <Svg width={W * 0.9} height={H * 0.16} viewBox="0 0 30 10">
-          <Rect x={2} y={3} width={18} height={5} rx={2.5} fill="#C98A3A" />
-          <Rect x={18} y={4} width={11} height={3} rx={1.5} fill="#C98A3A" />
-          <Rect x={8} y={0} width={7} height={4} rx={2} fill="#A9712B" />
-        </Svg>
-      </View>
     </Frame>
   );
 }
@@ -1336,8 +1366,14 @@ function FoamTub({ station, cup, carry }: EquipProps) {
     >
       <Svg width={W} height={H}>
         {/* stainless tub */}
-        <Path d={`M${W * 0.12} ${tubY} h${W * 0.76} l${-W * 0.07} ${tubH} h${-W * 0.62} Z`} fill="#F2EFEA" stroke="#D8D1C6" strokeWidth={1.4} />
-        <Rect x={W * 0.08} y={tubY - H * 0.03} width={W * 0.84} height={H * 0.05} rx={2} fill="#E6E1D8" />
+        <Path
+          d={`M${W * 0.12} ${tubY} h${W * 0.76} l${-W * 0.07} ${tubH} h${-W * 0.62} Z`}
+          fill="#E3E9ED"
+          stroke={SHOP.steelEdge}
+          strokeWidth={1.4}
+        />
+        <Rect x={W * 0.06} y={tubY - H * 0.04} width={W * 0.88} height={H * 0.06} rx={3} fill="#D5DDE3" />
+        <Rect x={W * 0.06} y={tubY - H * 0.04} width={W * 0.88} height={H * 0.02} rx={2} fill={SHOP.steelTop} />
         {/* whipped dome, swirled */}
         <Path
           d={`M${W * 0.14} ${tubY} q${W * 0.16} ${-H * 0.16} ${W * 0.36} ${-H * 0.02} q${W * 0.14} ${-H * 0.1} ${W * 0.36} ${H * 0.02} Z`}
@@ -1347,14 +1383,16 @@ function FoamTub({ station, cup, carry }: EquipProps) {
         />
         <Path d={`M${W * 0.28} ${tubY - H * 0.045} q${W * 0.1} ${-H * 0.03} ${W * 0.2} 0`} stroke="#FFFFFF" strokeWidth={1.4} fill="none" opacity={0.7} />
         {/* label band */}
-        <Rect x={W * 0.2} y={tubY + tubH * 0.4} width={W * 0.56} height={tubH * 0.22} rx={2} fill="#FFFFFF" opacity={0.85} />
+        <Rect x={W * 0.2} y={tubY + tubH * 0.38} width={W * 0.56} height={tubH * 0.24} rx={2} fill="#FFFFFF" opacity={0.85} />
+        <Path d={heartPath(W * 0.48, tubY + tubH * 0.5, W * 0.07)} fill={SHOP.pink} />
       </Svg>
 
-      <View style={[styles.tool, { left: W * 0.08, top: -H * 0.06 }]}>
-        <Svg width={W * 0.44} height={H * 0.46} viewBox="0 0 24 26">
-          <Rect x={10.5} y={0} width={2.6} height={15} rx={1.3} fill="#8F9794" />
-          <Ellipse cx={11.8} cy={19} rx={6.5} ry={4.5} fill="#E9E4DA" stroke="#CFC7B8" strokeWidth={1} />
-          <Ellipse cx={11.8} cy={18} rx={5} ry={3} fill={color} />
+      <View style={[styles.tool, { left: W * 0.04, top: -H * 0.12 }]}>
+        <Svg width={W * 0.44} height={H * 0.56} viewBox="0 0 24 30">
+          <Rect x={10.2} y={0} width={4.4} height={17} rx={2.2} fill={SHOP.pinkGrip} />
+          <Rect x={11.2} y={2} width={1.2} height={11} rx={0.6} fill="#FFFFFF" opacity={0.4} />
+          <Ellipse cx={12} cy={23} rx={6.8} ry={5} fill="#E3E9ED" stroke={SHOP.steelEdge} strokeWidth={1} />
+          <Ellipse cx={12} cy={21.6} rx={5.2} ry={3.2} fill={color} />
         </Svg>
       </View>
     </Frame>
@@ -1380,15 +1418,24 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,111,156,0.1)',
   },
   label: {
+    marginTop: 1,
     fontSize: 9.5,
-    lineHeight: 12,
+    lineHeight: 13,
     fontFamily: fonts.semi,
-    color: colors.ink,
+    color: '#6B4422',
     maxWidth: '100%',
+    backgroundColor: SHOP.plaque,
+    borderWidth: 1.5,
+    borderColor: SHOP.woodEdge,
+    borderRadius: 4,
+    paddingHorizontal: 5,
+    overflow: 'hidden',
   },
   labelActive: {
-    color: colors.primaryDark,
+    color: '#A33A62',
     fontFamily: fonts.bold,
+    backgroundColor: '#FFE3EC',
+    borderColor: colors.primary,
   },
   lever: {
     position: 'absolute',
@@ -1410,7 +1457,8 @@ const styles = StyleSheet.create({
     position: 'absolute',
     left: 0,
     right: 0,
-    backgroundColor: '#FFFDF9',
+    // Clear plastic: enough body to read over the shelves, not so much that it looks painted.
+    backgroundColor: 'rgba(252,254,254,0.72)',
   },
   cupShadow: {
     position: 'absolute',
