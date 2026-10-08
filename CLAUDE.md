@@ -205,10 +205,14 @@ Dropping the cup still standing on the work top sends it home.
   so the glass is left clear.
 - **The toppings are a piece of furniture, not a row.** They used to be loose pans along the ledge,
   a row that ran off the room and was swiped back; they stand in a painted stand now
-  (`TOPPING_STAND`, cut by `tools/cut-topping-stand.ps1`), centred in the tiled alcove the room
-  already paints a recess for, filling it from the ledge up to the shelf above — the stand's own
-  sign is the one part of it allowed past that, because a sign hangs where it can be read. It
-  carries its own `Topping` across it, so unlike the tea shelf nothing is drawn over it.
+  (`TOPPING_STAND`, cut by `tools/cut-topping-stand.ps1`), on the right of the work top under the
+  fridge, where the design puts it — the only surface on that side deep enough to take it, since
+  the ledge the fridge stands on is a hand's width of board. Its **right** edge is held off the
+  screen's edge rather than the room's, because the room is cropped at the sides on most phones
+  and anchoring it to the painting would lose its last column; its left edge is held off the cup,
+  and what is left between the two is all it gets, which is why the pans in it are smaller than
+  anything else in the room. It carries its own `Topping` across it, so unlike the tea shelf
+  nothing is drawn over it.
   `standToppings` sets the day's pans into a grid of its deck (`STAND.rows`, fractions of the
   sprite): two bands, the front one wider and lower because the deck is painted going away from
   you. The deck is shallower than two pans are tall, so the front band overlaps the back one by
@@ -231,13 +235,16 @@ Dropping the cup still standing on the work top sends it home.
 **Every box is the same size however many there are, and a row scrolls instead of shrinking.**
 Each is as big as its own art goes under the surface above it (`MAX_WIDTH`, and the row's height
 by its own art, so a bottle stays a bottle); a day that brings more of them is a longer row, not
-a row of thumbnails. The dispensers **divide their shelf between them** — a jar takes an equal
-share of the board, so however many the day has they stand evenly along it and a full shelf fills
-it exactly, rather than bunching at one end with the rest of the board bare. `TEA_GAP` is the least
-board between two of them and `TEA_SPREAD` the most, so three teas stand in the middle of the shelf
-instead of strung along it a jar's width apart. What they divide is the part of the shelf **that is
-on screen**: a phone taller than the painting crops it at the sides, and the end of the shelf can go
-with it. They stand under a little wooden `ShelfSign` reading "Trà" on the board above them, and
+a row of thumbnails. The dispensers **divide their shelf into `TEA_SHELF` equal places and fill
+them from the left** — the spacing is set by a full shelf, not by the day, so a jar is the same
+size and in the same place on day one as on day seven, the row simply grows along the board as the
+week goes on, and the places the week has not reached yet are bare board at the right-hand end.
+`TEA_GAP` is the board left between two of them when the shelf is full. What they divide is the
+part of the shelf **that is on screen**: a phone taller than the painting crops it at the sides,
+and the end of the shelf can go with it, so on most phones the first jar stands against the left
+edge of the screen rather than the painted end of the board. They stand under a little wooden
+`ShelfSign` reading "Trà", which is centred over the jars that are there rather than over the
+board, so it follows the row along; and
 they carry no name plaques — the colour of the tea is what tells them apart. The shelf is the one
 row that cannot be swiped, so it is also the only one held to its own run: a seventh tea would
 shrink all seven rather than stand out over the fridge. The rows below start at

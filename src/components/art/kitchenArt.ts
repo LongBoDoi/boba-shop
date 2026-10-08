@@ -170,12 +170,8 @@ export const ROOM = {
    * on.
    */
   shelf: { x0: 48, x1: 586, board: 309, top: 376, base: 512 },
-  /**
-   * The tiled recess under it, and the ledge in front of the fridge at the same height. `x0` and
-   * `x1` are the recess's own walls, which the topping stand is centred between; `top` is the
-   * underside of the shelf's board, which the stand's sign is the one thing allowed past.
-   */
-  alcove: { x0: 125, x1: 595, top: 566, base: 744 },
+  /** The tiled recess under it, and the ledge in front of the fridge at the same height. */
+  alcove: { top: 566, base: 744 },
   ledge: { x0: 617, top: 560, base: 740 },
   /** The work top through the middle: where a cup stands on it, and the edge it turns down at. */
   table: { top: 820, stand: 900, base: 918 },

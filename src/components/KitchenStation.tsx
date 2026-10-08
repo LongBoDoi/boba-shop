@@ -141,18 +141,20 @@ const PAN_WIDEN = 1.16;
 /** The least board between two jars, on the day the shelf is full and has none to spare. */
 const TEA_GAP = 2;
 /**
- * The most, as a share of a jar's width. The jars take an equal share of the board each, so a
- * full shelf fills it exactly and a short day's does not — and on a day with only three teas, a
- * share of the board apiece would leave them strung along it a jar's width apart. Past this they
- * stop spreading and the row stands in the middle of the shelf instead.
+ * How many dispensers the shelf is cut to hold, which is what sets the spacing rather than how
+ * many the day happens to have. The board is divided into this many equal places and the day's
+ * teas fill them **from the left**, so the row grows along the shelf as the week goes on and a
+ * full shelf fills it exactly. A jar is therefore the same size and in the same place on day one
+ * as on day seven, and the places the day has not reached yet are bare board at the right-hand
+ * end. Lower it to the number of teas there actually are and the row always fills the shelf.
  */
-const TEA_SPREAD = 0.3;
+const TEA_SHELF = 7;
 
 /** The pans are drawn wider than they are tall; everything else keeps its own art's shape. */
 const widened = (kind: StationKind) => kind === 'topping' || kind === 'ice';
 
-/** How wide the topping stand may get, as a fraction of the room's width — a backstop for a
- *  screen so short and wide that the alcove would otherwise hand it most of the room. */
+/** How wide the topping stand may get, as a fraction of the screen — a backstop for a screen so
+ *  wide that the gap between the cup and its right edge would otherwise hand it half the room. */
 const STAND_WIDTH = 0.52;
 
 /** How wide a piece of equipment may get, as a fraction of the room's width. */
@@ -232,7 +234,7 @@ export function layoutKitchen(config: DayConfig, W: number, H: number): KitchenL
   rows.forEach((items, r) => {
     const kind = items[0].kind;
     if (kind === 'topping') {
-      toppingStand = standToppings(items, r, W, px, py, cupH, stations);
+      toppingStand = standToppings(items, r, W, py, cupW, cupH, stations);
       strips.push({ scroll: false, span: toppingStand.w });
       return;
     }
@@ -257,13 +259,12 @@ export function layoutKitchen(config: DayConfig, W: number, H: number): KitchenL
 
     // Every box is as big as its own art goes in the space above the surface — never shrunk so
     // that the day's whole range fits across at once, which is what used to turn a late day's
-    // dispensers into thumbnails. A jar is the same size on day one and on day seven, and the
-    // counters below, which do overflow, run off the right of the room and are swiped back
-    // instead. The shelf cannot be swiped, so it is the one row held to its own run: the game's
-    // six teas fit across it at full size, and a seventh would shrink all six rather than stand
-    // out over the fridge.
+    // dispensers into thumbnails. The counters below, which do overflow, run off the right of the
+    // room and are swiped back instead. The shelf cannot be swiped, so it is the one row held to
+    // its own run — and to a full shelf's worth of it rather than the day's, so that a jar does
+    // not change size as the week brings more of them.
     const w = tea
-      ? Math.min(W * MAX_WIDTH[kind], headroom * ASPECT[kind], run / items.length - TEA_GAP)
+      ? Math.min(W * MAX_WIDTH[kind], headroom * ASPECT[kind], run / TEA_SHELF - TEA_GAP)
       : Math.min(W * MAX_WIDTH[kind], headroom * ASPECT[kind]);
     const h = Math.round(w / ASPECT[kind]);
 
@@ -272,21 +273,21 @@ export function layoutKitchen(config: DayConfig, W: number, H: number): KitchenL
     const widths = items.map((item) =>
       Math.round(h * ASPECT[tea ? 'tea' : item.kind] * (widened(item.kind) ? PAN_WIDEN : 1)),
     );
-    // The jars divide the board between them, so however many the day has they stand evenly
-    // along it rather than shoulder to shoulder at one end of it with the rest of the shelf bare.
-    // Pans sit shoulder to shoulder, since their row runs off the room and is swiped; a bottle or
-    // a carton takes a column of its own, wide enough to put its name under.
+    // The board is cut into `TEA_SHELF` equal places and the day's jars take them in turn, so the
+    // gap between any two of them is the same on every day of the week and a full shelf fills the
+    // board exactly. Pans sit shoulder to shoulder, since their row runs off the room and is
+    // swiped; a bottle or a carton takes a column of its own, wide enough to put its name under.
     const slots = items.map((item, i) =>
       tea
-        ? Math.min(run / items.length, widths[i] * (1 + TEA_SPREAD))
+        ? run / Math.max(TEA_SHELF, items.length)
         : widened(item.kind)
           ? widths[i]
           : Math.max(widths[i], Math.round(W * 0.2)),
     );
     const span = slots.reduce((sum, slot) => sum + slot, 0);
-    // The counters start hard against the left of what they stand on and run off the right if they
-    // have to. The shelf cannot be swiped, so what its row does not use is split either side of it.
-    let x = tea ? left + (run - span) / 2 : left;
+    // Everything starts hard against the left of what it stands on: the counters then run off the
+    // right if they have to, and the shelf leaves the places the day has not reached yet bare.
+    let x = left;
 
     items.forEach((item, i) => {
       const slot = Math.round(slots[i]);
@@ -322,8 +323,9 @@ export function layoutKitchen(config: DayConfig, W: number, H: number): KitchenL
       // cup put down on one is plainly meant for the shelf.
       teaBay = { x0: left, x1: left + run, top: base - h, base };
       teaSign = {
-        // The row is centred on the board, so the middle of one is the middle of the other.
-        cx: left + Math.round(run / 2),
+        // Over the jars that are there rather than over the middle of the board, since the row
+        // fills the board from the left and only reaches the far end on a full shelf.
+        cx: left + Math.round(span / 2),
         top: Math.round(py(ROOM.shelf.board)) - 2,
         height: Math.max(15, Math.round(py(ROOM.shelf.top) - py(ROOM.shelf.board))),
       };
@@ -349,10 +351,10 @@ export function layoutKitchen(config: DayConfig, W: number, H: number): KitchenL
 
 
 /**
- * Set the day's toppings into the painted stand in the alcove, and say where the stand itself
- * goes. The toppings used to be a row of loose pans along the ledge that ran off the room and was
- * swiped back; they are one piece of furniture now, standing where the room already paints a
- * recess for it, with its pans in a grid of its deck.
+ * Set the day's toppings into the painted stand, and say where the stand itself goes. The
+ * toppings used to be a row of loose pans along the ledge that ran off the room and was swiped
+ * back; they are one piece of furniture now, standing on the right of the work top under the
+ * fridge, with its pans in a grid of its deck.
  *
  * Nothing about the grid depends on the day: a pan is the same size with two of them as with six,
  * the way a dispenser is the same size on day one as on day seven. What a short day changes is how
@@ -366,18 +368,27 @@ function standToppings(
   items: { id: string; kind: StationKind }[],
   row: number,
   W: number,
-  px: (x: number) => number,
   py: (y: number) => number,
+  cupW: number,
   cupH: number,
   stations: Station[],
 ): ToppingStand {
-  const base = Math.round(py(ROOM.alcove.base));
-  // The stand fills the recess, and its sign is the one part of it that may stand past the top of
-  // that recess into the face of the shelf's board — a sign hangs where it can be read.
-  const h = Math.round(Math.min(base - py(ROOM.shelf.base), (W * STAND_WIDTH) / ART.stand));
-  const w = Math.round(h * ART.stand);
-  const left = Math.round(px((ROOM.alcove.x0 + ROOM.alcove.x1) / 2) - w / 2);
-  const stand: ToppingStand = { x: left, y: base - h, w, h };
+  // On the right of the work top, under the fridge, where the design puts it. It is the only
+  // surface on that side deep enough to take it: the ledge the fridge stands on is a hand's width
+  // of board, and the alcove the toppings used to spread along is over on the left.
+  const base = Math.round(py(ROOM.table.stand));
+  // Its right edge is held off the *screen's* edge rather than the room's, because a phone taller
+  // than the painting crops the room at the sides and the room's own right-hand end is well off
+  // it — anchored to the painting the stand would lose its last column on most phones.
+  const right = W - Math.round(W * 0.015);
+  // And its left edge off the cup, which stands on its coaster through the middle of that top.
+  // What is left between the two is all the stand gets; it is the narrowest the room has to offer
+  // and the reason the pans here are smaller than they were in the alcove.
+  const clear = Math.round(W / 2 + cupW * 0.58);
+  const w = Math.round(Math.min(right - clear, W * STAND_WIDTH));
+  const h = Math.round(w / ART.stand);
+  const stand: ToppingStand = { x: right - w, y: base - h, w, h };
+  const left = stand.x;
 
   const back = items.length > STAND.across ? Math.floor(items.length / 2) : 0;
   const bands = back > 0 ? [items.slice(0, back), items.slice(back)] : [items];
