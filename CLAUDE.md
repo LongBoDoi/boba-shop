@@ -62,9 +62,10 @@ Two things hold this together, and both are easy to break by accident:
   (`appVersion`, `fingerprint`) is invisible to it. **Upgrading the SDK means editing that string**
   — otherwise every phone quietly stops seeing new updates.
 - **Everything has to run inside Expo Go**, with only the native modules Expo Go already ships.
-  That was always the rule here; it is now the shipping path as well. In particular there is no
-  `expo-updates` in the project: Expo Go fetches the newest published update itself every time the
-  project is opened, which is all the auto-update this needs.
+  That was always the rule here; it is now the shipping path as well. `expo-updates` sits in
+  `package.json` only because `eas update` reinstalls it when publishing — nothing imports it, and
+  inside Expo Go it would be inert. Expo Go fetches the newest published update itself every time
+  the project is opened, which is all the auto-update this needs.
 
 One piece of upkeep is not in the repo: since 12 May 2026 Expo Go only loads a project owned by you
 or by an organisation you belong to. The project belongs to the personal account `manhlong`, so
