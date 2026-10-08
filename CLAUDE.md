@@ -57,11 +57,11 @@ src/screens/            TitleScreen, DayEndScreen, and the in-play screens:
   CounterPage.tsx       page 1 — the customer stage (take orders here)
   PrepPage.tsx          page 2 — the KitchenStation (the room you work in) edge to edge, plus
                         serve/clear. The orders hang inside the room, not above it.
-src/components/         Cup (layered, animated), CustomerStage, TicketRail, OrderTicket, KitchenStation,
+src/components/         Cup (layered, animated), CustomerStage, OrderBubble, KitchenStation,
                         Hud, Effects (coins/confetti/toss), OpeningSign…
 src/components/art/     SVG illustrations: Character, IngredientIcon, ShopBackdrop (customer wall),
-                        KitchenRoom (prep room: tiled wall, pendant lamps, shelves, cabinets;
-                        exports the SHOP palette + heartPath used by the equipment art),
+                        KitchenRoom (the prep room: one painted plate, plus the transform
+                        everything in the room is placed through; exports the SHOP palette),
                         kitchenArt.ts (the painted kitchen sprites + their geometry),
                         Counter, CounterTop, Tiles, ToppingShelf
 src/assets/kitchen/     the painted sprites themselves — generated, see "The kitchen's artwork"
@@ -88,23 +88,66 @@ palette it exports.
 **The drink is made by hand, not picked from a list.** `KitchenStation`
 (`src/components/KitchenStation.tsx`) is a room, not a menu, and **the cup is a physical object you drag
 around it** (`PanResponder`; the pager is frozen via `onDragging` while you hold it).
-`layoutKitchen(config, w, h)` places everything absolutely, top to bottom: a wooden shelf of glass tea
-dispensers, then the **work top** with the cup's coaster through the middle, then the stainless topping
-bar and the ice/sugar/milk/foam counter, then the pink cabinet doors (the hint pill sits on them). Each
-dispenser gets a **dock**: the spot the cup is held while that tap runs into it, just under its shelf.
-Dropping the cup still standing on the work top sends it home; lifting it up to a dispenser docks it
-there (`findStation` only considers teas), and only the docked one pours.
+`layoutKitchen(config, w, h)` places everything absolutely, **on the surfaces the painting already
+has** (`LEVELS`): the tea dispensers in the open shelf across the top, the toppings on the ledge in
+front of the fridge, the ice/sugar/milk/foam on the bench nearer the viewer, and the cup on its
+coaster through the middle of the work top. Each dispenser gets a **dock**: the spot the cup is held
+while that tap runs into it, just under its shelf.
+Dropping the cup still standing on the work top sends it home.
 
-- **Tea dispensers — carry the cup to them.** Drag the cup up under the spout to dock it,
-  then press *and hold* (`useHoldPour`): how long you hold is how much goes in (`POUR_RATE` per second).
-  The level rises live because the station owns the cup's liquid level as a shared value and the cup shows
-  the tea's colour while pouring, before `POUR` is even dispatched. The `Stream` is drawn across the
-  kitchen rather than inside the dispenser, and it ends at the drink's surface, so it visibly shortens
-  as the cup fills. It is drawn in **two halves split at the cup's lip** — `side="back"` before the cup
-  and `side="front"` after it — because neither alone is right: all in front and it runs down the
-  *outside* of the glass over the cat, all behind and tea still falling through open air is dimmed by
-  a cup it has not reached. Letting go commits `POUR { category, optionId, amount }` and sets the cup back on its mat
-  (so a docked cup never ends up hiding a shelf).
+- **The tea shelf is one station, and it opens.** The whole shelf is a single target (`teaBay`):
+  lift the cup anywhere onto it — it no longer has to be lined up under a particular jar — and
+  `TeaWindow` comes up over the room to pour in, on the tap nearest where the cup was let go
+  (`findStation` picks it). Touching a jar where it stands opens the same window on that tea. The
+  cup is still sent to that dispenser's dock underneath, so letting the window go leaves it standing
+  where it was carried; closing it (either button, or the dimmed room behind) stands it back down on
+  its mat. The window keeps clear of the order card the page floats over the room — `PrepPage`
+  measures the card and passes `topInset`, because the card grows with the recipe.
+  Like the room behind it the window **is one painting** (`TEA_BG`, cut by `lift_window` in
+  `cut-sheets.py`, which lifts it off the black it is painted on so its rounded corners and the
+  vines past them read against the room): the frame, the board the name is written across, three
+  shelves and the work top are all in the plate, and everything else is placed on the lines
+  `TEA_ROOM` measures off it, the same way `ROOM` works: the dispensers stand on its **second**
+  shelf, the cup in the middle of its work top (taller than the gap above that top, because it
+  stands in *front* of the shelves and is drawn after them), and the card on the right carries the
+  measure.
+- **Tea is poured in that window, and only there.** The shelf is a **carousel** the width of the
+  board: the day's teas stand in a row a `JAR_GAP` apart, each with its name on a plaque hung off
+  the front edge of the board, and the row runs the whole way across and moves with the finger,
+  stopping at its ends — it does not wrap round. **Only the jar over the cup pours**; the others
+  are brought across first, by swiping the shelf or by touching one, and nothing marks the live
+  one but where it is standing. A jar on its way off the end goes soft rather than being cut off
+  by the edge: `HAZE` fades it out and crossfades a blurred copy of the same sprite over the sharp
+  one, because `blurRadius` cannot be animated but one image lying over another can, and the fade
+  is read off the swipe so it follows the finger. The run holds as many **whole** jars as the
+  window will take either side of the cup — a run that ends mid-jar cuts the outermost one in half
+  — and it is measured **symmetrically about the cup**, not off the board's own middle, since the
+  two are a good 50 plate pixels apart and a lopsided run fades one side sooner than the other.
+  A jar is `JAR_FIT` times the headroom its shelf has — **over** 1, so it stands proud of the
+  board above rather than tucked under it; the plate's second shelf gives only 233 of its 1286
+  pixels, which makes for a very small dispenser.
+  Press *and hold* the middle tap (`useHoldPour`, in `pour.tsx` with `Stream` and `Spill`): how
+  long you hold is how much goes in (`POUR_RATE` per second). The level
+  rises live because `KitchenStation` owns the cup's liquid level as a shared value and hands it to
+  the window, and the cup shows the tea's colour while pouring, before `POUR` is even dispatched.
+  The `Stream` is drawn across the window rather than inside the dispenser, and it ends at the
+  drink's surface, so it visibly shortens as the cup fills. It is drawn in **two halves split at
+  the cup's lip** — `side="back"` before the cup and `side="front"` after it — because neither
+  alone is right: all in front and it runs down the *outside* of the glass over the cat, all behind
+  and tea still falling through open air is dimmed by a cup it has not reached. Letting go commits
+  `POUR { category, optionId, amount }`.
+  Things standing on a board have their feet at the *front* of its painted top face
+  (`TEA_ROOM.shelves[].stand`), not at the back edge against the wall, which reads as floating.
+  **Hold and swipe are one gesture**, decided from the first few pixels the way the counters'
+  lift-or-swipe is: sideways is a swipe, and the pour that had already started is thrown away
+  rather than committed. A tap that cannot pour — one off to the side, or a cup that already holds
+  another tea — says so (or slides over) on the way *up*, so that a touch which turns into a swipe
+  says nothing at all.
+- **How full the cup is, is read off the card on the right** (`Measure`), not off the glass: a tube
+  that fills with the tea's colour, with the red line across it that the order has to reach
+  (`MIN_FILL`). The tea stands *inside* the tube, so full is the tube less its wall at both ends.
+  A dashed ring printed round a cup this small was never easy to read against the drink behind it,
+  so the glass is left clear.
 - **Everything else — carry it to the cup.** The topping pans, the ice pan, the syrup bottle, the milk
   cartons and the foam tubs are dragged: `useCarry` keeps what's in hand, draws the tool following the
   finger above everything else, and on release either tips it into the cup (`SCOOP` / `ICE_SCOOP` /
@@ -112,11 +155,15 @@ there (`findStation` only considers teas), and only the docked one pours.
   drop onto it wherever it stands. Ice and syrup show how many scoops or pumps went in on the machine
   itself. Milk takes room in the cup, so a cup filled to the brim with tea has nowhere to put it.
 
-**The counters keep every box the same size and scroll instead of shrinking.** The dispensers
-share their shelf out between them, because the cup is carried to a particular tap and they all
-have to stay reachable; the topping bar and the equipment bar below do the opposite. Each box is
-sized once (`MAX_WIDTH`, and the row's height by its own art, so a bottle stays a bottle), the
-row starts at the left and runs off the right — the way it is read and the way it is swiped —
+**Every box is the same size however many there are, and a row scrolls instead of shrinking.**
+Each is as big as its own art goes under the surface above it (`MAX_WIDTH`, and the row's height
+by its own art, so a bottle stays a bottle); a day that brings more of them is a longer row, not
+a row of thumbnails. The dispensers stand shoulder to shoulder (`TEA_GAP`) at the left of their
+shelf, under a little wooden `ShelfSign` reading "Trà" on the board above them, and they carry no
+name plaques — six of them fill the shelf and the colour of the tea is what tells them apart. The
+shelf is the one row that cannot be swiped, so it is also the only one held to its own run: a
+seventh tea would shrink all seven rather than stand out over the fridge. The rows below start at
+the left and run off the right — the way it is read and the way it is swiped —
 and when a day brings more than the room is wide it becomes a `SwipeRow` you drag sideways. That swipe and the lift are **one gesture**, decided from
 the first few pixels: sideways swipes the row, anything else lifts the tool. The tool is picked up
 on touch either way — that is what lets a tap on a bin say what to do with it — and a swipe simply
@@ -128,9 +175,10 @@ the finger drifts or the browser decides it was a long-press, which cut pours sh
 only when the finger actually lifts, and the pager is frozen (`onDragging`) for the duration. Equipment
 shows no "added ✓" badges — the order slip is the checklist; machines only dim when they're locked out.
 
-`Cup` draws the "đủ" line (`MIN_FILL`) and the clean-pour band (`GOOD_FILL`) on the glass, and the station
-drips tea down the side when the live level goes over the brim. The order slip (`OrderTicket`) is a compact
-strip above the room, so the whole scene is workspace.
+`Cup` — the little one on the counter page — draws the "đủ" line (`MIN_FILL`) and the clean-pour
+band (`GOOD_FILL`) on the glass. `KitchenCup`, the one you pour into, does not: that is the
+window's `Measure`, and the station drips tea down the side (`Spill`) when the live level goes over
+the brim.
 
 ### Liquids are cut, never drawn
 **No tea or drink is rendered in code.** Both are sprites cut off the design — the dispensers from
@@ -198,20 +246,10 @@ to a tenth and then stands still for the ~180ms it takes to actually pour that m
 the hand as the tap stalling before it gets going. Everything that follows the surface goes through
 it, the pour stream in `KitchenStation` included, or the stream ends where the drink isn't.
 
-The **"đủ" line** is the one guide printed on the glass, and it is a dashed **ring**, not a bar —
-`CUP_ROUND` gives it the same perspective as the surface, so pour to it and the drink's own surface
-ellipse lands straight on it. It is drawn as two arcs meeting at the ring's widest points, where the
-glass turns away: the near half is on this side of everything and stays sharp, and the far half is
-read **through** whatever is in the cup. Empty glass is clear, so it starts sharp too and only goes
-soft — `FeGaussianBlur`, with its filter region set by hand, because the default crops a line this
-thin off square at both ends — once the tea is over the line. That crossfade is two `FarGuide`
-layers under animated view styles rather than one element under `useAnimatedProps`, for the reason
-below.
-
-Both are plain `<Image>`s moved by `useAnimatedStyle`. An earlier attempt slid one taller sprite
-inside an SVG clip by animating the image's `y` through `useAnimatedProps`, which looked right in
-every mock-up and did not hold up in the app — the drink sat at the top of its own box and stopped
-short of the base. Keep the drink on view styles.
+`KitchenCup` prints **no guide on the glass**. It used to carry the "đủ" line as a dashed ring in
+the surface's own perspective, with its far half blurred by however much tea stood in front of it;
+the station window's `Measure` says the same thing in a place that can be read at a glance, so the
+ring came off. The fill is still `MIN_FILL`, and `Cup` on the counter page still draws its own.
 
 ### The kitchen's artwork
 Nearly everything in the prep room is a **painted sprite**. `tools/cut-sheets.py` cuts
@@ -249,50 +287,55 @@ keeps the painted ticks, highlights and the cat decal on top of it:
   that [KitchenRoom](src/components/art/KitchenRoom.tsx) and the station place by the layout's
   lines. Three pans and two pieces had no art of their own and are repainted from the ones that do,
   by `repaint()`, which keeps the shading and leaves the red scoop alone;
-- the **topping counter** is the pack's own stainless counter (`counter-steel.png`), sliced
-  across and stretched over the room by `SteelBar` in KitchenRoom: `bar-splash.png` is the
-  raised back standing behind the pans, `bar-deck.png` the deck they are sunk into, and
-  `bar-front.png` the edge it turns down at — beyond the **apron**, the strip of deck a counter
-  keeps in front of its pans, which is where their name plaques hang (`APRON`, a fraction of a
-  pan, and counted into what a steel row takes up so the row below still lands where it should). The sprite's
-  *ends* are drawn in perspective and this counter runs off both sides of the room, so what is
-  stretched is a column out of its middle. Rebuilding the counter out of the mockup instead was
-  a long detour and never read right: the mockup's pans run edge to edge, so almost none of its
-  counter is ever on show, and the two tones it does show — a near-white front edge, a dark band
-  behind the rims — become stripes painted across a slab once there is bare counter between the
-  pans. The shadow each pan sits in is drawn **with the pan** (`Frame`) for the same reason.
-  Every line of the counter is measured off the pan's own rim (`shelf.rim`, lower than
-  `shelf.top`: a pan sprite starts at the scoop standing in it, `PAN_BODY` down), and the
-  stainless reaches only just far enough above the rims to stand those scoops in — the design's
-  counter is nearly all pan. `layoutKitchen` sets each bar's `from`, the work top comes down to
-  meet it, and each bar's `until` is the next bar's `from`, so no wall shows between them;
-- the run along the **floor** is a **single unit at each end with a double between them**
-  (`FLOOR` in KitchenRoom), and what is used of each is its **front alone** — the steel top a
-  unit ships with would stand under the counter's front as a second ledge. Each is as wide as
-  its own art and `cabinetH` is exactly as deep as that run wants to be: a cabinet is a unit,
-  not a backdrop, and stretched either way it is a cabinet pulled out of shape, which the
-  handles show first. Wanting them deeper is a reason to use *fewer* units across, not to
-  stretch the ones there are;
-- the things at the **right of the work top** — the straw tin, the plant behind it and the
-  chalkboard — are `table-props.png`, cut as one group out of `reference.png` itself by
-  `clear_room()`. The pack's straw tin is a different one (rainbow straws, a cat printed on it)
-  and the pack has no arrangement, so the group is taken from the design whole. The design runs
-  the chalkboard off the side of the screen, so the sprite does too and the room hangs it on the
-  right edge; its two contact shadows are placed by `PROP_FEET`.
+- **the room itself is one painted plate**, `room-bg.png` — the tiled wall and its lamps, the
+  dispenser shelf, the fridge, the work top, the bench and the pink units at its foot, all of
+  it painted rather than assembled. It used to be assembled: a wall tile set to repeat, a shelf
+  plank and a stainless counter each sliced into bands and stretched across the room, a run of
+  cabinet fronts, a group of props cut out of the mockup — every one of them a line to compute
+  and a seam to get wrong. Those sprites are still cut (a station may yet want the stainless),
+  but the room no longer draws any of them. Each piece of equipment now sits in a contact
+  shadow of its own (`Frame`), because there is no well in a counter to sink it into.
 
 **The prep page is all kitchen.** There is no ticket rail or order slip above it: the room fills
 everything between the tabs and the action buttons, which is what gives the equipment the size it has
-in the reference. The order lives on a note clipped to the shop's rail
-([OrderNote.tsx](src/components/OrderNote.tsx)) — the printed "Ly mới" slip when nothing is taken,
-otherwise the customer's name on the header with the drink listed underneath, ticking off as the cup
-comes together. The other taken orders are pegged up beside it as `TicketPin`s; tap one to switch.
-`layoutKitchen` sizes each row to what stands on it and gives most of the slack to the cup's band, so
-the room packs the way the reference does rather than leaving empty wall.
+in the reference.
 
-The layout follows `tools/sheets/reference.png`: lamps and tiled wall, the dispenser shelf (with
-the plant and the poster at its ends when there is room for them), the notes rail, the work top
-with the cup on its coaster, the stainless topping bar, then the pink cabinets. `layoutKitchen`
-reserves `sideRoom` at the ends of the dispenser shelf only while there are four teas or fewer.
+### The order, spoken back
+[OrderBubble.tsx](src/components/OrderBubble.tsx) is a **speech bubble floating over the top of the
+room** (it used to be a paper note clipped to a rail inside it): who the drink is for, what it is
+called, and a tile for every thing that goes in it, each ticking off as the cup comes together. The
+heart at the end is the customer's patience, emptying from the top and turning amber then red — the
+`ClipPath` over the heart path is how, because a `View` cannot be heart-shaped.
+
+Three things about it are deliberate:
+
+- it lists the drink in `SPOKEN` order — tea, milk, sugar, ice, toppings, foam — not `BUILD_ORDER`,
+  which runs bottom of the cup upwards. The card is read, not built;
+- the tiles stand together at one size and the row runs out from the left. Sharing the card's whole
+  width between them leaves a two-thing order as two tiles marooned at either end;
+- the card takes **no touches at all** (`pointerEvents="none"`), so on a short phone, where it laps
+  over the dispenser shelf, nothing it covers stops being draggable. Only the pegged orders under
+  its right corner — the other taken tickets, tap one to switch — are live.
+
+`drinkName` puts "sữa" where Vietnamese puts it, which is not the same place every time: "Trà Thái"
+becomes "Trà sữa Thái", "Hồng trà" becomes "Hồng trà sữa".
+
+### Standing things on a painting
+The plate is `tools/sheets/room-bg.png`, 940x1674, and `ROOM` in
+[kitchenArt.ts](src/components/art/kitchenArt.ts) is **where it draws its surfaces, in its own
+pixels**: the shelf's board, the ceiling over it and the face of the board above that (where its
+sign is mounted), the ledge, the line a cup stands on along the work top, the bench, the cabinets. Nothing in the room is a fraction of the phone any more —
+`fitRoom(w, h)` gives the `px`/`py` that take plate pixels to room pixels, and a dispenser is on
+the shelf the painting paints however the phone is shaped.
+
+`fitRoom` deliberately does **not** use `resizeMode="cover"`. Cover centres the image on itself,
+and a phone shorter than the painting then loses the work top off the bottom; this centres on
+the working band instead (`KEEP`, the shelf down to the bench) and lets the ceiling and the
+floor be what goes. Anything that must stay reachable in a short room has to clamp itself into
+view — the hint pill does, because the pink units it sits on can be cropped away.
+
+If the plate is re-cut, `ROOM` is what to re-measure: read a column of it for the horizontal
+lines and a row for the vertical ones.
 
 
 ## Conventions

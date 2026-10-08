@@ -6,18 +6,9 @@ import Animated, {
   useSharedValue,
   withTiming,
 } from 'react-native-reanimated';
-import Svg, {
-  ClipPath,
-  Defs,
-  Ellipse,
-  FeGaussianBlur,
-  Filter,
-  G,
-  Image as SvgImage,
-  Path,
-} from 'react-native-svg';
+import Svg, { ClipPath, Defs, Ellipse, G, Image as SvgImage, Path } from 'react-native-svg';
 
-import { Drink, getIngredient, ICE_LEVELS, MIN_FILL, Tea } from '../game/ingredients';
+import { Drink, getIngredient, ICE_LEVELS, Tea } from '../game/ingredients';
 import { DURATION, timing } from '../motion';
 import { shade } from './art/Character';
 import {
@@ -68,7 +59,7 @@ export const WELL_TOP = 48 / ART.h;
 export const CUP_LIP = 28 / ART.h;
 export const WELL_BOTTOM = 162 / ART.h;
 export const WELL_RUN = WELL_BOTTOM - WELL_TOP;
-/** The foot of the well and how deep it runs, for the pour guide drawn on the glass. */
+/** The foot of the well and how deep it runs, which the surface sits on the way up. */
 const WELL_Y = 162;
 const WELL_DEPTH = 114;
 /**
@@ -103,39 +94,6 @@ const WELL_TOP_L = 14;
 const WELL_TOP_W = 86;
 const WELL_KNEE_L = 22;
 const WELL_KNEE_W = 67;
-
-/**
- * How deep the cup's mouth looks for how wide it is. The surface sprite is 85 across and reads
- * about 11 either side of the line it stands on, so anything printed round the glass at a level —
- * the "đủ" line — is an ellipse of these proportions, not a bar.
- */
-const CUP_ROUND = 11 / 42.5;
-/** The "đủ" line's own ring: where it sits, and how wide the glass is there. */
-const MIN_FILL_Y = WELL_Y - MIN_FILL * WELL_DEPTH;
-const MIN_FILL_T = (MIN_FILL_Y - WELL_TOP_Y) / (WELL_KNEE_Y - WELL_TOP_Y);
-const MIN_FILL_RX = (WELL_TOP_W + (WELL_KNEE_W - WELL_TOP_W) * MIN_FILL_T) / 2;
-const MIN_FILL_CX = WELL_TOP_L + (WELL_KNEE_L - WELL_TOP_L) * MIN_FILL_T + MIN_FILL_RX;
-const MIN_FILL_RY = MIN_FILL_RX * CUP_ROUND;
-/**
- * The ring in halves, because they are not at the same distance: the near one is printed on the
- * glass between you and the drink, the far one is the same ink across the cup from you. They meet
- * at the ring's widest points, where the glass turns away. Both arcs run left to right, so their
- * dashes stay in step.
- */
-const MIN_FILL_FAR = `M${MIN_FILL_CX - MIN_FILL_RX} ${MIN_FILL_Y} A${MIN_FILL_RX} ${MIN_FILL_RY} 0 0 1 ${MIN_FILL_CX + MIN_FILL_RX} ${MIN_FILL_Y}`;
-const MIN_FILL_NEAR = `M${MIN_FILL_CX - MIN_FILL_RX} ${MIN_FILL_Y} A${MIN_FILL_RX} ${MIN_FILL_RY} 0 0 0 ${MIN_FILL_CX + MIN_FILL_RX} ${MIN_FILL_Y}`;
-const GUIDE = '#E5534B';
-/**
- * How far past the line the tea has to rise for the far half to go soft. Empty glass is clear, so
- * the far half is as sharp as the near one until there is tea between them — then it is being read
- * through the drink, and it blurs. The near half never does: it is on this side of everything.
- */
-const MIN_FILL_BAND = 0.05;
-function submerged(raw: number) {
-  'worklet';
-  const filled = pourLevel(Math.max(0, Math.min(1, raw)));
-  return Math.max(0, Math.min(1, (filled - MIN_FILL) / MIN_FILL_BAND));
-}
 
 /** Where the ice floats and where the toppings pile up, in sprite units. */
 const ICE_SPOTS = [
@@ -206,9 +164,6 @@ export function KitchenCup({ drink, width, height, level }: KitchenCupProps) {
   const foamStyle = useAnimatedStyle(() => ({
     bottom: padBottom + pourLevel(Math.max(0, Math.min(1, level.get()))) * runPx - 4 * scale,
   }));
-  // How much tea stands between you and the far half of the "đủ" ring.
-  const dryGuide = useAnimatedStyle(() => ({ opacity: 1 - submerged(level.get()) }));
-  const wetGuide = useAnimatedStyle(() => ({ opacity: submerged(level.get()) }));
 
   return (
     <View style={{ width, height }}>
@@ -246,7 +201,7 @@ export function KitchenCup({ drink, width, height, level }: KitchenCupProps) {
         </>
       )}
 
-      {/* ice, toppings and the pouring guides live in the drink, never outside the glass */}
+      {/* ice and toppings live in the drink, never outside the glass */}
       <Svg style={StyleSheet.absoluteFill} width={width} height={height} viewBox={`0 0 ${ART.w} ${ART.h}`}>
         <Defs>
           <ClipPath id={`wellp-${uid}`}>
@@ -285,31 +240,8 @@ export function KitchenCup({ drink, width, height, level }: KitchenCupProps) {
               );
             })}
 
-          {/* The one pour guide: the "đủ" line, a dashed ring printed round the glass. It is an
-              ellipse rather than a bar because that is what a level looks like on a cup seen from
-              here — pour to it and the drink's own surface sits straight on it. The glass stays
-              clear otherwise: a wash of colour over it reads as a tinted cup rather than the clear
-              one the sprite paints. */}
-          <Path
-            d={MIN_FILL_NEAR}
-            fill="none"
-            stroke={GUIDE}
-            strokeWidth={1.2}
-            strokeDasharray="4 3"
-            opacity={0.85}
-          />
         </G>
       </Svg>
-
-      {/* The far half, in two copies crossfaded by how far the tea is over the line. They are their
-          own layers because that fade is driven by the level, and a view style is the one way of
-          moving something here that has held up — see CLAUDE.md on the drink. */}
-      <Animated.View style={[styles.layer, { width, height }, dryGuide]} pointerEvents="none">
-        <FarGuide uid={`${uid}d`} width={width} height={height} />
-      </Animated.View>
-      <Animated.View style={[styles.layer, { width, height }, wetGuide]} pointerEvents="none">
-        <FarGuide uid={`${uid}w`} width={width} height={height} blurred />
-      </Animated.View>
 
       {foam && (
         <Animated.View style={[styles.foam, { height: 9 * scale }, foamStyle]} pointerEvents="none">
@@ -325,45 +257,6 @@ export function KitchenCup({ drink, width, height, level }: KitchenCupProps) {
       {/* The cat is printed on the front of the glass, so it goes over the drink. */}
       <Image source={CUP_DECAL} style={[styles.layer, { width, height }]} />
     </View>
-  );
-}
-
-/** The far half of the "đủ" ring, sharp or softened, clipped to the glass like everything else. */
-function FarGuide({
-  uid,
-  width,
-  height,
-  blurred = false,
-}: {
-  uid: string;
-  width: number;
-  height: number;
-  blurred?: boolean;
-}) {
-  return (
-    <Svg width={width} height={height} viewBox={`0 0 ${ART.w} ${ART.h}`}>
-      <Defs>
-        <ClipPath id={`fw-${uid}`}>
-          <Path d={WELL} />
-        </ClipPath>
-        {/* A generous filter region. The default is the arc's own box plus a tenth, which for a
-            line this thin crops the blur off square at both ends. */}
-        <Filter id={`fb-${uid}`} x="-15%" y="-120%" width="130%" height="340%">
-          <FeGaussianBlur stdDeviation="1.1" />
-        </Filter>
-      </Defs>
-      <G clipPath={`url(#fw-${uid})`}>
-        <Path
-          d={MIN_FILL_FAR}
-          fill="none"
-          stroke={GUIDE}
-          strokeWidth={blurred ? 1.1 : 1.2}
-          strokeDasharray="4 3"
-          opacity={blurred ? 0.42 : 0.7}
-          filter={blurred ? `url(#fb-${uid})` : undefined}
-        />
-      </G>
-    </Svg>
   );
 }
 

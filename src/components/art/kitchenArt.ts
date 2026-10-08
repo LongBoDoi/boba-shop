@@ -125,6 +125,86 @@ export const PIECE_ART: Record<string, number> = {
 };
 
 // ------------------------------------------------------------------ the room around it
+/**
+ * The prep room itself, painted whole. It used to be built out of fittings — a tiled wall, a
+ * shelf plank, a stainless bar, a run of cabinet fronts — each stretched across the room and
+ * each needing its own line computed; now it is one plate and the fittings are simply in it.
+ */
+export const ROOM_BG = require('../../assets/kitchen/room-bg.png');
+
+/**
+ * Where that plate draws its surfaces, in its own 940x1674 pixels. Nothing in the room is
+ * measured in fractions of the phone any more: a station stands on the line the painting puts
+ * under it, projected through `fitRoom`. Re-cut the plate and these are what to re-measure.
+ */
+export const ROOM = {
+  width: 940,
+  height: 1674,
+  /**
+   * The open shelf across the top: `board` is where its own top board begins — the face a sign
+   * is mounted on — `top` the ceiling of the recess under it, and `base` the board things stand
+   * on.
+   */
+  shelf: { x0: 48, x1: 586, board: 309, top: 376, base: 512 },
+  /** The tiled recess under it, and the ledge in front of the fridge at the same height. */
+  alcove: { top: 566, base: 744 },
+  ledge: { x0: 617, top: 560, base: 740 },
+  /** The work top through the middle: where a cup stands on it, and the edge it turns down at. */
+  table: { top: 820, stand: 900, base: 918 },
+  /** The lower counter in front of that, a step down and nearer the viewer. */
+  bench: { top: 1040, base: 1072 },
+  /** The pink units at the foot of the room, and the tiled floor in front of them. */
+  cabinets: 1376,
+  floor: 1510,
+};
+
+/**
+ * The tea station, opened: its frame, the board its sign is painted on, the three shelves and
+ * the work top under them, all in one plate. Cut off `tools/sheets/tea-room.png` by
+ * `cut-sheets.py`, which lifts it off the black it is painted on so its rounded corners and the
+ * vines hanging past them read against the room behind.
+ */
+export const TEA_BG = require('../../assets/kitchen/tea-room.png');
+
+/**
+ * Where that plate draws its surfaces, in its own 1156x1286 pixels — the same arrangement as
+ * `ROOM` above, and re-measure these if the plate is re-cut. The sprite is the window *and* what
+ * hangs past it, so the frame itself is `panel`.
+ */
+export const TEA_ROOM = {
+  width: 1156,
+  height: 1286,
+  /** The frame, inside the sprite: the sign board stands above its top edge and the vines past
+   *  its corners. */
+  panel: { x0: 2, x1: 1153, top: 30, base: 1283 },
+  /** The face of that sign board, which the station's name is written across. */
+  sign: { x0: 325, x1: 835, top: 14, base: 120 },
+  /**
+   * The three boards, top to bottom. A board's top face is painted as a lit strip seen from a
+   * little above — 567 to 589 on the middle one — and `stand` is the *front* of that strip, where
+   * a thing standing on the board has its feet. Standing it on the back edge, against the wall,
+   * reads as floating behind the board rather than on it. `base` is the foot of the board, which
+   * is what the shelf above has to clear.
+   */
+  shelves: [
+    { stand: 313, base: 353 },
+    { stand: 586, base: 625 },
+    { stand: 842, base: 876 },
+  ],
+  /** The work top: its back edge, the line a cup stands on, and the edge it turns down at. */
+  table: { top: 960, stand: 1080, front: 1116 },
+  /**
+   * The cup, in the middle of the work top. It is taller than the gap above that top because it
+   * stands in *front* of the shelves rather than under them, which is also why it is drawn after
+   * them.
+   */
+  cup: { cx: 578, stand: 1080, height: 280 },
+  /** The face of the card on the right, which the measure is drawn on. */
+  board: { x0: 900, x1: 1115, top: 755, base: 960 },
+  /** The button that shuts the window, over the frame's top right corner. */
+  shut: { cx: 1070, cy: 110, d: 111 },
+};
+
 export const WALL = require('../../assets/kitchen/wall.png');
 export const LAMP = require('../../assets/kitchen/lamp.png');
 export const SHELF_PLANK = require('../../assets/kitchen/shelf-plank.png');

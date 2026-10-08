@@ -6,6 +6,7 @@ import { ICON_CUP, ICON_TRASH } from '../components/art/kitchenArt';
 import { Button } from '../components/Button';
 import { Point } from '../components/Effects';
 import { cupSizeFor, KitchenStation } from '../components/KitchenStation';
+import { OrderBubble } from '../components/OrderBubble';
 import { Ticket } from '../components/TicketRail';
 import { Drink, MIN_FILL } from '../game/ingredients';
 import { DayConfig } from '../game/levels';
@@ -70,6 +71,9 @@ export function PrepPage({
   trashRef,
 }: PrepPageProps) {
   const [scene, setScene] = useState({ width: 0, height: 0 });
+  // How much of the room the order card floats over, so a window opened in the room can keep
+  // clear of it. The card grows with the recipe, so it is measured rather than guessed.
+  const [orderH, setOrderH] = useState(0);
   const insets = useSafeAreaInsets();
   const enough = build.fill >= MIN_FILL;
   const canServe = Boolean(selectedCustomer && cup.tea && enough);
@@ -105,25 +109,50 @@ export function PrepPage({
         }}
       >
         {scene.height > 0 && (
-          <KitchenStation
-            width={scene.width}
-            height={scene.height}
-            config={config}
-            cup={cup}
-            build={build}
-            cupId={cupId}
-            onPour={onPour}
-            onScoop={onScoop}
-            onIce={onIce}
-            onSugar={onSugar}
-            onDragging={onDragging}
-            tickets={tickets}
-            selectedSlot={selectedSlot}
-            selectedCustomer={selectedCustomer}
-            clock={clock}
-            onSelectTicket={onSelectTicket}
-            cupRef={machineRef}
-          />
+          <>
+            <KitchenStation
+              width={scene.width}
+              height={scene.height}
+              config={config}
+              cup={cup}
+              build={build}
+              cupId={cupId}
+              onPour={onPour}
+              onScoop={onScoop}
+              onIce={onIce}
+              onSugar={onSugar}
+              onDragging={onDragging}
+              topInset={Math.round(scene.height * 0.012) + orderH}
+              cupRef={machineRef}
+            />
+            {/* The order is spoken back over the room rather than pinned inside it, so it can
+                be read at a glance and nothing it covers is something you reach for. */}
+            <View
+              style={[styles.order, { top: Math.round(scene.height * 0.012) }]}
+              pointerEvents="box-none"
+              onLayout={(event: LayoutChangeEvent) => setOrderH(Math.round(event.nativeEvent.layout.height))}
+            >
+              <OrderBubble
+                customer={selectedCustomer}
+                cup={cup}
+                config={config}
+                patience={
+                  selectedCustomer
+                    ? Math.max(
+                        0,
+                        1 -
+                          (clock - (selectedCustomer.orderedAt ?? selectedCustomer.arrivedAt)) /
+                            selectedCustomer.patienceMs,
+                      )
+                    : 1
+                }
+                tickets={tickets}
+                selectedSlot={selectedSlot}
+                width={scene.width - 20}
+                onSelectTicket={onSelectTicket}
+              />
+            </View>
+          </>
         )}
       </View>
 
@@ -145,6 +174,11 @@ const styles = StyleSheet.create({
   scene: {
     flex: 1,
     overflow: 'hidden',
+  },
+  order: {
+    position: 'absolute',
+    left: 10,
+    right: 10,
   },
   actions: {
     flexDirection: 'row',

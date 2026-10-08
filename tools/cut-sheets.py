@@ -154,6 +154,31 @@ def clear_room(im, tol=11):
     return im.crop((bb[0], bb[1], W, bb[3])) if bb else im
 
 
+def lift_window(plate, floor=30):
+    """
+    A painting on a black backdrop, cut out with an alpha channel and trimmed to itself.
+
+    Anything darker than `floor` is backdrop — the window's own darkest paint, the shadowed wood
+    along its foot, is several times that — and the edge is softened by a pixel so the rounded
+    corners do not come out as stairs.
+    """
+    from PIL import ImageFilter
+
+    W, H = plate.size
+    px = plate.load()
+    mask = Image.new('L', (W, H), 0)
+    mp = mask.load()
+    for y in range(H):
+        for x in range(W):
+            c = px[x, y]
+            if max(c) > floor:
+                mp[x, y] = 255
+    mask = mask.filter(ImageFilter.GaussianBlur(0.8))
+    out = plate.convert('RGBA')
+    out.putalpha(mask)
+    return out.crop(out.getbbox())
+
+
 def unclip(pan, whole):
     """
     Put back what a pan's crop cut off. The crops in `tools/sheets/pans` all stop short at the
@@ -364,6 +389,20 @@ def main():
     steel.crop((90, 0, 122, 23)).save(OUT / 'bar-splash.png')
     steel.crop((90, 23, 122, 77)).save(OUT / 'bar-deck.png')
     steel.crop((90, 77, 122, 104)).save(OUT / 'bar-front.png')
+
+    # ------------------------------------------------------------------ the room itself
+    # The prep room is not built out of fittings any more: it is one painted plate, and
+    # everything the player touches stands on a surface that plate already draws. It goes
+    # through whole — only re-encoded — so the lines measured off it in `ROOM`
+    # (src/components/art/kitchenArt.ts) stay true to the pixel.
+    plate = Image.open(SHEETS / 'room-bg.png').convert('RGB')
+    plate.save(OUT / 'room-bg.png', optimize=True)
+
+    # ------------------------------------------------------------------ the tea window
+    # The pouring window is painted whole — frame, sign board and all — on a black backdrop.
+    # Lifting it off that backdrop is the whole job: its corners are rounded and its vines hang
+    # out past them, so the black has to become transparent rather than be cropped around.
+    lift_window(Image.open(SHEETS / 'tea-room.png').convert('RGB')).save(OUT / 'tea-room.png', optimize=True)
 
     blank_card(Image.open(OUT / 'card.png').convert('RGBA'))
 
