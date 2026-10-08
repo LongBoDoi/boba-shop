@@ -207,13 +207,15 @@ Dropping the cup still standing on the work top sends it home.
   a row that ran off the room and was swiped back; they stand in a painted stand now
   (`TOPPING_STAND`, cut by `tools/cut-topping-stand.ps1`), on the right of the work top under the
   fridge, where the design puts it — the only surface on that side deep enough to take it, since
-  the ledge the fridge stands on is a hand's width of board. It **lies on that top**, on the same
-  line the cup stands on (`ROOM.table.stand`) — set back against the wall behind it instead, it
-  rose far enough to cover the bottom of the fridge, which is worse than anything it hides from
-  down there. Its **right** edge is the right edge of the *screen*, not of the room, because the
-  room is cropped at the sides on most phones and anchoring it to the painting would lose its last
-  column; its left edge is held off the cup, and what is left between the two is all it gets,
-  which is why the pans in it are smaller than anything else in the room. It carries its own `Topping` across it, so unlike the tea shelf
+  the ledge the fridge stands on is a hand's width of board. It **lies on that top**, right down
+  at the front edge of it (`ROOM.table.base`), nearer the viewer than the cup — set back against
+  the wall behind it instead, it rose far enough to cover the bottom of the fridge, which is worse
+  than anything it hides from down there. It is pushed out past the right of the *screen* by
+  `STAND_PUSH`, not set against the right of the room, because the room is cropped at the sides on
+  most phones and anchoring it to the painting would lose its last column; what goes past the edge
+  is the outer arm of its frame, which has nothing standing on it. Its left edge is held off the
+  cup, and what is left between the two is all it gets, which is why the pans in it are smaller
+  than anything else in the room. It carries its own `Topping` across it, so unlike the tea shelf
   nothing is drawn over it.
   `standToppings` sets the day's pans into a grid of its deck (`STAND.rows`, fractions of the
   sprite): two bands, the front one wider and lower because the deck is painted going away from

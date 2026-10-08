@@ -156,6 +156,9 @@ const widened = (kind: StationKind) => kind === 'topping' || kind === 'ice';
 /** How wide the topping stand may get, as a fraction of the screen — a backstop for a screen so
  *  wide that the gap between the cup and its right edge would otherwise hand it half the room. */
 const STAND_WIDTH = 0.52;
+/** How far past the right of the screen it hangs, as a fraction of that screen: pushed out of the
+ *  way rather than set neatly against the edge, which also buys it the width to push off. */
+const STAND_PUSH = 0.03;
 
 /** How wide a piece of equipment may get, as a fraction of the room's width. */
 const MAX_WIDTH: Record<StationKind, number> = {
@@ -376,14 +379,16 @@ function standToppings(
   // On the right of the work top, under the fridge, where the design puts it. It is the only
   // surface on that side deep enough to take it: the ledge the fridge stands on is a hand's width
   // of board, and the alcove the toppings used to spread along is over on the left.
-  // It lies on the work top itself, on the same line the cup stands on. Set back against the wall
-  // behind it instead, it rose far enough to cover the bottom of the fridge, which is worse than
-  // anything it hides from down here.
-  const base = Math.round(py(ROOM.table.stand));
-  // And hard against the right-hand edge of the **screen** rather than of the room, because a
-  // phone taller than the painting crops the room at the sides and the room's own right-hand end
-  // is well off it — anchored to the painting the stand would lose its last column on most phones.
-  const right = W;
+  // It lies on the work top itself, right down at the front edge of it — nearer the viewer than
+  // the cup, and the furthest forward the top goes. Set back against the wall behind it instead,
+  // it rose far enough to cover the bottom of the fridge, which is worse than anything it hides
+  // from down here.
+  const base = Math.round(py(ROOM.table.base));
+  // And out past the right-hand edge of the **screen**, not of the room: a phone taller than the
+  // painting crops the room at the sides, so the room's own right-hand end is well off the screen
+  // and a stand anchored to it would lose its last column. What goes past the edge is the outer
+  // arm of the frame, which has nothing standing on it.
+  const right = W + Math.round(W * STAND_PUSH);
   // And its left edge off the cup, which stands on its coaster through the middle of that top.
   // What is left between the two is all the stand gets; it is the narrowest the room has to offer
   // and the reason the pans here are smaller than they were in the alcove.
