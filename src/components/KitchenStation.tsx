@@ -28,11 +28,12 @@ import { DayConfig } from '../game/levels';
 import { CupBuild, Customer } from '../game/reducer';
 import { DURATION, ease, timing } from '../motion';
 import { colors, fonts } from '../theme';
-import { KitchenRoom, RoomShelf, SHOP } from './art/KitchenRoom';
+import { FLOOR_SPAN, KitchenRoom, RoomShelf, SHOP } from './art/KitchenRoom';
 import {
   ART,
   FOAM,
   JAR_SPOUT,
+  PAN_BODY,
   JAR_TEA,
   MILK,
   PAN,
@@ -66,6 +67,8 @@ interface Station {
   cx: number;
   /** Full width of this station's column — the touch target and the name under it. */
   slot: number;
+  /** Which row of the kitchen it stands in; a row may scroll sideways as a whole. */
+  row: number;
   /** Line the equipment stands on. */
   base: number;
   /** Where liquid leaves it, measured inside the box. */
@@ -74,9 +77,24 @@ interface Station {
   dockY: number;
 }
 
+/** A row of equipment, and whether there is more of it than the room is wide. */
+export interface RowStrip {
+  scroll: boolean;
+  /** How wide the row's contents are altogether. */
+  span: number;
+}
+
+/** A row the player can swipe along, and how far it may go. */
+interface PanRow {
+  offset: SharedValue<number>;
+  min: number;
+  onHold: (held: boolean) => void;
+}
+
 export interface KitchenLayout {
   stations: Station[];
   shelves: RoomShelf[];
+  strips: RowStrip[];
   /** The work top in the middle of the room — where the cup rests between jobs. */
   tableLine: number;
   /** The shop's notes rail, across the top of the cup's band. */
@@ -91,11 +109,20 @@ export interface KitchenLayout {
   homeY: number;
 }
 
+/** The strip of counter a steel bar keeps in front of its pans, as a fraction of a pan. */
+const APRON = 0.3;
+
+/** How much wider than its own art a pan is drawn, towards the design's wider pans. */
+const PAN_WIDEN = 1.16;
+
+/** A pan is set into the counter; everything else stands on it. */
+const sunkKind = (kind: StationKind) => kind === 'topping' || kind === 'ice';
+
 /** How wide a piece of equipment may get, as a fraction of the room's width. */
 const MAX_WIDTH: Record<StationKind, number> = {
   tea: 0.26,
   milk: 0.21,
-  topping: 0.3,
+  topping: 0.4,
   ice: 0.3,
   sugar: 0.17,
   foam: 0.23,
@@ -133,10 +160,15 @@ export function cupSizeFor(W: number, H: number) {
  */
 export function layoutKitchen(config: DayConfig, W: number, H: number): KitchenLayout {
   const { width: cupW, height: cupH } = cupSizeFor(W, H);
-  // The lamps hang over the top of the wall, so the shelf starts close to it.
-  const top = Math.max(16, Math.round(H * 0.035));
+  // The lamps hang over the top of the wall, so the shelf starts close to it — but not under
+  // it: with the slack going to the work top there is no gap above the row to fall back on.
+  const top = Math.max(16, Math.round(H * 0.05));
   const labelH = 17;
-  const cabinetH = Math.max(34, Math.round(H * 0.11));
+  // Exactly as deep as the run of door fronts along the floor wants to be: a single unit at
+  // each end with a double between them, each as wide as its own art. Stretching them to a
+  // height that is not their own is what makes a cabinet look pulled out of shape, and the
+  // handles show it first.
+  const cabinetH = Math.max(34, Math.min(Math.round(H * 0.2), Math.round(W / FLOOR_SPAN)));
   const cabinetTop = H - cabinetH;
   const counterH = Math.max(46, Math.round(W * 0.15));
   // The band the cup lives in: room to stand on the work top and to be lifted up to a tap.
@@ -158,36 +190,71 @@ export function layoutKitchen(config: DayConfig, W: number, H: number): KitchenL
   const sideRoom = rows[0].length <= 4 ? Math.round(W * 0.13) : 0;
 
   // Each row is only as tall as what stands on it — the slack goes to the cup, like the shop does.
+  // The dispensers share their shelf out between them, because the cup is carried to a
+  // particular tap and they all have to be reachable. The counters below do the opposite: every
+  // box keeps the same size however many there are, and the row scrolls sideways instead of
+  // shrinking, which is what stops a long day's worth of toppings from turning into thumbnails.
   const plans = rows.map((items) => {
     const kind = items[0].kind;
-    const inset = kind === 'tea' ? sideRoom : 0;
+    const tea = kind === 'tea';
+    const inset = tea ? sideRoom : 0;
     const slot = (W - 6 - inset * 2) / items.length;
-    const w = Math.round(Math.min(slot - 10, W * MAX_WIDTH[kind], H * (kind === 'tea' ? 0.3 : 0.22) * ASPECT[kind]));
-    return { items, inset, slot, w, h: Math.round(w / ASPECT[kind]) };
+    const w = tea
+      ? Math.min(slot - 10, W * MAX_WIDTH[kind], H * 0.3 * ASPECT[kind])
+      : Math.min(W * MAX_WIDTH[kind], H * 0.13 * ASPECT[kind]);
+    return { items, tea, inset, slot, h: Math.round(w / ASPECT[kind]) };
   });
 
+  // A counter keeps a strip of its deck in front of the pans before it turns down, which is
+  // where their name plaques hang; that strip is part of what a steel row takes up.
+  const apron = (plan: { tea: boolean; h: number }) =>
+    plan.tea ? 0 : Math.round(plan.h * (1 - PAN_BODY) * APRON);
   const room = cabinetTop - top - bandH;
-  const used = plans.reduce((sum, plan) => sum + plan.h + labelH, 0);
-  // Most of the slack goes to the cup's band, the rest as breathing space above each row;
-  // if it does not fit at all, everything shrinks together.
+  const used = plans.reduce((sum, plan) => sum + plan.h + labelH + apron(plan), 0);
+  // Nearly all the slack goes to the cup's band — that is, to the wooden work top, which is
+  // where the design puts its room. Spreading it between the rows instead pads out the steel
+  // counters, and a counter is only ever as deep as the pans standing in it.
   const slack = room - used;
-  const toBand = Math.max(0, slack * 0.62);
+  const toBand = Math.max(0, slack * 0.88);
   const band = bandH + toBand;
   const gap = Math.max(0, (slack - toBand) / plans.length);
   const squeeze = slack < 0 ? room / used : 1;
 
   const stations: Station[] = [];
   const shelves: RoomShelf[] = [];
+  const strips: RowStrip[] = [];
   let y = top;
   let tableLine = cabinetTop - counterH;
 
   plans.forEach((plan, r) => {
     const h = Math.round(plan.h * squeeze);
-    const w = Math.round(plan.w * squeeze);
-    const base = Math.round(y + gap * (r === 0 ? 0.5 : 0.25) + h);
+    // The pans sit low in their counter: the design leaves barely a hand's width of stainless
+    // behind them and little more in front, so a steel row's slack nearly all goes above it,
+    // into the wooden work top that comes down to meet the counter.
+    const lead = r === 0 ? 0.5 : 0.45;
+    const base = Math.round(y + gap * lead + h);
+
+    // One height for the whole row, and each box as wide as its own art — so a bottle stays a
+    // bottle and a carton a carton, instead of every one of them taking the first one's shape.
+    // A pan is drawn a little wider than that: the design's are half again as wide as they are
+    // tall where ours are square, and a square one is too narrow for its name to fit on a line.
+    const widths = plan.items.map((item) =>
+      Math.round(h * ASPECT[plan.tea ? 'tea' : item.kind] * (sunkKind(item.kind) ? PAN_WIDEN : 1)),
+    );
+    // A pan is set into the counter, so pans sit shoulder to shoulder; a bottle or a carton
+    // stands on it and takes a column of its own, wide enough to put its name under.
+    const slots = plan.items.map((item, i) =>
+      sunkKind(item.kind) ? widths[i] : Math.max(widths[i], Math.round(W * 0.2)),
+    );
+    // The counters start hard against the left, run off the right, and are swiped back.
+    const span = slots.reduce((sum, slot) => sum + slot, 0);
+    let x = 0;
 
     plan.items.forEach((item, i) => {
-      const cx = Math.round(3 + plan.inset + plan.slot * (i + 0.5));
+      const w = widths[i];
+      const slot = plan.tea ? Math.round(plan.slot) : slots[i];
+      const cx = plan.tea ? Math.round(3 + plan.inset + plan.slot * (i + 0.5)) : Math.round(x + slot / 2);
+      x += slot;
       const option =
         item.kind === 'ice' || item.kind === 'sugar' ? undefined : getIngredient(categoryOf(item.kind), item.id);
       stations.push({
@@ -196,20 +263,29 @@ export function layoutKitchen(config: DayConfig, W: number, H: number): KitchenL
         id: item.id,
         name: option?.name ?? EQUIPMENT_NAMES[item.id] ?? item.id,
         color: option?.color ?? colors.sky,
+        row: r,
         x: cx - Math.round(w / 2),
         y: base - h,
         w,
         h,
         cx,
-        slot: Math.round(plan.slot),
+        slot,
         base,
         spout: item.kind === 'tea' ? Math.round(h * JAR_SPOUT) : Math.round(h * 0.2),
         dockY: base + cupH + 8,
       });
     });
+    strips.push({ scroll: !plan.tea && span > W, span });
 
-    shelves.push({ base, top: base - h, steel: plan.items[0].kind !== 'tea' });
-    y = base + Math.round(labelH * squeeze) + gap * (r === 0 ? 0.5 : 0.75);
+    const sunk = sunkKind(plan.items[0].kind);
+    shelves.push({
+      base,
+      top: base - h,
+      steel: plan.items[0].kind !== 'tea',
+      // a pan's sprite starts at the scoop standing in it, well above the counter
+      rim: base - Math.round(h * (sunk ? 1 - PAN_BODY : 1)),
+    });
+    y = base + Math.round((labelH + apron(plan)) * squeeze) + gap * (1 - lead);
     // The work top goes straight under the dispensers, so the cup only has a short lift.
     if (r === 0) {
       tableLine = Math.round(y + band - counterH);
@@ -217,9 +293,30 @@ export function layoutKitchen(config: DayConfig, W: number, H: number): KitchenL
     }
   });
 
+  // The stainless runs unbroken from under the work top down to the cabinets, the way the shop
+  // is actually built: each steel bar owns the counter from where the one above it stops, so no
+  // wall shows through between them.
+  // How far the stainless reaches above its pans is measured off the pans themselves, as the
+  // design measures it: enough to stand the scoops in with a little air over them, no more —
+  // the design's counter is nearly all pan. The work top above comes down to meet it, so a
+  // room with space to spare gets a deeper wooden counter rather than a wider slab of steel.
+  const bars = shelves.filter((shelf) => shelf.steel);
+  // The stainless may come up as far as the front of the cup's coaster, but no further: past
+  // that it would be standing on the work top rather than in front of it.
+  const coasterH = Math.round(cupW * 1.5) / ART.coaster;
+  const highest = tableLine + Math.round(Math.max(counterH * 0.16, coasterH * 0.56));
+  bars.forEach((shelf) => {
+    const rim = shelf.rim ?? shelf.top;
+    shelf.from = Math.max(highest, Math.round(rim - (shelf.base - rim) * 0.3));
+  });
+  bars.forEach((shelf, k) => {
+    shelf.until = bars[k + 1]?.from ?? cabinetTop;
+  });
+
   return {
     stations,
     shelves,
+    strips,
     tableLine,
     // The rail hangs just under the dispensers, at the top of the cup's band.
     railY: Math.round(tableLine - band + counterH + 4),
@@ -290,7 +387,7 @@ export function KitchenStation({
   cupRef,
 }: KitchenStationProps) {
   const layout = useMemo(() => layoutKitchen(config, W, H), [config, W, H]);
-  const { stations, shelves, tableLine, railY, cabinetTop, sideRoom, cupW, cupH, homeX, homeY } = layout;
+  const { stations, shelves, strips, tableLine, railY, cabinetTop, sideRoom, cupW, cupH, homeX, homeY } = layout;
 
   const cupX = useSharedValue(homeX);
   const cupY = useSharedValue(homeY);
@@ -369,6 +466,20 @@ export function KitchenStation({
     if (standDown.current) clearTimeout(standDown.current);
   }, []);
 
+  // How far each row has been swiped along. There are never more than three, and the top one —
+  // the dispensers — never moves, because the cup is carried to a particular tap.
+  const swipe = [useSharedValue(0), useSharedValue(0), useSharedValue(0)];
+  // A new day rearranges the counters, so anything swiped out of the way is brought back into
+  // range — otherwise a row that no longer overflows would sit permanently off to one side.
+  const spans = strips.map((strip) => strip.span).join();
+  useEffect(() => {
+    strips.forEach((strip, r) => {
+      const min = Math.min(0, W - strip.span);
+      swipe[r].set(strip.scroll ? Math.max(min, Math.min(0, swipe[r].get())) : 0);
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [spans, W]);
+
   const carry = useCarry({
     cup,
     build,
@@ -423,22 +534,35 @@ export function KitchenStation({
         matW={Math.round(cupW * 1.5)}
       />
 
-      {stations.map((station) => {
-        const props = { station, active: docked?.key === station.key, ...shared };
-        switch (station.kind) {
-          case 'tea':
-            return <TeaDispenser key={station.key} {...props} onPour={onPour} />;
-          case 'milk':
-            return <MilkCarton key={station.key} {...props} />;
-          case 'topping':
-            return <ToppingBin key={station.key} {...props} max={config.maxToppings} />;
-          case 'ice':
-            return <IceChest key={station.key} {...props} />;
-          case 'sugar':
-            return <SyrupPump key={station.key} {...props} />;
-          default:
-            return <FoamTub key={station.key} {...props} />;
-        }
+      {strips.map((strip, r) => {
+        const row = stations.filter((station) => station.row === r);
+        const pan = strip.scroll ? { offset: swipe[r], min: W - strip.span, onHold: onDragging } : undefined;
+        const boxes = row.map((station) => {
+          const props = { station, active: docked?.key === station.key, pan, ...shared };
+          switch (station.kind) {
+            case 'tea':
+              return <TeaDispenser key={station.key} {...props} onPour={onPour} />;
+            case 'milk':
+              return <MilkCarton key={station.key} {...props} />;
+            case 'topping':
+              return <ToppingBin key={station.key} {...props} max={config.maxToppings} />;
+            case 'ice':
+              return <IceChest key={station.key} {...props} />;
+            case 'sugar':
+              return <SyrupPump key={station.key} {...props} />;
+            default:
+              return <FoamTub key={station.key} {...props} />;
+          }
+        });
+        return strip.scroll ? (
+          <SwipeRow key={r} offset={swipe[r]}>
+            {boxes}
+          </SwipeRow>
+        ) : (
+          <View key={r} style={StyleSheet.absoluteFill} pointerEvents="box-none">
+            {boxes}
+          </View>
+        );
       })}
 
       {/* The order hangs on the rail, with the other tickets pegged up beside it. */}
@@ -637,7 +761,9 @@ function Drop({
 
 interface Carry {
   /** Start carrying what this station holds; the gesture is owned by the station. */
-  begin: (station: Station) => void;
+  begin: (station: Station, offset?: number) => void;
+  /** Put it straight back without a word — the gesture turned out to be a swipe. */
+  cancel: () => void;
   move: (dx: number, dy: number) => void;
   drop: () => void;
   /** The thing in hand, drawn above everything else. */
@@ -698,9 +824,10 @@ function useCarry({
   const origin = useRef({ x: 0, y: 0, station: null as Station | null });
 
   const begin = useCallback(
-    (station: Station) => {
+    (station: Station, offset = 0) => {
       origin.current = {
-        x: station.cx - latest.current.size / 2,
+        // a row that has been swiped holds its equipment away from where the layout put it
+        x: station.cx + offset - latest.current.size / 2,
         y: station.y + station.h * 0.1,
         station,
       };
@@ -721,6 +848,13 @@ function useCarry({
     },
     [x, y],
   );
+
+  const cancel = useCallback(() => {
+    x.set(withTiming(origin.current.x, timing(DURATION.fast)));
+    y.set(withTiming(origin.current.y, timing(DURATION.fast)));
+    show.set(withDelay(DURATION.fast, withTiming(0, { duration: 1 })));
+    setHeld(null);
+  }, [x, y, show]);
 
   const drop = useCallback(() => {
     onDragging(false);
@@ -805,7 +939,17 @@ function useCarry({
     </Animated.View>
   );
 
-  return { begin, move, drop, node };
+  return { begin, cancel, move, drop, node };
+}
+
+/** A row holding more equipment than the room is wide: swipe along it to reach the rest. */
+function SwipeRow({ offset, children }: { offset: SharedValue<number>; children: ReactNode }) {
+  const style = useAnimatedStyle(() => ({ transform: [{ translateX: offset.get() }] }));
+  return (
+    <Animated.View style={[StyleSheet.absoluteFill, style]} pointerEvents="box-none">
+      {children}
+    </Animated.View>
+  );
 }
 
 /** What a station puts in your hand: the shop's scoop, a carton, or the syrup bottle. */
@@ -888,6 +1032,8 @@ interface EquipProps {
   onNudge: (message: string) => void;
   onPouring: (what: { category: 'tea' | 'milk'; id: string } | null) => void;
   carry: Carry;
+  /** Set when this row holds more than the room is wide, so it can be swiped along. */
+  pan?: PanRow;
 }
 
 interface FrameProps {
@@ -908,6 +1054,7 @@ interface FrameProps {
  */
 function Frame({ station, active, label, locked, accessibilityLabel, press, handlers, children }: FrameProps) {
   const style = useAnimatedStyle(() => ({ transform: [{ scale: press.value }] }));
+  const sunk = sunkKind(station.kind);
   return (
     <Animated.View
       {...handlers}
@@ -917,9 +1064,50 @@ function Frame({ station, active, label, locked, accessibilityLabel, press, hand
       accessibilityState={{ selected: Boolean(active) }}
       style={[styles.frame, { left: station.cx - station.slot / 2, top: station.y - 6, width: station.slot }, style]}
     >
+      {sunk &&
+        // A pan is dropped through the counter, so the stainless is in shadow all round its
+        // rim. Without it the pans read as standing on the counter rather than in it.
+        [0.07, 0.045, 0.022].map((at) => {
+          const g = Math.round(station.h * at);
+          // the sprite starts at the scoop standing in the pan; the rim is what the counter holds
+          const rim = Math.round(station.h * PAN_BODY);
+          // The well is deepest behind the pan, where the counter drops away out of the light,
+          // so the shadow reaches further up than it does to the sides.
+          const back = g * 2.2;
+          return (
+            <View
+              key={at}
+              style={{
+                position: 'absolute',
+                // the frame is a slot-wide column with the equipment centred 6px down it
+                left: (station.slot - station.w) / 2 - g,
+                top: 6 + rim - back,
+                width: station.w + g * 2,
+                height: station.h - rim + back + g,
+                borderRadius: g * 1.8,
+                backgroundColor: '#5E5467',
+                opacity: 0.16,
+              }}
+            />
+          );
+        })}
       <View style={[{ width: station.w, height: station.h }, locked && styles.locked]}>{children}</View>
       {active && <View style={[styles.ring, { width: station.w + 10, height: station.h + 10 }]} />}
-      <Text style={[styles.label, active && styles.labelActive]} numberOfLines={1}>
+      <Text
+        style={[
+          styles.label,
+          // Wide enough for a short name to stay whole even on a narrow bottle — a plaque held
+          // to the width of its box would break "Đường" across two lines.
+          { maxWidth: Math.max(station.slot - 2, 70) },
+          // A pan is sunk into the counter, so its plaque sits on the rim rather than below it,
+          // the way the design has them.
+          sunk && styles.labelSunk,
+          active && styles.labelActive,
+        ]}
+        // A plaque is only as wide as the box it belongs to, so a long name runs onto a second
+        // line rather than being cut off; the apron in front of the pans is where it goes.
+        numberOfLines={2}
+      >
         {label}
       </Text>
     </Animated.View>
@@ -990,22 +1178,50 @@ function useHoldPour({
   };
 }
 
-/** Picking a tool out of a bin and carrying it over to the cup. */
-function useCarryGesture(station: Station, carry: Carry, press: SharedValue<number>): GestureResponderHandlers {
+/**
+ * Picking a tool out of a bin and carrying it over to the cup — and, on a row that holds more
+ * than the room is wide, swiping that row along instead.
+ *
+ * The two share one gesture, so which it is has to be decided from the first few pixels of
+ * movement: sideways is a swipe along the counter, anything else is a lift. The tool is picked
+ * up on touch either way, because that is what makes a tap on a bin say what to do with it; a
+ * swipe simply puts it straight back.
+ */
+function useCarryGesture(
+  station: Station,
+  carry: Carry,
+  press: SharedValue<number>,
+  pan?: PanRow,
+): GestureResponderHandlers {
   const from = useRef({ x: 0, y: 0 });
+  const mode = useRef<'carry' | 'swipe'>('carry');
+  const at = useRef(0);
   const letGo = () => {
     press.set(withTiming(1, { duration: 180, easing: ease }));
-    carry.drop();
+    if (mode.current === 'swipe') pan?.onHold(false);
+    else carry.drop();
+    mode.current = 'carry';
   };
   return {
     ...GRABBY,
     onResponderGrant: (event) => {
       from.current = { x: event.nativeEvent.pageX, y: event.nativeEvent.pageY };
+      mode.current = 'carry';
+      at.current = pan ? pan.offset.get() : 0;
       press.set(withTiming(0.94, { duration: 80 }));
-      carry.begin(station);
+      carry.begin(station, at.current);
     },
-    onResponderMove: (event) =>
-      carry.move(event.nativeEvent.pageX - from.current.x, event.nativeEvent.pageY - from.current.y),
+    onResponderMove: (event) => {
+      const dx = event.nativeEvent.pageX - from.current.x;
+      const dy = event.nativeEvent.pageY - from.current.y;
+      if (pan && mode.current === 'carry' && Math.abs(dx) > 7 && Math.abs(dx) > Math.abs(dy) * 1.4) {
+        mode.current = 'swipe';
+        carry.cancel();
+        pan.onHold(true);
+      }
+      if (mode.current === 'swipe') pan?.offset.set(Math.max(pan.min, Math.min(0, at.current + dx)));
+      else carry.move(dx, dy);
+    },
     onResponderRelease: letGo,
     onResponderTerminate: letGo,
   };
@@ -1187,11 +1403,11 @@ function TeaDispenser({
 // --------------------------------------------------------------------------- milk cartons
 
 /** A carton you pick up off the shelf and tip into the cup. */
-function MilkCarton({ station, cup, carry }: EquipProps) {
+function MilkCarton({ station, cup, carry, pan }: EquipProps) {
   const { w: W, h: H } = station;
   const locked = cup.milk !== null && cup.milk !== station.id;
   const press = useSharedValue(1);
-  const handlers = useCarryGesture(station, carry, press);
+  const handlers = useCarryGesture(station, carry, press, pan);
 
   return (
     <Frame
@@ -1209,13 +1425,13 @@ function MilkCarton({ station, cup, carry }: EquipProps) {
 
 // --------------------------------------------------------------------------- the topping bar
 
-function ToppingBin({ station, cup, max, carry }: EquipProps & { max: number }) {
+function ToppingBin({ station, cup, max, carry, pan }: EquipProps & { max: number }) {
   const { w: W, h: H } = station;
   const option = getIngredient('toppings', station.id) as Topping;
   const inCup = cup.toppings.includes(station.id);
   const full = !inCup && cup.toppings.length >= max;
   const press = useSharedValue(1);
-  const handlers = useCarryGesture(station, carry, press);
+  const handlers = useCarryGesture(station, carry, press, pan);
 
   return (
     <Frame
@@ -1233,10 +1449,10 @@ function ToppingBin({ station, cup, max, carry }: EquipProps & { max: number }) 
 
 // --------------------------------------------------------------------------- the ice pan
 
-function IceChest({ station, build, carry }: EquipProps) {
+function IceChest({ station, build, carry, pan }: EquipProps) {
   const { w: W, h: H } = station;
   const press = useSharedValue(1);
-  const handlers = useCarryGesture(station, carry, press);
+  const handlers = useCarryGesture(station, carry, press, pan);
 
   return (
     <Frame
@@ -1269,10 +1485,10 @@ function IceChest({ station, build, carry }: EquipProps) {
 
 // --------------------------------------------------------------------------- syrup and foam
 
-function SyrupPump({ station, build, carry }: EquipProps) {
+function SyrupPump({ station, build, carry, pan }: EquipProps) {
   const { w: W, h: H } = station;
   const press = useSharedValue(1);
-  const handlers = useCarryGesture(station, carry, press);
+  const handlers = useCarryGesture(station, carry, press, pan);
   const pumps = build.sugarPumps;
 
   return (
@@ -1297,12 +1513,12 @@ function SyrupPump({ station, build, carry }: EquipProps) {
   );
 }
 
-function FoamTub({ station, cup, carry }: EquipProps) {
+function FoamTub({ station, cup, carry, pan }: EquipProps) {
   const { w: W, h: H } = station;
   const option = getIngredient('foam', station.id);
   const inCup = cup.foam === station.id;
   const press = useSharedValue(1);
-  const handlers = useCarryGesture(station, carry, press);
+  const handlers = useCarryGesture(station, carry, press, pan);
 
   return (
     <Frame
@@ -1338,17 +1554,21 @@ const styles = StyleSheet.create({
   },
   label: {
     marginTop: 1,
-    fontSize: 9.5,
-    lineHeight: 13,
+    textAlign: 'center',
+    fontSize: 9,
+    lineHeight: 12,
     fontFamily: fonts.semi,
     color: '#6B4422',
-    maxWidth: '100%',
     backgroundColor: SHOP.plaque,
     borderWidth: 1.5,
     borderColor: SHOP.woodEdge,
     borderRadius: 4,
     paddingHorizontal: 5,
     overflow: 'hidden',
+  },
+  labelSunk: {
+    // half on the pan's rim and half on the counter in front of it, where the design hangs it
+    marginTop: -8,
   },
   labelActive: {
     color: '#A33A62',

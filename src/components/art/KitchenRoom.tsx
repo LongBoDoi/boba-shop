@@ -4,10 +4,12 @@ import Svg, { Ellipse } from 'react-native-svg';
 
 import {
   ART,
+  BAR_DECK,
+  BAR_FRONT,
+  BAR_SPLASH,
   CABINET,
-  CHALKBOARD,
+  DRAWER,
   COASTER,
-  COUNTER_STEEL,
   CUP_STACK,
   LAMP,
   PLANT,
@@ -15,11 +17,9 @@ import {
   RAIL_BAR,
   RAIL_CAP,
   SHELF_FOOT,
-  PLANK_FACE,
   PLANK_TOP,
   SHELF_PLANK,
-  STRAWS,
-  SUCCULENT,
+  TABLE_PROPS,
   TOWEL,
   WALL,
 } from './kitchenArt';
@@ -53,6 +53,24 @@ export const SHOP = {
  */
 const COASTER_FACE = 0.52;
 
+/**
+ * Where the design's cluster of props touches the table — the straw tin's base and the
+ * chalkboard's feet — as fractions of the sprite, so each stands in a pool of its own rather
+ * than the pair sharing one long smear.
+ */
+/** The run along the floor: a single unit at each end with a double between them. */
+const FLOOR = [
+  { src: DRAWER, aspect: ART.drawer },
+  { src: CABINET, aspect: ART.cabinet },
+  { src: DRAWER, aspect: ART.drawer },
+];
+export const FLOOR_SPAN = FLOOR.reduce((sum, unit) => sum + unit.aspect, 0);
+
+const PROP_FEET = [
+  { cx: 0.25, cy: 0.925, rx: 0.245 },
+  { cx: 0.74, cy: 0.975, rx: 0.29 },
+];
+
 export interface RoomShelf {
   /** Top of the equipment standing on this shelf. */
   top: number;
@@ -60,6 +78,18 @@ export interface RoomShelf {
   base: number;
   /** A stainless serving bar (the topping pans drop into it) rather than a wooden shelf. */
   steel?: boolean;
+  /**
+   * Where the equipment's own rim meets the counter. A pan sprite starts at the scoop standing
+   * in it, which reaches well above the steel, so this is lower than `top`.
+   */
+  rim?: number;
+  /**
+   * For a steel bar, the run of counter it owns: `from` is where its stainless starts — right
+   * under the work top, or under the bar above it — and `until` is where it hands over, so the
+   * counter is one unbroken surface from the work top to the cabinets, as the design has it.
+   */
+  from?: number;
+  until?: number;
 }
 
 interface KitchenRoomProps {
@@ -95,6 +125,45 @@ function Shadow({ cx, cy, rx, ry }: { cx: number; cy: number; rx: number; ry: nu
         <Ellipse key={k} cx={rx} cy={ry} rx={rx * k} ry={ry * k} fill="#5C3A18" opacity={0.055} />
       ))}
     </Svg>
+  );
+}
+
+/** The lines a steel bar is built on: where its stainless starts, ends, and holds its pans. */
+function bands(shelf: RoomShelf) {
+  const rim = shelf.rim ?? shelf.top;
+  const until = shelf.until ?? shelf.base;
+  return {
+    rim,
+    until,
+    from: shelf.from ?? rim,
+    // the strip of deck it keeps in front of the pans before it turns down
+    apron: Math.min(Math.round((shelf.base - rim) * 0.3), until - shelf.base),
+  };
+}
+
+/**
+ * A stainless serving bar: the pack's own counter, sliced across and stretched over the room.
+ * Its raised back stands behind the pans, its deck is what they are sunk into, and it turns
+ * down at the front into the cabinets. The sprite's ends are drawn in perspective and this
+ * counter runs off both sides of the room, so what is stretched is a column out of its middle.
+ */
+function SteelBar({ W, shelf }: { W: number; shelf: RoomShelf }) {
+  const { rim, from, until, apron } = bands(shelf);
+  const band = (src: ImageSourcePropType, top: number, height: number) => (
+    <Image
+      source={src}
+      resizeMode="stretch"
+      style={{ position: 'absolute', left: -2, top, width: W + 4, height: Math.max(1, height) }}
+    />
+  );
+  return (
+    <View>
+      {band(BAR_DECK, rim, shelf.base - rim + apron)}
+      {/* the counter's raised back, standing behind the pans */}
+      {band(BAR_SPLASH, from, rim - from)}
+      {/* and the edge it turns down at, beyond the apron in front of them */}
+      {band(BAR_FRONT, shelf.base + apron, until - shelf.base - apron)}
+    </View>
   );
 }
 
@@ -147,20 +216,24 @@ export const KitchenRoom = memo(function KitchenRoom({
   if (W <= 0 || H <= 0) return null;
 
   const lampW = Math.max(32, Math.round(W * 0.125));
-  const shelfH = Math.max(10, Math.round(W * 0.042));
   const plankH = Math.max(15, Math.round(W * 0.058));
   const counterH = Math.max(46, Math.round(W * 0.15));
   // how much of the table's surface shows behind the things standing on it
   const surfaceD = Math.round(counterH * 0.72);
   const coasterH = matW / ART.coaster;
-  // The lip is the strip of table in front of whatever stands on it — deep enough for the
-  // coaster, which is a disc seen from above: the cup sits at its middle, not on its back edge.
-  const lip = Math.round(Math.max(counterH * 0.16, coasterH * 0.56));
   const band = tableLine - railY; // the cup's band, rail to work top
   const capW = Math.max(17, Math.round(W * 0.058));
   const capH = capW / ART.railCap;
-  // the cluster of props standing at the right of the work top
-  const propRow = Math.min(band * 1.1, W * 0.44);
+  // The straw tin, the plant and the chalkboard are one sprite, arranged the way the design
+  // arranges them, and the design runs the chalkboard off the side of the screen — so the
+  // sprite is cut that way and hangs off the right edge here too.
+  const propsW = Math.min(W * 0.285, band * 0.96 * ART.tableProps);
+  const propsH = propsW / ART.tableProps;
+  // They stand forward of the cup, almost at the table's front edge, as the design has them.
+  // The work top runs down to meet the stainless, which stands in front of it: all the wood on
+  // show is surface, and the slack in the room goes into that rather than into the steel.
+  const woodBottom = shelves.find((shelf) => shelf.steel)?.from ?? tableLine + counterH;
+  const propsBottom = tableLine + (woodBottom - tableLine) * 0.74;
 
   const topShelf = shelves[0];
   const propW = Math.min(sideRoom, Math.round(W * 0.2));
@@ -178,34 +251,11 @@ export const KitchenRoom = memo(function KitchenRoom({
 
       {shelves.map((shelf, i) =>
         shelf.steel ? (
-          <View key={i}>
-            {/* the counter surface crosses the pans, so they read as sunk into it */}
-            <View
-              style={{
-                position: 'absolute',
-                left: 0,
-                top: shelf.top + (shelf.base - shelf.top) * 0.3,
-                width: W,
-                height: (shelf.base - shelf.top) * 0.7,
-                backgroundColor: SHOP.steel,
-              }}
-            />
-            <View
-              style={{
-                position: 'absolute',
-                left: 0,
-                top: shelf.top + (shelf.base - shelf.top) * 0.3,
-                width: W,
-                height: 3,
-                backgroundColor: SHOP.steelTop,
-              }}
-            />
-            <Image
-              source={COUNTER_STEEL}
-              resizeMode="stretch"
-              style={{ position: 'absolute', left: -2, top: shelf.base - shelfH * 0.5, width: W + 4, height: shelfH * 1.6 }}
-            />
-          </View>
+          // One run of stainless with the pans sunk into it, lit the way the design lights it:
+          // the surface fills the whole run, so what shows between two pans is counter and not
+          // wall; a dark recess sits just above the rims, where the wells drop away; and the
+          // front edge catches the light where it turns down to the cabinets.
+          <SteelBar key={i} W={W} shelf={shelf} />
         ) : (
           <View key={i}>
             {[0.17, 0.83].map((at) => (
@@ -261,11 +311,12 @@ export const KitchenRoom = memo(function KitchenRoom({
         source={RAIL_CAP}
         style={{ position: 'absolute', right: 1, top: railY, width: capW, height: capH, transform: [{ scaleX: -1 }] }}
       />
-      {/* ---- the work top: a surface receding behind whatever stands on it, then its front edge */}
+      {/* ---- the work top. All of it is surface: the topping counter stands in front of it and
+              hides its front edge completely, which is how the design has the two meet. */}
       <Image
         source={PLANK_TOP}
         resizeMode="stretch"
-        style={{ position: 'absolute', left: -2, top: tableLine - surfaceD, width: W + 4, height: surfaceD + lip + 2 }}
+        style={{ position: 'absolute', left: -2, top: tableLine - surfaceD, width: W + 4, height: woodBottom - tableLine + surfaceD }}
       />
       {/* the back of the table, where it meets the wall, sits in its own shadow */}
       <View
@@ -280,16 +331,19 @@ export const KitchenRoom = memo(function KitchenRoom({
         }}
       />
 
-      {/* ---- props standing on the work top */}
-      <Prop src={SUCCULENT} aspect={ART.succulent} x={W - propRow * 0.92} bottom={tableLine - surfaceD * 0.34} w={propRow * 0.16} shadow={0.8} />
-      <Prop src={CHALKBOARD} aspect={ART.chalkboard} x={W - propRow * 0.8} bottom={tableLine - surfaceD * 0.22} w={propRow * 0.37} shadow={0.74} />
-      <Prop src={STRAWS} aspect={ART.straws} x={W - propRow * 0.4} bottom={tableLine} w={propRow * 0.34} shadow={0.8} />
-
-      {/* ---- the table's front edge, in front of everything standing on it */}
+      {/* ---- props standing on the work top, forward of the cup, as the design has them */}
+      {PROP_FEET.map((foot) => (
+        <Shadow
+          key={foot.cx}
+          cx={W - propsW * (1 - foot.cx)}
+          cy={propsBottom - propsH * (1 - foot.cy)}
+          rx={propsW * foot.rx}
+          ry={propsW * foot.rx * 0.3}
+        />
+      ))}
       <Image
-        source={PLANK_FACE}
-        resizeMode="stretch"
-        style={{ position: 'absolute', left: -2, top: tableLine + lip, width: W + 4, height: counterH - lip }}
+        source={TABLE_PROPS}
+        style={{ position: 'absolute', left: W - propsW, top: propsBottom - propsH, width: propsW, height: propsH }}
       />
 
       {/* The coaster is a disc lying on the table, so the cup standing at `tableLine` meets it at
@@ -308,12 +362,24 @@ export const KitchenRoom = memo(function KitchenRoom({
         }}
       />
 
-      {/* ---- pink cabinets along the bottom, with the towel on its rail */}
-      <Image
-        source={CABINET}
-        resizeMode="stretch"
-        style={{ position: 'absolute', left: -2, top: cabinetTop, width: W + 4, height: H - cabinetTop + 2 }}
-      />
+      {/* ---- pink cabinets along the bottom, with the towel on its rail. A cabinet is a unit,
+              not a backdrop — stretched to the width of the room one would be a smear — so the
+              run is a single at each end with a double between them, each as wide as its own
+              art. `cabinetH` is sized to that run, so none of them is stretched. */}
+      {FLOOR.reduce<{ x: number; nodes: React.ReactNode[] }>(
+        (run, unit, i) => {
+          const w = ((W + 4) * unit.aspect) / FLOOR_SPAN;
+          run.nodes.push(
+            <Image
+              key={i}
+              source={unit.src}
+              style={{ position: 'absolute', left: run.x, top: cabinetTop, width: w, height: H - cabinetTop + 2 }}
+            />,
+          );
+          return { x: run.x + w, nodes: run.nodes };
+        },
+        { x: -2, nodes: [] },
+      ).nodes}
       <Prop src={TOWEL} aspect={ART.towel} x={W - cupH * 0.42} bottom={H} w={cupH * 0.38} />
     </View>
   );

@@ -112,6 +112,17 @@ there (`findStation` only considers teas), and only the docked one pours.
   drop onto it wherever it stands. Ice and syrup show how many scoops or pumps went in on the machine
   itself. Milk takes room in the cup, so a cup filled to the brim with tea has nowhere to put it.
 
+**The counters keep every box the same size and scroll instead of shrinking.** The dispensers
+share their shelf out between them, because the cup is carried to a particular tap and they all
+have to stay reachable; the topping bar and the equipment bar below do the opposite. Each box is
+sized once (`MAX_WIDTH`, and the row's height by its own art, so a bottle stays a bottle), the
+row starts at the left and runs off the right — the way it is read and the way it is swiped —
+and when a day brings more than the room is wide it becomes a `SwipeRow` you drag sideways. That swipe and the lift are **one gesture**, decided from
+the first few pixels: sideways swipes the row, anything else lifts the tool. The tool is picked up
+on touch either way — that is what lets a tap on a bin say what to do with it — and a swipe simply
+puts it back (`carry.cancel`). A swiped row offsets where the carried tool starts (`carry.begin`
+takes it), and the offsets are pulled back into range whenever a new day rearranges the counters.
+
 **All of this is the raw responder API (`GRABBY`), not `Pressable`**: a `Pressable` cancels its press when
 the finger drifts or the browser decides it was a long-press, which cut pours short. These gestures end
 only when the finger actually lifts, and the pager is frozen (`onDragging`) for the duration. Equipment
@@ -206,9 +217,13 @@ short of the base. Keep the drink on view styles.
 Nearly everything in the prep room is a **painted sprite**. `tools/cut-sheets.py` cuts
 `tools/sheets/*.png` into `src/assets/kitchen/`, and
 [kitchenArt.ts](src/components/art/kitchenArt.ts) is the only place that names those files. The
-sprites are generated — change the script (or the sheet), re-run it, never hand-edit a PNG. The one
-exception is the `pan-*.png` set, cut from a 1024px rendering of the kitchen sheet that no longer
-exists; they are checked in and the script leaves them alone. The dispensers and the cup have
+sprites are generated — change the script (or the sheet), re-run it, never hand-edit a PNG. The `pan-*.png`
+set came from a 1024px rendering of the kitchen sheet that no longer exists; those crops live in
+`tools/sheets/pans/` as source art — four of the seven are recolours that exist nowhere else —
+and `unclip()` finishes them off. Every one was cut too tight, losing the cap of the scoop
+standing in it and the foot of its tray, and the sheet still draws one pan whole: the same steel
+and the same red in all seven, so that one fills in for the lot. They are then trimmed to a
+single box around the tray's front edge, because a row of them is laid out from one aspect. The dispensers and the cup have
 scripts of their own — see "Liquids are cut, never drawn".
 
 Anything that has to *move* is drawn against a window the script cleared out of the artwork, which
@@ -230,10 +245,40 @@ keeps the painted ticks, highlights and the cat decal on top of it:
 - the **carried scoop** is `scoop.png` with the pieces heaped into its bowl, over the sprite —
   the bowl is solid chrome, so anything behind it is invisible;
 - the **pans, cartons, syrup, foam tubs and every fitting** (wall, lamps, shelf, steel counter,
-  cabinets, rail, coaster, plant, poster, chalkboard, cup stack, straws, towel) are whole sprites
+  cabinets, rail, coaster, plant, poster, cup stack, towel) are whole sprites
   that [KitchenRoom](src/components/art/KitchenRoom.tsx) and the station place by the layout's
   lines. Three pans and two pieces had no art of their own and are repainted from the ones that do,
-  by `repaint()`, which keeps the shading and leaves the red scoop alone.
+  by `repaint()`, which keeps the shading and leaves the red scoop alone;
+- the **topping counter** is the pack's own stainless counter (`counter-steel.png`), sliced
+  across and stretched over the room by `SteelBar` in KitchenRoom: `bar-splash.png` is the
+  raised back standing behind the pans, `bar-deck.png` the deck they are sunk into, and
+  `bar-front.png` the edge it turns down at — beyond the **apron**, the strip of deck a counter
+  keeps in front of its pans, which is where their name plaques hang (`APRON`, a fraction of a
+  pan, and counted into what a steel row takes up so the row below still lands where it should). The sprite's
+  *ends* are drawn in perspective and this counter runs off both sides of the room, so what is
+  stretched is a column out of its middle. Rebuilding the counter out of the mockup instead was
+  a long detour and never read right: the mockup's pans run edge to edge, so almost none of its
+  counter is ever on show, and the two tones it does show — a near-white front edge, a dark band
+  behind the rims — become stripes painted across a slab once there is bare counter between the
+  pans. The shadow each pan sits in is drawn **with the pan** (`Frame`) for the same reason.
+  Every line of the counter is measured off the pan's own rim (`shelf.rim`, lower than
+  `shelf.top`: a pan sprite starts at the scoop standing in it, `PAN_BODY` down), and the
+  stainless reaches only just far enough above the rims to stand those scoops in — the design's
+  counter is nearly all pan. `layoutKitchen` sets each bar's `from`, the work top comes down to
+  meet it, and each bar's `until` is the next bar's `from`, so no wall shows between them;
+- the run along the **floor** is a **single unit at each end with a double between them**
+  (`FLOOR` in KitchenRoom), and what is used of each is its **front alone** — the steel top a
+  unit ships with would stand under the counter's front as a second ledge. Each is as wide as
+  its own art and `cabinetH` is exactly as deep as that run wants to be: a cabinet is a unit,
+  not a backdrop, and stretched either way it is a cabinet pulled out of shape, which the
+  handles show first. Wanting them deeper is a reason to use *fewer* units across, not to
+  stretch the ones there are;
+- the things at the **right of the work top** — the straw tin, the plant behind it and the
+  chalkboard — are `table-props.png`, cut as one group out of `reference.png` itself by
+  `clear_room()`. The pack's straw tin is a different one (rainbow straws, a cat printed on it)
+  and the pack has no arrangement, so the group is taken from the design whole. The design runs
+  the chalkboard off the side of the screen, so the sprite does too and the room hangs it on the
+  right edge; its two contact shadows are placed by `PROP_FEET`.
 
 **The prep page is all kitchen.** There is no ticket rail or order slip above it: the room fills
 everything between the tabs and the action buttons, which is what gives the equipment the size it has

@@ -129,21 +129,25 @@ export const WALL = require('../../assets/kitchen/wall.png');
 export const LAMP = require('../../assets/kitchen/lamp.png');
 export const SHELF_PLANK = require('../../assets/kitchen/shelf-plank.png');
 export const PLANK_TOP = require('../../assets/kitchen/plank-top.png');
-export const PLANK_FACE = require('../../assets/kitchen/plank-face.png');
 export const SHELF_FOOT = require('../../assets/kitchen/shelf-foot.png');
-export const COUNTER_STEEL = require('../../assets/kitchen/counter-steel.png');
-export const CABINET = require('../../assets/kitchen/cabinet.png');
-export const DRAWER = require('../../assets/kitchen/drawer.png');
+/** The pack's stainless counter, sliced across: its raised back, its deck, its front edge. */
+export const BAR_SPLASH = require('../../assets/kitchen/bar-splash.png');
+export const BAR_DECK = require('../../assets/kitchen/bar-deck.png');
+export const BAR_FRONT = require('../../assets/kitchen/bar-front.png');
+/** The pink units along the floor: a single at each end, a double in the middle. Their fronts
+ *  alone — the steel top each ships with would stand under the counter's front as a second
+ *  ledge. */
+export const DRAWER = require('../../assets/kitchen/drawer-front.png');
+export const CABINET = require('../../assets/kitchen/cabinet-front.png');
 export const RAIL_CAP = require('../../assets/kitchen/rail-cap.png');
 export const RAIL_BAR = require('../../assets/kitchen/rail-bar.png');
 export const RAIL_CLIP = require('../../assets/kitchen/rail-clip.png');
 export const COASTER = require('../../assets/kitchen/coaster.png');
 export const PLANT = require('../../assets/kitchen/plant.png');
 export const POSTER = require('../../assets/kitchen/poster.png');
-export const CHALKBOARD = require('../../assets/kitchen/chalkboard.png');
-export const SUCCULENT = require('../../assets/kitchen/succulent.png');
 export const CUP_STACK = require('../../assets/kitchen/cup-stack.png');
-export const STRAWS = require('../../assets/kitchen/straws.png');
+/** The straw tin, the plant and the chalkboard together, cut off the design as one group. */
+export const TABLE_PROPS = require('../../assets/kitchen/table-props.png');
 export const TOWEL = require('../../assets/kitchen/towel.png');
 export const CARD = require('../../assets/kitchen/card.png');
 export const CARD_BLANK = require('../../assets/kitchen/card-blank.png');
@@ -154,7 +158,7 @@ export const ICON_CUP = require('../../assets/kitchen/icon-cup.png');
 export const ART = {
   jar: 116 / 205,
   cup: 113 / 174,
-  pan: 228 / 232,
+  pan: 235 / 239,
   scoop: 102 / 64,
   milk: 99 / 157,
   syrup: 77 / 167,
@@ -166,21 +170,24 @@ export const ART = {
   foot: 32 / 22,
   railCap: 36 / 53,
   railClip: 56 / 53,
-  counter: 211 / 104,
-  cabinet: 246 / 112,
+  drawer: 153 / 72,
+  cabinet: 246 / 72,
   coaster: 151 / 77,
   plant: 144 / 215,
   poster: 116 / 168,
-  chalkboard: 146 / 165,
-  succulent: 66 / 129,
   cupStack: 124 / 225,
-  straws: 129 / 154,
+  tableProps: 241 / 264,
   towel: 154 / 142,
 };
 
 // ------------------------------------------------------------------ where things line up
 /** How far down a dispenser its tap lets go of the tea. */
 export const JAR_SPOUT = 0.87;
+/**
+ * How far down a pan sprite its own rim starts: the top of the sprite is the scoop standing in
+ * it, which reaches well above the counter.
+ */
+export const PAN_BODY = 40 / 239;
 /** The bowl of the carried scoop — what you picked up is heaped here. */
 export const SCOOP_BOWL = { cx: 0.34, cy: 0.57, r: 0.17 };
 
