@@ -8,7 +8,7 @@ import { CupBuild } from '../game/reducer';
 import { DURATION, timing } from '../motion';
 import { colors, fonts } from '../theme';
 import { SHOP } from './art/KitchenRoom';
-import { ART, JAR_SPOUT, JAR_TEA, TEA_BG, TEA_ROOM } from './art/kitchenArt';
+import { ART, JAR_SPOUT, JAR_TEA, TEA_BG, TEA_FRONT, TEA_ROOM } from './art/kitchenArt';
 import { KitchenCup } from './KitchenCup';
 import { Spill, Stream, TapSwipe, useHoldPour } from './pour';
 
@@ -25,6 +25,13 @@ const JAR_FIT = 1.35;
 const HAZE = 1.3;
 /** How much of a jar is left by the time it is right at the end: soft, but still clearly a jar. */
 const HAZE_LEFT = 0.5;
+/**
+ * How much the jars either side of the middle one give up. Only the one over the cup pours, and
+ * nothing but where it stands used to say so; this quietens its neighbours a little so the one in
+ * the middle reads as the one in hand. It is a slot's worth of travel, so it follows the swipe —
+ * the jar being brought over comes up as the one leaving goes down.
+ */
+const SIDE_DIM = 0.22;
 /** A breath between two jars, in the plate's own pixels, so they do not stand on each other. */
 const JAR_GAP = 24;
 /** The plaque under a jar, hung on the front edge of the board it stands on. */
@@ -61,9 +68,12 @@ interface TeaWindowProps {
  * Like the room behind it the window is one painting (`TEA_BG`): its frame, the board its name is
  * written across, three shelves and the work top are all in the plate, and everything the player
  * touches is placed on the lines `TEA_ROOM` measures off it. The jars stand on the second shelf,
- * three at a time with the rest a swipe away; the cup stands in the middle of the work top, in
+ * a few at a time with the rest a swipe away; the cup stands in the middle of the work top, in
  * front of the shelves rather than under them; and how full it is is read off the card on the
  * right rather than off the glass.
+ *
+ * One painting is not one layer, though: the greenery down either side of it hangs in front of
+ * those shelves, so it is cut back out (`TEA_FRONT`) and drawn again over the jars.
  */
 export function TeaWindow({
   width: W,
@@ -92,6 +102,12 @@ export function TeaWindow({
   const top = Math.round(free + (band - h) / 2);
   /** Plate pixels to window pixels — the same trick the room itself is placed with. */
   const at = (v: number) => Math.round((v * w) / TEA_ROOM.width);
+  /**
+   * The same, left whole. A piece cut out of the plate and laid back over it has to land on its own
+   * pixels exactly, and rounding a sprite's corner and its width apart can put it half a pixel out,
+   * which shows up as a seam down the edge of every leaf.
+   */
+  const span = (v: number) => (v * w) / TEA_ROOM.width;
 
   // The shelf is a carousel the width of the board: a jar is as tall as the board above it leaves
   // room for, they stand shoulder to shoulder with no gap at all, and the row runs the whole way
@@ -192,8 +208,8 @@ export function TeaWindow({
           </Text>
         </View>
 
-        {/* The shelf, clipped to the three it shows, so the ones waiting their turn are off the
-            board rather than out over the vines. */}
+        {/* The shelf, clipped to the run it shows, so the ones waiting their turn are off the
+            board rather than out over the frame. */}
         <View style={[styles.bay, { left: bayX, top: jarTop, width: bayW, height: nameTop + nameH }]}>
           <Animated.View style={[StyleSheet.absoluteFill, shelf]}>
             {teas.map((option, i) => {
@@ -205,7 +221,7 @@ export function TeaWindow({
                   width={jarW}
                   height={jarH}
                   name={{ top: nameTop, height: nameH, width: slot }}
-                  shelf={{ shift, width: bayW }}
+                  shelf={{ shift, width: bayW, slot }}
                   chosen={i === chosen}
                   locked={cup.tea !== null && cup.tea !== option.id}
                   fill={build.fill}
@@ -219,6 +235,29 @@ export function TeaWindow({
               );
             })}
           </Animated.View>
+        </View>
+
+        {/* The vines and the potted plant, laid back over the shelf. They hang in *front* of the
+            boards in the painting, so the jars at either end of the row have to pass behind them
+            rather than over them. Everywhere else these are the plate's own pixels lying on
+            themselves, so there is nothing to see. */}
+        <View style={StyleSheet.absoluteFill} pointerEvents="none">
+          {(['left', 'right'] as const).map((side) => {
+            const box = TEA_ROOM.front[side];
+            return (
+              <Image
+                key={side}
+                source={TEA_FRONT[side]}
+                style={{
+                  position: 'absolute',
+                  left: span(box.x),
+                  top: span(box.y),
+                  width: span(box.w),
+                  height: span(box.h),
+                }}
+              />
+            );
+          })}
         </View>
 
         {/* The half of the pour that is already inside the glass goes under the cup, so the glass
@@ -317,8 +356,8 @@ function Tap({
   height: number;
   /** The plaque under it: how far below the jar it hangs, and how big it is. */
   name: { top: number; height: number; width: number };
-  /** The board it is standing on, and how far along that board it has been swiped. */
-  shelf: { shift: SharedValue<number>; width: number };
+  /** The board it is standing on, how far along it has been swiped, and one jar's worth of it. */
+  shelf: { shift: SharedValue<number>; width: number; slot: number };
   /** The one in the middle, over the cup. Only this one pours. */
   chosen: boolean;
   locked: boolean;
@@ -351,8 +390,17 @@ function Tap({
     const mid = left + width / 2 + sv.get();
     return Math.max(0, Math.min(1, Math.min(mid, w - mid) / (width * HAZE)));
   };
+  // How far off the middle of the board it is, in jars: 0 for the one over the cup, 1 for the two
+  // beside it and no further, so the rest of the row is quiet together rather than tailing away —
+  // the ends of it are the haze's to fade.
+  const aside = (sv: SharedValue<number>, w: number, slot: number) => {
+    'worklet';
+    return Math.min(1, Math.abs(left + width / 2 + sv.get() - w / 2) / slot);
+  };
   const style = useAnimatedStyle(() => ({
-    opacity: HAZE_LEFT + (1 - HAZE_LEFT) * clear(shelf.shift, shelf.width),
+    opacity:
+      (HAZE_LEFT + (1 - HAZE_LEFT) * clear(shelf.shift, shelf.width)) *
+      (1 - SIDE_DIM * aside(shelf.shift, shelf.width, shelf.slot)),
     transform: [{ scale: press.get() }],
   }));
   const haze = useAnimatedStyle(() => ({ opacity: 1 - clear(shelf.shift, shelf.width) }));

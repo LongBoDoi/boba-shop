@@ -167,6 +167,17 @@ export const ROOM = {
 export const TEA_BG = require('../../assets/kitchen/tea-room.png');
 
 /**
+ * The greenery down either side of that window, cut back out of it by `tools/cut-tea-front.ps1`
+ * so it can be drawn a second time *over* the jars. The vines and the potted plant hang in front
+ * of the shelves, and a jar swiped out to either end of the shelf was climbing over them; these
+ * are the plate's own pixels, so laid back over the plate they cannot be seen at all.
+ */
+export const TEA_FRONT = {
+  left: require('../../assets/kitchen/tea-front-left.png'),
+  right: require('../../assets/kitchen/tea-front-right.png'),
+};
+
+/**
  * Where that plate draws its surfaces, in its own 1156x1286 pixels — the same arrangement as
  * `ROOM` above, and re-measure these if the plate is re-cut. The sprite is the window *and* what
  * hangs past it, so the frame itself is `panel`.
@@ -203,6 +214,11 @@ export const TEA_ROOM = {
   board: { x0: 900, x1: 1115, top: 755, base: 960 },
   /** The button that shuts the window, over the frame's top right corner. */
   shut: { cx: 1070, cy: 110, d: 111 },
+  /** Where each `TEA_FRONT` sprite came off the plate, which is where it goes back. */
+  front: {
+    left: { x: 10, y: 22, w: 296, h: 878 },
+    right: { x: 853, y: 22, w: 292, h: 669 },
+  },
 };
 
 export const WALL = require('../../assets/kitchen/wall.png');

@@ -26,6 +26,10 @@ here:
 * `tools/cut-cup-design.ps1` writes `cup.png`, `cup-base.png` and `drink-<tea>.png` off
   tools/sheets/cup-design.png, which is the same cup drawn twice, empty and full.
 
+One more runs *after* this script rather than beside it: `tools/cut-tea-front.ps1` lifts the tea
+window's vines and potted plant back out of the `tea-room.png` written below, so the dispensers
+can stand behind them. Re-cut the window and that one has to be re-run.
+
 The game used to draw its liquids itself and they never matched the design, so nothing is drawn
 now — they are simply the design.
 

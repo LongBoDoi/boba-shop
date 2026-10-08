@@ -107,6 +107,7 @@ src/assets/kitchen/     the painted sprites themselves — generated, see "The k
 tools/                  cut-sheets.py: cuts the asset sheets into those sprites
                         cut-tea-jars.ps1: a whole dispenser per tea, off the kitchen sheet
                         cut-cup-design.ps1: the cup and its drink, off the cup design
+                        cut-tea-front.ps1: the tea window's greenery, back out of its own plate
 src/motion.ts           shared animation timings/easings
 src/theme.ts            colours and font family names
 ```
@@ -150,12 +151,26 @@ Dropping the cup still standing on the work top sends it home.
   shelf, the cup in the middle of its work top (taller than the gap above that top, because it
   stands in *front* of the shelves and is drawn after them), and the card on the right carries the
   measure.
+  **One painting is not one layer.** The vines down either side of that window and the potted
+  plant on the right hang in *front* of the shelves, so a jar swiped out to an end was climbing
+  over them. `tools/cut-tea-front.ps1` cuts them back out of the finished plate — by colour, since
+  a leaf is the only thing on it with green level with red and no blue to speak of; the pot is
+  terracotta, which is the shelf's own colour, so that one is a traced silhouette — and `TeaWindow`
+  draws them again (`TEA_FRONT`) over the shelf. They are the plate's own pixels, cut out of the
+  plate's own output, so laid back on it they are invisible; placing them is the one thing to be
+  careful of, which is why their boxes are in `TEA_ROOM.front` and are placed with `span` rather
+  than `at` — rounding a sprite's corner and its width apart puts it half a pixel out, and a seam
+  would run down the edge of every leaf.
 - **Tea is poured in that window, and only there.** The shelf is a **carousel** the width of the
   board: the day's teas stand in a row a `JAR_GAP` apart, each with its name on a plaque hung off
   the front edge of the board, and the row runs the whole way across and moves with the finger,
   stopping at its ends — it does not wrap round. **Only the jar over the cup pours**; the others
   are brought across first, by swiping the shelf or by touching one, and nothing marks the live
-  one but where it is standing. A jar on its way off the end goes soft rather than being cut off
+  one but where it is standing — that, and `SIDE_DIM`, which takes a little opacity off the jars
+  either side of it so the middle one reads as the one in hand. It is a slot's worth of travel and
+  goes no further, so the row is quiet together rather than tailing away, and it follows the swipe:
+  the jar coming over rises as the one leaving goes down.
+  A jar on its way off the end goes soft rather than being cut off
   by the edge: `HAZE` fades it out and crossfades a blurred copy of the same sprite over the sharp
   one, because `blurRadius` cannot be animated but one image lying over another can, and the fade
   is read off the swipe so it follows the finger. The run holds as many **whole** jars as the
