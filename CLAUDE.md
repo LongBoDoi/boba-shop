@@ -38,42 +38,38 @@ some networks reset), prefix the command: `NODE_OPTIONS="--dns-result-order=ipv4
 `eas-cli` needs `npx eas-cli@latest login` on a new machine. `app.json` uses `web.output: "single"`;
 `public/index.html` is the web page template (sets `lang="vi"`).
 
-### Shipping the phone builds (EAS Build + EAS Update)
+### Sharing the game on a phone (Expo Go)
 
-The game is **not** on the App Store or Google Play. It is handed out as an installable build to a
-handful of people, and keeps itself current over the air afterwards.
-
-One build profile does it, `friends` in `eas.json`: `distribution: "internal"` (so Android gets a
-plain APK and iOS an ad-hoc build), `channel: "friends"`, and `autoIncrement` so every build gets a
-fresh `versionCode` / `buildNumber`.
+The game is not on the App Store or Google Play, and it is not a standalone build either. It is
+published to EAS Update and opened inside **Expo Go**: the friend installs Expo Go from their own
+store, opens one link, and plays. Publishing a new version is one command and a few seconds.
 
 ```bash
-npx eas-cli@latest build --platform android --profile friends   # APK + an install page to share
-npx eas-cli@latest build --platform ios --profile friends       # needs a paid Apple Developer account
 npx eas-cli@latest update --channel friends --message "what changed" --environment production
 ```
 
-`build` prints a page on `expo.dev` with a QR code; that link is what the friends open. Android
-installs it after the usual "unknown source" warning. iOS is the awkward half: ad-hoc distribution
-needs a **paid Apple Developer account**, and every device has to be registered by UDID
-(`npx eas-cli@latest device:create`, then rebuild) before it can install — up to 100 a year.
+The link that opens it, and a QR code for the same link:
 
-**`update` is the one to reach for.** It is a JS/asset push: seconds instead of a cloud build, and
-nobody reinstalls anything. `runtimeVersion` follows the `appVersion` policy, so an update reaches
-every installed build whose `version` in `app.json` matches. That means:
+```
+exp://u.expo.dev/a7ab235c-52a1-459c-a82e-cca1e4c3cf36?channel-name=friends&runtime-version=exposdk:57.0.0
+https://qr.expo.dev/eas-update?slug=exp&projectId=a7ab235c-52a1-459c-a82e-cca1e4c3cf36&channel=friends&runtimeVersion=exposdk:57.0.0
+```
 
-- Changed TypeScript, art, fonts-as-assets, game data → `eas update`, done.
-- Changed anything *native* — added or removed a package with native code, touched `plugins`,
-  `android`/`ios` config, or bumped the SDK → bump `version` in `app.json`, build again, and have
-  everyone reinstall. Pushing such a change as an update would reach phones whose native code can't
-  run it.
+Two things hold this together, and both are easy to break by accident:
 
-`src/updates.ts` is the in-app half. `expo-updates` checks on every cold start and downloads in the
-background; `useGameUpdates(safeToRestart)` also re-checks when the app returns to the foreground
-(throttled to 15 minutes), and then restarts the game *only between days* — a restart drops the
-in-memory `GameState`, so doing it mid-shift would throw away the player's day. While an update sits
-waiting, `UpdateNotice` says so at the foot of the screen. None of this runs in Expo Go, on web, or
-in development: `Updates.isEnabled` is false there.
+- **`runtimeVersion` in `app.json` is the literal string `exposdk:57.0.0`**, not a policy. Expo Go
+  asks the update server for exactly that runtime, and an update published under a policy
+  (`appVersion`, `fingerprint`) is invisible to it. **Upgrading the SDK means editing that string**
+  — otherwise every phone quietly stops seeing new updates.
+- **Everything has to run inside Expo Go**, with only the native modules Expo Go already ships.
+  That was always the rule here; it is now the shipping path as well. In particular there is no
+  `expo-updates` in the project: Expo Go fetches the newest published update itself every time the
+  project is opened, which is all the auto-update this needs.
+
+One piece of upkeep is not in the repo: since 12 May 2026 Expo Go only loads a project owned by you
+or by an organisation you belong to. The project belongs to the personal account `manhlong`, so
+sharing it with anyone else means moving it to the `manhlongs-team` organisation on expo.dev and
+inviting each friend (a free Expo account each) into that organisation.
 
 ## Architecture
 
@@ -107,7 +103,6 @@ tools/                  cut-sheets.py: cuts the asset sheets into those sprites
                         cut-cup-design.ps1: the cup and its drink, off the cup design
 src/motion.ts           shared animation timings/easings
 src/theme.ts            colours and font family names
-src/updates.ts          over-the-air updates: check, download, restart between days
 ```
 
 ### The two pages (swipe navigation)
@@ -400,7 +395,8 @@ lines and a row for the vertical ones.
 - `Cup` is tapered by drawing triangles in `backgroundColor` over its corners, so pass the colour
   actually behind it. Cups that move over busy backgrounds use `tapered={false}`.
 - Everything used must run in Expo Go (current libs all do). Adding a library with native code
-  that Expo Go lacks means switching to a development build.
+  that Expo Go lacks costs the whole sharing path — see "Sharing the game on a phone": a
+  development build would have to be installed on every friend's phone instead of one link.
 
 ## Verifying changes
 
