@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta httpEquiv="X-UA-Compatible" content="IE=edge" />
-    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, shrink-to-fit=no" />
     <title>%WEB_TITLE%</title>
     <!-- The `react-native-web` recommended style reset: https://necolas.github.io/react-native-web/docs/setup/#root-element -->
     <style id="expo-reset">
@@ -23,6 +23,36 @@
         flex: 1;
       }
     </style>
+    <style id="game-surface">
+      /* The page is a game surface, not a document. A hold is "pour" or "carry" — never
+         "select this text", "save this image" or "zoom". RNW styles its own elements with
+         single-class rules, so the selection properties have to out-rank them. */
+      * {
+        -webkit-touch-callout: none !important;
+        -webkit-user-select: none !important;
+        user-select: none !important;
+        -webkit-tap-highlight-color: transparent !important;
+        -webkit-user-drag: none !important;
+        touch-action: manipulation;
+      }
+      /* Long-pressing an image is what opens the iOS share sheet; let the taps fall through
+         to the View that owns the gesture instead. */
+      img {
+        pointer-events: none;
+      }
+      html,
+      body {
+        overscroll-behavior: none;
+        -webkit-text-size-adjust: 100%;
+        text-size-adjust: 100%;
+      }
+      /* Pins the page so Safari cannot rubber-band or pull-to-refresh the game away. */
+      body {
+        position: fixed;
+        width: 100%;
+        margin: 0;
+      }
+    </style>
   </head>
 
   <body>
@@ -32,6 +62,21 @@
     </noscript>
     <!-- The root element for your Expo app. -->
     <div id="root"></div>
-  
-</body>
+    <script>
+      // The browser gestures that survive CSS have to be refused by hand: the context menu an
+      // Android long-press raises, a drag started on artwork, a selection dragged across labels,
+      // and the iOS pinch-zoom gestures.
+      (function () {
+        var refuse = function (event) {
+          event.preventDefault();
+        };
+        ["contextmenu", "dragstart", "selectstart"].forEach(function (name) {
+          document.addEventListener(name, refuse);
+        });
+        ["gesturestart", "gesturechange", "gestureend"].forEach(function (name) {
+          document.addEventListener(name, refuse, { passive: false });
+        });
+      })();
+    </script>
+  </body>
 </html>

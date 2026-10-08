@@ -38,39 +38,44 @@ some networks reset), prefix the command: `NODE_OPTIONS="--dns-result-order=ipv4
 `eas-cli` needs `npx eas-cli@latest login` on a new machine. `app.json` uses `web.output: "single"`;
 `public/index.html` is the web page template (sets `lang="vi"`).
 
-### Sharing the game on a phone (Expo Go)
+### Playing on a phone, and the app routes that were ruled out
 
-The game is not on the App Store or Google Play, and it is not a standalone build either. It is
-published to EAS Update and opened inside **Expo Go**: the friend installs Expo Go from their own
-store, opens one link, and plays. Publishing a new version is one command and a few seconds.
+The phone story is the web page: open https://boba-shop.expo.app in the browser, or add it to the
+home screen. There is no app build, and the routes to one were each tried and dropped — worth not
+re-litigating:
 
-```bash
-npx eas-cli@latest update --channel friends --message "what changed" --environment production
-```
+- **Expo Go** (publish with `eas update`, hand out one link) is dead on the current client. Expo Go
+  57.0.9 cannot launch EAS Updates at all: every runtime string (`exposdk:57.0.0`, `exposdk:57.0.9`,
+  bare `57.0.0`), a manifest with `sdkVersion` pinned to the client's own build number, and the
+  `exp://u.expo.dev/update/<id>` link form all died with `IOException: Failed to download remote
+  update`, while the published update itself was provably intact (manifest `200`, all 84 assets
+  downloadable with the `assetRequestHeaders` tokens). The fault is inside the client — it filters
+  updates with `sdkVersions.contains(manifest.getExpoGoSDKVersion())` — and the fix (expo/expo#46944)
+  had not shipped as of October 2026.
+- **A standalone build** is fine on Android (EAS generates the keystore; nothing to sign up for) but
+  iOS needs a paid Apple Developer account for any private route, ad-hoc or TestFlight.
+- **The stores' private channels** — Play internal testing (100 testers by email, $25 once) and
+  TestFlight internal (100 App Store Connect users, $99/yr) — are the clean answer if that money is
+  ever worth spending. Neither needs a public listing or a review.
 
-The link that opens it, and a QR code for the same link:
+### The page is a game surface, not a document
 
-```
-exp://u.expo.dev/a7ab235c-52a1-459c-a82e-cca1e4c3cf36?channel-name=friends&runtime-version=exposdk:57.0.0
-https://qr.expo.dev/eas-update?slug=exp&projectId=a7ab235c-52a1-459c-a82e-cca1e4c3cf36&channel=friends&runtimeVersion=exposdk:57.0.0
-```
+`public/index.html` refuses the browser behaviours that a game's holds and drags would otherwise
+trigger: the iOS share sheet on a long-pressed image, the selection magnifier on a long-pressed
+label, the Android long-press context menu, double-tap and pinch zoom, image dragging, and Safari's
+rubber-band / pull-to-refresh.
 
-Two things hold this together, and both are easy to break by accident:
+Two details make it work:
 
-- **`runtimeVersion` in `app.json` is the literal string `exposdk:57.0.0`**, not a policy. Expo Go
-  asks the update server for exactly that runtime, and an update published under a policy
-  (`appVersion`, `fingerprint`) is invisible to it. **Upgrading the SDK means editing that string**
-  — otherwise every phone quietly stops seeing new updates.
-- **Everything has to run inside Expo Go**, with only the native modules Expo Go already ships.
-  That was always the rule here; it is now the shipping path as well. `expo-updates` sits in
-  `package.json` only because `eas update` reinstalls it when publishing — nothing imports it, and
-  inside Expo Go it would be inert. Expo Go fetches the newest published update itself every time
-  the project is opened, which is all the auto-update this needs.
+- The selection rules carry `!important`. React Native Web styles its elements with single-class
+  rules, which out-rank a bare `*` selector.
+- `img { pointer-events: none }` is the one that stops the iOS image menu. RNW lays an invisible
+  `<img>` over every picture on purpose — its own source comments it as *"Accessibility image allows
+  users to trigger the browser's image context menu"* — so the gesture has to be let through to the
+  `View` underneath, which is what owns it.
 
-One piece of upkeep is not in the repo: since 12 May 2026 Expo Go only loads a project owned by you
-or by an organisation you belong to. The project belongs to the personal account `manhlong`, so
-sharing it with anyone else means moving it to the `manhlongs-team` organisation on expo.dev and
-inviting each friend (a free Expo account each) into that organisation.
+`touch-action` stays at `manipulation` rather than `none`: `none` would kill the page pager's swipe
+along with the zoom.
 
 ## Architecture
 
@@ -395,9 +400,9 @@ lines and a row for the vertical ones.
 - Custom fonts: set `fontFamily: fonts.*` and don't also set `fontWeight`.
 - `Cup` is tapered by drawing triangles in `backgroundColor` over its corners, so pass the colour
   actually behind it. Cups that move over busy backgrounds use `tapered={false}`.
-- Everything used must run in Expo Go (current libs all do). Adding a library with native code
-  that Expo Go lacks costs the whole sharing path — see "Sharing the game on a phone": a
-  development build would have to be installed on every friend's phone instead of one link.
+- Everything used must work on the web build — that is where the game actually ships — and in
+  Expo Go, which is how it is tried on a real phone while developing. A library with native code
+  that Expo Go lacks costs both.
 
 ## Verifying changes
 

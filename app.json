@@ -33,10 +33,6 @@
     "owner": "manhlong",
     "plugins": [
       "expo-font"
-    ],
-    "runtimeVersion": "exposdk:57.0.0",
-    "updates": {
-      "url": "https://u.expo.dev/a7ab235c-52a1-459c-a82e-cca1e4c3cf36"
-    }
+    ]
   }
 }
