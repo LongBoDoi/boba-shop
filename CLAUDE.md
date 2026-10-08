@@ -212,11 +212,16 @@ Dropping the cup still standing on the work top sends it home.
 **Every box is the same size however many there are, and a row scrolls instead of shrinking.**
 Each is as big as its own art goes under the surface above it (`MAX_WIDTH`, and the row's height
 by its own art, so a bottle stays a bottle); a day that brings more of them is a longer row, not
-a row of thumbnails. The dispensers stand shoulder to shoulder (`TEA_GAP`) at the left of their
-shelf, under a little wooden `ShelfSign` reading "Trà" on the board above them, and they carry no
-name plaques — six of them fill the shelf and the colour of the tea is what tells them apart. The
-shelf is the one row that cannot be swiped, so it is also the only one held to its own run: a
-seventh tea would shrink all seven rather than stand out over the fridge. The rows below start at
+a row of thumbnails. The dispensers **divide their shelf between them** — a jar takes an equal
+share of the board, so however many the day has they stand evenly along it and a full shelf fills
+it exactly, rather than bunching at one end with the rest of the board bare. `TEA_GAP` is the least
+board between two of them and `TEA_SPREAD` the most, so three teas stand in the middle of the shelf
+instead of strung along it a jar's width apart. What they divide is the part of the shelf **that is
+on screen**: a phone taller than the painting crops it at the sides, and the end of the shelf can go
+with it. They stand under a little wooden `ShelfSign` reading "Trà" on the board above them, and
+they carry no name plaques — the colour of the tea is what tells them apart. The shelf is the one
+row that cannot be swiped, so it is also the only one held to its own run: a seventh tea would
+shrink all seven rather than stand out over the fridge. The rows below start at
 the left and run off the right — the way it is read and the way it is swiped —
 and when a day brings more than the room is wide it becomes a `SwipeRow` you drag sideways. That swipe and the lift are **one gesture**, decided from
 the first few pixels: sideways swipes the row, anything else lifts the tool. The tool is picked up

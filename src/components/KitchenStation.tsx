@@ -126,8 +126,15 @@ export interface KitchenLayout {
 /** How much wider than its own art a pan is drawn, towards the design's wider pans. */
 const PAN_WIDEN = 1.16;
 
-/** The sliver between two jars: they stand shoulder to shoulder, not spread down the shelf. */
+/** The least board between two jars, on the day the shelf is full and has none to spare. */
 const TEA_GAP = 2;
+/**
+ * The most, as a share of a jar's width. The jars take an equal share of the board each, so a
+ * full shelf fills it exactly and a short day's does not — and on a day with only three teas, a
+ * share of the board apiece would leave them strung along it a jar's width apart. Past this they
+ * stop spreading and the row stands in the middle of the shelf instead.
+ */
+const TEA_SPREAD = 0.3;
 
 /** The pans are drawn wider than they are tall; everything else keeps its own art's shape. */
 const widened = (kind: StationKind) => kind === 'topping' || kind === 'ice';
@@ -214,8 +221,16 @@ export function layoutKitchen(config: DayConfig, W: number, H: number): KitchenL
     // The plaque hangs below the surface, so all of this is the box's: what the shelf above
     // leaves it.
     const headroom = base - Math.round(py(level.ceiling));
-    const left = Math.round(px(level.x0));
-    const run = Math.round(px(level.x1)) - left;
+    let left = Math.round(px(level.x0));
+    let run = Math.round(px(level.x1)) - left;
+    if (tea) {
+      // A phone taller than the painting keeps the painting's shape and crops it at the sides, and
+      // the end of the shelf can go with it. The jars divide what is actually on screen, so the
+      // one at the end is not left standing half off the edge of it.
+      const end = Math.min(left + run, W);
+      left = Math.max(left, 0);
+      run = end - left;
+    }
 
     // Every box is as big as its own art goes in the space above the surface — never shrunk so
     // that the day's whole range fits across at once, which is what used to turn a late day's
@@ -234,20 +249,26 @@ export function layoutKitchen(config: DayConfig, W: number, H: number): KitchenL
     const widths = items.map((item) =>
       Math.round(h * ASPECT[tea ? 'tea' : item.kind] * (widened(item.kind) ? PAN_WIDEN : 1)),
     );
-    // Jars and pans sit shoulder to shoulder; a bottle or a carton takes a column of its own,
-    // wide enough to put its name under. Six jars at this size are what the shelf holds, which
-    // is every tea in the game.
+    // The jars divide the board between them, so however many the day has they stand evenly
+    // along it rather than shoulder to shoulder at one end of it with the rest of the shelf bare.
+    // Pans sit shoulder to shoulder, since their row runs off the room and is swiped; a bottle or
+    // a carton takes a column of its own, wide enough to put its name under.
     const slots = items.map((item, i) =>
-      tea ? widths[i] + TEA_GAP : widened(item.kind) ? widths[i] : Math.max(widths[i], Math.round(W * 0.2)),
+      tea
+        ? Math.min(run / items.length, widths[i] * (1 + TEA_SPREAD))
+        : widened(item.kind)
+          ? widths[i]
+          : Math.max(widths[i], Math.round(W * 0.2)),
     );
     const span = slots.reduce((sum, slot) => sum + slot, 0);
-    // Both the shelf and the counters start hard against the left of what they stand on.
-    let x = left;
+    // The counters start hard against the left of what they stand on and run off the right if they
+    // have to. The shelf cannot be swiped, so what its row does not use is split either side of it.
+    let x = tea ? left + (run - span) / 2 : left;
 
     items.forEach((item, i) => {
-      const slot = slots[i];
-      const cx = Math.round(x + slot / 2);
-      x += slot;
+      const slot = Math.round(slots[i]);
+      const cx = Math.round(x + slots[i] / 2);
+      x += slots[i];
       const option =
         item.kind === 'ice' || item.kind === 'sugar' ? undefined : getIngredient(categoryOf(item.kind), item.id);
       stations.push({
@@ -273,11 +294,13 @@ export function layoutKitchen(config: DayConfig, W: number, H: number): KitchenL
     });
 
     if (tea) {
-      teaBay = { x0: left, x1: left + span, top: base - h, base };
+      // The whole board, not just the run the jars happen to use: the row stands in the middle of
+      // it, so the bare ends are between the jars and the edge rather than off to one side, and a
+      // cup put down on one is plainly meant for the shelf.
+      teaBay = { x0: left, x1: left + run, top: base - h, base };
       teaSign = {
-        // Over the jars rather than over the shelf, so that on a day with only three of them it
-        // is still naming the three and not the bare end of the board.
-        cx: left + Math.round(span / 2),
+        // The row is centred on the board, so the middle of one is the middle of the other.
+        cx: left + Math.round(run / 2),
         top: Math.round(py(ROOM.shelf.board)) - 2,
         height: Math.max(15, Math.round(py(ROOM.shelf.top) - py(ROOM.shelf.board))),
       };
