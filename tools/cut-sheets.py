@@ -24,7 +24,9 @@ here:
 * `tools/cut-tea-jars.ps1` writes `jar-<tea>.png` — a whole dispenser per tea, glass and tea
   together, off tools/sheets/kitchen.png;
 * `tools/cut-cup-design.ps1` writes `cup.png`, `cup-base.png` and `drink-<tea>.png` off
-  tools/sheets/cup-design.png, which is the same cup drawn twice, empty and full.
+  tools/sheets/cup-design.png, which is the same cup drawn twice, empty and full;
+* `tools/cut-topping-stand.ps1` writes `topping-stand.png` off tools/sheets/topping-stand.png,
+  which arrived flattened onto a painted checkerboard rather than with an alpha channel.
 
 One more runs *after* this script rather than beside it: `tools/cut-tea-front.ps1` lifts the tea
 window's vines and potted plant back out of the `tea-room.png` written below, so the dispensers

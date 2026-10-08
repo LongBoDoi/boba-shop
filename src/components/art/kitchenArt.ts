@@ -102,6 +102,30 @@ export const PAN: Record<string, number> = {
   ice: require('../../assets/kitchen/pan-ice.png'),
 };
 
+/**
+ * The stand the pans are set into, painted whole — frame, back wall, deck and its own `Topping`
+ * sign, which is why no sign is drawn over this one the way it is over the tea shelf. Cut off
+ * `tools/sheets/topping-stand.png` by `tools/cut-topping-stand.ps1`.
+ */
+export const TOPPING_STAND = require('../../assets/kitchen/topping-stand.png');
+
+/** Where that stand takes its pans, in fractions of its own sprite. */
+export const STAND = {
+  /**
+   * The two bands of deck a row of pans stands on, back then front. `feet` is the line their feet
+   * are on and `x0`/`x1` the run of deck they divide — wider at the front than at the back,
+   * because the deck is painted going away from you. The deck is shallower than two pans are
+   * tall, so the front band overlaps the back one by about a fifth and is drawn over it, which is
+   * what a second row behind a first one looks like anyway.
+   */
+  rows: [
+    { feet: 0.52, x0: 0.13, x1: 0.8 },
+    { feet: 0.768, x0: 0.104, x1: 0.828 },
+  ],
+  /** How many pans a band holds before the day's range needs a wider one. */
+  across: 3,
+};
+
 /** One of whatever is in a pan — for the scoop you carry and the pile in the cup. */
 export const PIECE: Record<string, number> = {
   pearls: require('../../assets/kitchen/piece-pearl.png'),
@@ -146,8 +170,12 @@ export const ROOM = {
    * on.
    */
   shelf: { x0: 48, x1: 586, board: 309, top: 376, base: 512 },
-  /** The tiled recess under it, and the ledge in front of the fridge at the same height. */
-  alcove: { top: 566, base: 744 },
+  /**
+   * The tiled recess under it, and the ledge in front of the fridge at the same height. `x0` and
+   * `x1` are the recess's own walls, which the topping stand is centred between; `top` is the
+   * underside of the shelf's board, which the stand's sign is the one thing allowed past.
+   */
+  alcove: { x0: 125, x1: 595, top: 566, base: 744 },
   ledge: { x0: 617, top: 560, base: 740 },
   /** The work top through the middle: where a cup stands on it, and the edge it turns down at. */
   table: { top: 820, stand: 900, base: 918 },
@@ -255,6 +283,7 @@ export const ART = {
   jar: 116 / 205,
   cup: 113 / 174,
   pan: 235 / 239,
+  stand: 760 / 454,
   scoop: 102 / 64,
   milk: 99 / 157,
   syrup: 77 / 167,

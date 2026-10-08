@@ -108,6 +108,7 @@ tools/                  cut-sheets.py: cuts the asset sheets into those sprites
                         cut-tea-jars.ps1: a whole dispenser per tea, off the kitchen sheet
                         cut-cup-design.ps1: the cup and its drink, off the cup design
                         cut-tea-front.ps1: the tea window's greenery, back out of its own plate
+                        cut-topping-stand.ps1: the topping stand, off the checkerboard it came on
 src/motion.ts           shared animation timings/easings
 src/theme.ts            colours and font family names
 ```
@@ -129,8 +130,8 @@ palette it exports.
 (`src/components/KitchenStation.tsx`) is a room, not a menu, and **the cup is a physical object you drag
 around it** (`PanResponder`; the pager is frozen via `onDragging` while you hold it).
 `layoutKitchen(config, w, h)` places everything absolutely, **on the surfaces the painting already
-has** (`LEVELS`): the tea dispensers in the open shelf across the top, the toppings on the ledge in
-front of the fridge, the ice/sugar/milk/foam on the bench nearer the viewer, and the cup on its
+has** (`LEVELS`): the tea dispensers in the open shelf across the top, the toppings in their stand
+in the tiled alcove, the ice/sugar/milk/foam on the bench nearer the viewer, and the cup on its
 coaster through the middle of the work top. Each dispenser gets a **dock**: the spot the cup is held
 while that tap runs into it, just under its shelf.
 Dropping the cup still standing on the work top sends it home.
@@ -202,6 +203,24 @@ Dropping the cup still standing on the work top sends it home.
   (`MIN_FILL`). The tea stands *inside* the tube, so full is the tube less its wall at both ends.
   A dashed ring printed round a cup this small was never easy to read against the drink behind it,
   so the glass is left clear.
+- **The toppings are a piece of furniture, not a row.** They used to be loose pans along the ledge,
+  a row that ran off the room and was swiped back; they stand in a painted stand now
+  (`TOPPING_STAND`, cut by `tools/cut-topping-stand.ps1`), centred in the tiled alcove the room
+  already paints a recess for, filling it from the ledge up to the shelf above — the stand's own
+  sign is the one part of it allowed past that, because a sign hangs where it can be read. It
+  carries its own `Topping` across it, so unlike the tea shelf nothing is drawn over it.
+  `standToppings` sets the day's pans into a grid of its deck (`STAND.rows`, fractions of the
+  sprite): two bands, the front one wider and lower because the deck is painted going away from
+  you. The deck is shallower than two pans are tall, so the front band overlaps the back one by
+  about a fifth and is pushed later so it is drawn over it — which is what a second row behind a
+  first one looks like anyway. A pan is the same size with two of them as with six; what a short
+  day changes is the *shape* of the grid — up to three stand in a single band through the middle
+  of the deck rather than huddled at the back, and the odd one on a day of five goes to the front
+  band, the nearer and the easier to reach. They wear **no name plaques** (the stand is named, and
+  six Vietnamese topping names would not fit under six pans this size) and cast **no pool of their
+  own** (`shadow={false}` — they are set into a tray that is painted with its own shadow). What a
+  pan holds is said on the hint line the moment it is picked up instead, which is what `onGrab`
+  on `useCarryGesture` is for.
 - **Everything else — carry it to the cup.** The topping pans, the ice pan, the syrup bottle, the milk
   cartons and the foam tubs are dragged: `useCarry` keeps what's in hand, draws the tool following the
   finger above everything else, and on release either tips it into the cup (`SCOOP` / `ICE_SCOOP` /

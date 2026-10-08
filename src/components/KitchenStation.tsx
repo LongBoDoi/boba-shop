@@ -37,7 +37,9 @@ import {
   ROOM,
   SCOOP,
   SCOOP_BOWL,
+  STAND,
   SYRUP,
+  TOPPING_STAND,
 } from './art/kitchenArt';
 import { KitchenCup } from './KitchenCup';
 import { GRABBY } from './pour';
@@ -100,6 +102,14 @@ export interface TeaBay {
   base: number;
 }
 
+/** Where the painted topping stand goes, which its pans are then set into. */
+export interface ToppingStand {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
 /** A row the player can swipe along, and how far it may go. */
 interface PanRow {
   offset: SharedValue<number>;
@@ -113,6 +123,8 @@ export interface KitchenLayout {
   /** Both null on a day with no dispensers at all, which cannot happen in play. */
   teaSign: TeaSign | null;
   teaBay: TeaBay | null;
+  /** Null on a day with no toppings. */
+  toppingStand: ToppingStand | null;
   /** Where a cup stands on the work top through the middle of the room. */
   tableLine: number;
   /** Where the pink units at the foot of the room start. */
@@ -138,6 +150,10 @@ const TEA_SPREAD = 0.3;
 
 /** The pans are drawn wider than they are tall; everything else keeps its own art's shape. */
 const widened = (kind: StationKind) => kind === 'topping' || kind === 'ice';
+
+/** How wide the topping stand may get, as a fraction of the room's width — a backstop for a
+ *  screen so short and wide that the alcove would otherwise hand it most of the room. */
+const STAND_WIDTH = 0.52;
 
 /** How wide a piece of equipment may get, as a fraction of the room's width. */
 const MAX_WIDTH: Record<StationKind, number> = {
@@ -211,10 +227,17 @@ export function layoutKitchen(config: DayConfig, W: number, H: number): KitchenL
   const strips: RowStrip[] = [];
   let teaSign: TeaSign | null = null;
   let teaBay: TeaBay | null = null;
+  let toppingStand: ToppingStand | null = null;
 
   rows.forEach((items, r) => {
-    const level = LEVELS[Math.min(r, LEVELS.length - 1)];
     const kind = items[0].kind;
+    if (kind === 'topping') {
+      toppingStand = standToppings(items, r, W, px, py, cupH, stations);
+      strips.push({ scroll: false, span: toppingStand.w });
+      return;
+    }
+
+    const level = LEVELS[Math.min(r, LEVELS.length - 1)];
     const tea = kind === 'tea';
 
     const base = Math.round(py(level.base));
@@ -314,6 +337,7 @@ export function layoutKitchen(config: DayConfig, W: number, H: number): KitchenL
     strips,
     teaSign,
     teaBay,
+    toppingStand,
     tableLine,
     cabinetTop: Math.round(py(ROOM.cabinets)),
     cupW,
@@ -323,6 +347,85 @@ export function layoutKitchen(config: DayConfig, W: number, H: number): KitchenL
   };
 }
 
+
+/**
+ * Set the day's toppings into the painted stand in the alcove, and say where the stand itself
+ * goes. The toppings used to be a row of loose pans along the ledge that ran off the room and was
+ * swiped back; they are one piece of furniture now, standing where the room already paints a
+ * recess for it, with its pans in a grid of its deck.
+ *
+ * Nothing about the grid depends on the day: a pan is the same size with two of them as with six,
+ * the way a dispenser is the same size on day one as on day seven. What a short day changes is how
+ * many bands the grid has — up to three pans stand in a single band through the middle of the deck
+ * rather than huddled at the back of it — and the odd one on a day of five goes to the front band,
+ * which is the nearer and the easier to reach.
+ *
+ * The pans are pushed back band first, so the front band is drawn over it where the two overlap.
+ */
+function standToppings(
+  items: { id: string; kind: StationKind }[],
+  row: number,
+  W: number,
+  px: (x: number) => number,
+  py: (y: number) => number,
+  cupH: number,
+  stations: Station[],
+): ToppingStand {
+  const base = Math.round(py(ROOM.alcove.base));
+  // The stand fills the recess, and its sign is the one part of it that may stand past the top of
+  // that recess into the face of the shelf's board — a sign hangs where it can be read.
+  const h = Math.round(Math.min(base - py(ROOM.shelf.base), (W * STAND_WIDTH) / ART.stand));
+  const w = Math.round(h * ART.stand);
+  const left = Math.round(px((ROOM.alcove.x0 + ROOM.alcove.x1) / 2) - w / 2);
+  const stand: ToppingStand = { x: left, y: base - h, w, h };
+
+  const back = items.length > STAND.across ? Math.floor(items.length / 2) : 0;
+  const bands = back > 0 ? [items.slice(0, back), items.slice(back)] : [items];
+  // A band of its own sits halfway down the deck; two take the deck's own two.
+  const depth = (i: number) => (bands.length === 1 ? 0.5 : i);
+  const across = Math.max(STAND.across, Math.ceil(items.length / 2));
+
+  bands.forEach((band, i) => {
+    const t = depth(i);
+    const mix = (pick: (band: { feet: number; x0: number; x1: number }) => number) =>
+      pick(STAND.rows[0]) + (pick(STAND.rows[1]) - pick(STAND.rows[0])) * t;
+    const runX0 = left + w * mix((b) => b.x0);
+    const runX1 = left + w * mix((b) => b.x1);
+    const feet = Math.round(stand.y + h * mix((b) => b.feet));
+    const paneW = Math.round((runX1 - runX0) / across);
+    const paneH = Math.round(paneW / (ART.pan * PAN_WIDEN));
+    // A band that is not full stands in the middle of its run rather than at one end of it.
+    let x = runX0 + (runX1 - runX0 - paneW * band.length) / 2;
+
+    band.forEach((item) => {
+      const option = getIngredient('toppings', item.id);
+      const cx = Math.round(x + paneW / 2);
+      x += paneW;
+      stations.push({
+        key: `${item.kind}-${item.id}`,
+        kind: item.kind,
+        id: item.id,
+        name: option?.name ?? item.id,
+        color: option?.color ?? colors.sky,
+        row,
+        x: cx - Math.round(paneW / 2),
+        y: feet - paneH,
+        w: paneW,
+        h: paneH,
+        cx,
+        // The touch target is the pan itself: there is no plaque to leave room for, and a wider
+        // one would reach over the pan beside it.
+        slot: paneW,
+        labelW: paneW,
+        base: feet,
+        spout: Math.round(paneH * 0.2),
+        dockY: feet + cupH + 8,
+      });
+    });
+  });
+
+  return stand;
+}
 
 function categoryOf(kind: StationKind) {
   return kind === 'topping' ? 'toppings' : kind === 'tea' ? 'tea' : kind === 'milk' ? 'milk' : 'foam';
@@ -374,7 +477,8 @@ export function KitchenStation({
   cupRef,
 }: KitchenStationProps) {
   const layout = useMemo(() => layoutKitchen(config, W, H), [config, W, H]);
-  const { stations, strips, teaSign, teaBay, tableLine, cabinetTop, cupW, cupH, homeX, homeY } = layout;
+  const { stations, strips, teaSign, teaBay, toppingStand, tableLine, cabinetTop, cupW, cupH, homeX, homeY } =
+    layout;
 
   const cupX = useSharedValue(homeX);
   const cupY = useSharedValue(homeY);
@@ -503,6 +607,25 @@ export function KitchenStation({
       />
 
       {teaSign && <ShelfSign sign={teaSign} />}
+
+      {/* The topping stand, which its pans are then set into — so it goes down before the rows
+          rather than with them. It is wrapped rather than given `pointerEvents` of its own: that
+          is not a prop on an Image, and on the web the bare deck around the pans would otherwise
+          swallow a touch meant for the room. */}
+      {toppingStand && (
+        <View style={StyleSheet.absoluteFill} pointerEvents="none">
+          <Image
+            source={TOPPING_STAND}
+            style={{
+              position: 'absolute',
+              left: toppingStand.x,
+              top: toppingStand.y,
+              width: toppingStand.w,
+              height: toppingStand.h,
+            }}
+          />
+        </View>
+      )}
 
       {strips.map((strip, r) => {
         const row = stations.filter((station) => station.row === r);
@@ -934,6 +1057,8 @@ interface FrameProps {
   /** Left off where the equipment speaks for itself — the dispensers are told apart by colour. */
   label?: string;
   locked?: boolean;
+  /** Off for anything set into a surface rather than stood on one. */
+  shadow?: boolean;
   accessibilityLabel: string;
   press: SharedValue<number>;
   handlers: GestureResponderHandlers;
@@ -945,7 +1070,7 @@ interface FrameProps {
  * are raw responders rather than presses, so a finger that drifts (or a browser's long-press) can
  * never cut a drag short.
  */
-function Frame({ station, label, locked, accessibilityLabel, press, handlers, children }: FrameProps) {
+function Frame({ station, label, locked, shadow = true, accessibilityLabel, press, handlers, children }: FrameProps) {
   const style = useAnimatedStyle(() => ({ transform: [{ scale: press.value }] }));
   return (
     <Animated.View
@@ -957,12 +1082,14 @@ function Frame({ station, label, locked, accessibilityLabel, press, handlers, ch
     >
       {/* Everything in the room stands on a painted surface now, so each box sits in a pool of
           its own rather than in the dark well a steel counter used to give the pans. */}
-      <Shadow
-        cx={station.slot / 2}
-        cy={6 + station.h}
-        rx={station.w * 0.46}
-        ry={Math.max(3, station.w * 0.11)}
-      />
+      {shadow && (
+        <Shadow
+          cx={station.slot / 2}
+          cy={6 + station.h}
+          rx={station.w * 0.46}
+          ry={Math.max(3, station.w * 0.11)}
+        />
+      )}
       <View style={[{ width: station.w, height: station.h }, locked && styles.locked]}>{children}</View>
       {label !== undefined && (
         <Text
@@ -992,6 +1119,8 @@ function useCarryGesture(
   carry: Carry,
   press: SharedValue<number>,
   pan?: PanRow,
+  /** Called the moment it is lifted, for anything that has to say what it is. */
+  onGrab?: () => void,
 ): GestureResponderHandlers {
   const from = useRef({ x: 0, y: 0 });
   const mode = useRef<'carry' | 'swipe'>('carry');
@@ -1010,6 +1139,7 @@ function useCarryGesture(
       at.current = pan ? pan.offset.get() : 0;
       press.set(withTiming(0.94, { duration: 80 }));
       carry.begin(station, at.current);
+      onGrab?.();
     },
     onResponderMove: (event) => {
       const dx = event.nativeEvent.pageX - from.current.x;
@@ -1102,19 +1232,26 @@ function MilkCarton({ station, cup, carry, pan }: EquipProps) {
 
 // --------------------------------------------------------------------------- the topping bar
 
-function ToppingBin({ station, cup, max, carry, pan }: EquipProps & { max: number }) {
+/**
+ * One pan in the topping stand. It wears no plaque and casts no pool of its own: it is set into a
+ * stand whose own sign names the station, standing in a tray that is already painted with the
+ * shadow around it, and six Vietnamese topping names would not fit under six pans this size
+ * anyway. What a pan is holding is said out loud instead, on the line along the bottom, the moment
+ * it is picked up.
+ */
+function ToppingBin({ station, cup, max, carry, pan, onNudge }: EquipProps & { max: number }) {
   const { w: W, h: H } = station;
   const option = getIngredient('toppings', station.id) as Topping;
   const inCup = cup.toppings.includes(station.id);
   const full = !inCup && cup.toppings.length >= max;
   const press = useSharedValue(1);
-  const handlers = useCarryGesture(station, carry, press, pan);
+  const handlers = useCarryGesture(station, carry, press, pan, () => onNudge(option.name));
 
   return (
     <Frame
       station={station}
       locked={full}
-      label={option.name}
+      shadow={false}
       accessibilityLabel={`Hộp ${option.name} — kéo vào ly`}
       press={press}
       handlers={handlers}
