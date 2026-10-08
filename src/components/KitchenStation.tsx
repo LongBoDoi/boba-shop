@@ -376,7 +376,11 @@ function standToppings(
   // On the right of the work top, under the fridge, where the design puts it. It is the only
   // surface on that side deep enough to take it: the ledge the fridge stands on is a hand's width
   // of board, and the alcove the toppings used to spread along is over on the left.
-  const base = Math.round(py(ROOM.table.stand));
+  // It stands against the **back** of that top rather than out on its front lip. Standing where
+  // the cup stands put a crate the cup's own height in the middle of the room, in front of the
+  // step and the ledge and everything else painted behind it; set back it reads as part of the
+  // wall it is against, and the counter in front of it stays clear to work on.
+  const base = Math.round(py(ROOM.table.top));
   // Its right edge is held off the *screen's* edge rather than the room's, because a phone taller
   // than the painting crops the room at the sides and the room's own right-hand end is well off
   // it — anchored to the painting the stand would lose its last column on most phones.
@@ -392,8 +396,9 @@ function standToppings(
 
   const back = items.length > STAND.across ? Math.floor(items.length / 2) : 0;
   const bands = back > 0 ? [items.slice(0, back), items.slice(back)] : [items];
-  // A band of its own sits halfway down the deck; two take the deck's own two.
-  const depth = (i: number) => (bands.length === 1 ? 0.5 : i);
+  // Two bands take the deck's own two; a band of its own stands at the **front** of the deck,
+  // where a hand reaches, rather than adrift in the middle of a tray that is empty all round it.
+  const depth = (i: number) => (bands.length === 1 ? 1 : i);
   const across = Math.max(STAND.across, Math.ceil(items.length / 2));
 
   bands.forEach((band, i) => {
@@ -403,10 +408,16 @@ function standToppings(
     const runX0 = left + w * mix((b) => b.x0);
     const runX1 = left + w * mix((b) => b.x1);
     const feet = Math.round(stand.y + h * mix((b) => b.feet));
-    const paneW = Math.round((runX1 - runX0) / across);
-    const paneH = Math.round(paneW / (ART.pan * PAN_WIDEN));
+    const run = runX1 - runX0;
+    // A single row spreads to fill the tray instead of standing three pans' worth apart in it: a
+    // shop with two toppings keeps two big pans, not two small ones in a crate. It stops at the
+    // depth of the deck, which is as deep as a pan can be and still be standing on it.
+    const deep = Math.round(h * (STAND.rows[1].feet - STAND.deck));
+    const wide = Math.round(run / (bands.length === 1 ? band.length : across));
+    const paneH = Math.min(Math.round(wide / (ART.pan * PAN_WIDEN)), bands.length === 1 ? deep : Infinity);
+    const paneW = Math.min(wide, Math.round(paneH * ART.pan * PAN_WIDEN));
     // A band that is not full stands in the middle of its run rather than at one end of it.
-    let x = runX0 + (runX1 - runX0 - paneW * band.length) / 2;
+    let x = runX0 + (run - paneW * band.length) / 2;
 
     band.forEach((item) => {
       const option = getIngredient('toppings', item.id);

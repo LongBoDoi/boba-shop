@@ -122,6 +122,8 @@ export const STAND = {
     { feet: 0.52, x0: 0.13, x1: 0.8 },
     { feet: 0.768, x0: 0.104, x1: 0.828 },
   ],
+  /** The back of the deck, which is as deep as a single row of pans may get. */
+  deck: 0.346,
   /** How many pans a band holds before the day's range needs a wider one. */
   across: 3,
 };

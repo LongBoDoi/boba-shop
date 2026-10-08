@@ -207,7 +207,10 @@ Dropping the cup still standing on the work top sends it home.
   a row that ran off the room and was swiped back; they stand in a painted stand now
   (`TOPPING_STAND`, cut by `tools/cut-topping-stand.ps1`), on the right of the work top under the
   fridge, where the design puts it — the only surface on that side deep enough to take it, since
-  the ledge the fridge stands on is a hand's width of board. Its **right** edge is held off the
+  the ledge the fridge stands on is a hand's width of board. It stands against the **back** of
+  that top (`ROOM.table.top`), not out on its front lip where the cup stands: out there it was a
+  crate the cup's own height in the middle of the room, in front of the step and the ledge and
+  everything else painted behind it. Its **right** edge is held off the
   screen's edge rather than the room's, because the room is cropped at the sides on most phones
   and anchoring it to the painting would lose its last column; its left edge is held off the cup,
   and what is left between the two is all it gets, which is why the pans in it are smaller than
@@ -217,10 +220,12 @@ Dropping the cup still standing on the work top sends it home.
   sprite): two bands, the front one wider and lower because the deck is painted going away from
   you. The deck is shallower than two pans are tall, so the front band overlaps the back one by
   about a fifth and is pushed later so it is drawn over it — which is what a second row behind a
-  first one looks like anyway. A pan is the same size with two of them as with six; what a short
-  day changes is the *shape* of the grid — up to three stand in a single band through the middle
-  of the deck rather than huddled at the back, and the odd one on a day of five goes to the front
-  band, the nearer and the easier to reach. They wear **no name plaques** (the stand is named, and
+  first one looks like anyway. What a short day changes is the *shape* of the grid: up to three
+  toppings stand in a **single band at the front** of the deck, where a hand reaches, and spread
+  to fill the tray — a shop with two toppings keeps two big pans, not two small ones adrift in a
+  crate — stopping at `STAND.deck`, which is as deep as a pan can be and still be standing on the
+  deck. The odd one on a day of five goes to the front band, the nearer and the easier to reach.
+  They wear **no name plaques** (the stand is named, and
   six Vietnamese topping names would not fit under six pans this size) and cast **no pool of their
   own** (`shadow={false}` — they are set into a tray that is painted with its own shadow). What a
   pan holds is said on the hint line the moment it is picked up instead, which is what `onGrab`
