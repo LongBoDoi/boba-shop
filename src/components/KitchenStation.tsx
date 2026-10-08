@@ -159,6 +159,13 @@ const STAND_WIDTH = 0.52;
 /** How far past the right of the screen it hangs, as a fraction of that screen: pushed out of the
  *  way rather than set neatly against the edge, which also buys it the width to push off. */
 const STAND_PUSH = 0.03;
+/**
+ * And how much of the gap between the cup and that edge it actually takes. Filling the gap makes
+ * it the biggest thing on the work top by some way; this holds it back off the cup so it reads as
+ * something standing beside the work rather than crowding it. Everything in the stand is a share
+ * of its width, so this is the one number that sizes the pans with it.
+ */
+const STAND_TRIM = 0.88;
 
 /** How wide a piece of equipment may get, as a fraction of the room's width. */
 const MAX_WIDTH: Record<StationKind, number> = {
@@ -393,7 +400,7 @@ function standToppings(
   // What is left between the two is all the stand gets; it is the narrowest the room has to offer
   // and the reason the pans here are smaller than they were in the alcove.
   const clear = Math.round(W / 2 + cupW * 0.58);
-  const w = Math.round(Math.min(right - clear, W * STAND_WIDTH));
+  const w = Math.round(Math.min(right - clear, W * STAND_WIDTH) * STAND_TRIM);
   const h = Math.round(w / ART.stand);
   const stand: ToppingStand = { x: right - w, y: base - h, w, h };
   const left = stand.x;

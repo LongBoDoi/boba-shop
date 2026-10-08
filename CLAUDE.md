@@ -214,8 +214,10 @@ Dropping the cup still standing on the work top sends it home.
   `STAND_PUSH`, not set against the right of the room, because the room is cropped at the sides on
   most phones and anchoring it to the painting would lose its last column; what goes past the edge
   is the outer arm of its frame, which has nothing standing on it. Its left edge is held off the
-  cup, and what is left between the two is all it gets, which is why the pans in it are smaller
-  than anything else in the room. It carries its own `Topping` across it, so unlike the tea shelf
+  cup, and `STAND_TRIM` of what is between the two is all it gets — filling that gap made it the
+  biggest thing on the work top by some way — which is why the pans in it are smaller than
+  anything else in the room. Everything in the stand is a share of its width, so `STAND_TRIM` is
+  the one number that resizes the pans with it. It carries its own `Topping` across it, so unlike the tea shelf
   nothing is drawn over it.
   `standToppings` sets the day's pans into a grid of its deck (`STAND.rows`, fractions of the
   sprite): two bands, the front one wider and lower because the deck is painted going away from
