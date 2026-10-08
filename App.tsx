@@ -12,11 +12,13 @@ import { useSharedValue, withDelay, withTiming, Easing } from 'react-native-rean
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { ScreenWipe } from './src/components/ScreenWipe';
+import { UpdateNotice } from './src/components/UpdateNotice';
 import { createInitialState, gameReducer, GameState } from './src/game/reducer';
 import { DayEndScreen } from './src/screens/DayEndScreen';
 import { GameScreen } from './src/screens/GameScreen';
 import { TitleScreen } from './src/screens/TitleScreen';
 import { colors } from './src/theme';
+import { useGameUpdates } from './src/updates';
 
 const WIPE_MS = 250;
 
@@ -31,6 +33,9 @@ export default function App() {
     if (state.phase !== previous.phase && !outgoing) setOutgoing(previous);
     setPrevious(state);
   }
+
+  // A new build downloads itself in the background; it takes over between days, never mid-shift.
+  const update = useGameUpdates(state.phase !== 'playing');
 
   const wipe = useSharedValue(0);
   useEffect(() => {
@@ -63,6 +68,7 @@ export default function App() {
             onMenu={() => dispatch({ type: 'GO_TO_TITLE' })}
           />
         )}
+        {update.waiting && <UpdateNotice />}
         <ScreenWipe progress={wipe} />
       </View>
     </SafeAreaProvider>

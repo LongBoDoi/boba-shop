@@ -38,6 +38,43 @@ some networks reset), prefix the command: `NODE_OPTIONS="--dns-result-order=ipv4
 `eas-cli` needs `npx eas-cli@latest login` on a new machine. `app.json` uses `web.output: "single"`;
 `public/index.html` is the web page template (sets `lang="vi"`).
 
+### Shipping the phone builds (EAS Build + EAS Update)
+
+The game is **not** on the App Store or Google Play. It is handed out as an installable build to a
+handful of people, and keeps itself current over the air afterwards.
+
+One build profile does it, `friends` in `eas.json`: `distribution: "internal"` (so Android gets a
+plain APK and iOS an ad-hoc build), `channel: "friends"`, and `autoIncrement` so every build gets a
+fresh `versionCode` / `buildNumber`.
+
+```bash
+npx eas-cli@latest build --platform android --profile friends   # APK + an install page to share
+npx eas-cli@latest build --platform ios --profile friends       # needs a paid Apple Developer account
+npx eas-cli@latest update --channel friends --message "what changed" --environment production
+```
+
+`build` prints a page on `expo.dev` with a QR code; that link is what the friends open. Android
+installs it after the usual "unknown source" warning. iOS is the awkward half: ad-hoc distribution
+needs a **paid Apple Developer account**, and every device has to be registered by UDID
+(`npx eas-cli@latest device:create`, then rebuild) before it can install — up to 100 a year.
+
+**`update` is the one to reach for.** It is a JS/asset push: seconds instead of a cloud build, and
+nobody reinstalls anything. `runtimeVersion` follows the `appVersion` policy, so an update reaches
+every installed build whose `version` in `app.json` matches. That means:
+
+- Changed TypeScript, art, fonts-as-assets, game data → `eas update`, done.
+- Changed anything *native* — added or removed a package with native code, touched `plugins`,
+  `android`/`ios` config, or bumped the SDK → bump `version` in `app.json`, build again, and have
+  everyone reinstall. Pushing such a change as an update would reach phones whose native code can't
+  run it.
+
+`src/updates.ts` is the in-app half. `expo-updates` checks on every cold start and downloads in the
+background; `useGameUpdates(safeToRestart)` also re-checks when the app returns to the foreground
+(throttled to 15 minutes), and then restarts the game *only between days* — a restart drops the
+in-memory `GameState`, so doing it mid-shift would throw away the player's day. While an update sits
+waiting, `UpdateNotice` says so at the foot of the screen. None of this runs in Expo Go, on web, or
+in development: `Updates.isEnabled` is false there.
+
 ## Architecture
 
 ```
@@ -70,6 +107,7 @@ tools/                  cut-sheets.py: cuts the asset sheets into those sprites
                         cut-cup-design.ps1: the cup and its drink, off the cup design
 src/motion.ts           shared animation timings/easings
 src/theme.ts            colours and font family names
+src/updates.ts          over-the-air updates: check, download, restart between days
 ```
 
 ### The two pages (swipe navigation)

@@ -7,9 +7,13 @@
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.manhlong.bobashop",
+      "buildNumber": "1"
     },
     "android": {
+      "package": "com.manhlong.bobashop",
+      "versionCode": 1,
       "adaptiveIcon": {
         "backgroundColor": "#FFE3EC",
         "foregroundImage": "./assets/android-icon-foreground.png",
@@ -31,6 +35,14 @@
     "owner": "manhlong",
     "plugins": [
       "expo-font"
-    ]
+    ],
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/a7ab235c-52a1-459c-a82e-cca1e4c3cf36",
+      "checkAutomatically": "ON_LOAD",
+      "fallbackToCacheTimeout": 0
+    }
   }
 }
