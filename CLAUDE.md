@@ -83,7 +83,7 @@ along with the zoom.
 App.tsx                 fonts (Baloo 2), useReducer game state, phase switching + fade transition
 src/game/               pure game logic, no React
   reducer.ts            GameState + CupBuild, actions (START_DAY, TICK, TAKE_ORDER, POUR, SCOOP,
-                        ICE_SCOOP, SUGAR_PUMP, SERVE, CLEAR_CUP…), scoring
+                        ICE_SCOOP, SUGAR_PUMP, SERVE, CLEAR_CUP, SET_MODE…), scoring
   levels.ts             getDayConfig(day): unlock schedule, order/serve patience, spawn rate, goal; describeUnlocks
   ingredients.ts        all ingredients (Vietnamese names, colours, prices), Drink type, categories,
                         and the hands-on constants (MIN_FILL, GOOD_FILL, POUR_RATE, DEFAULT_ID…)
@@ -97,7 +97,7 @@ src/screens/            TitleScreen, DayEndScreen, and the in-play screens:
   PrepPage.tsx          page 2 — the KitchenStation (the room you work in) edge to edge, plus
                         serve/clear. The orders hang inside the room, not above it.
 src/components/         Cup (layered, animated), CustomerStage, OrderBubble, KitchenStation,
-                        Hud, Effects (coins/confetti/toss), OpeningSign…
+                        Hud, Effects (coins/confetti/toss), OpeningSign, SettingsSheet…
 src/components/art/     SVG illustrations: Character, IngredientIcon, ShopBackdrop (customer wall),
                         KitchenRoom (the prep room: one painted plate, plus the transform
                         everything in the room is placed through; exports the SHOP palette),
@@ -119,6 +119,24 @@ indicator under the HUD highlights the active page and badges each side (Quầy 
 Pha chế = # tickets to make); tapping a tab scrolls the pager (swiping is the primary gesture). Because
 `PrepPage` is off-screen until swiped to, it re-measures its machine/bin positions when the parent bumps
 its `measureToken` on scroll-settle, and reports them up via `onGeometry` for the effects overlay.
+
+### Game modes
+
+`GameState.mode` (`standard` | `relaxed`) says how the shop is run, and it is the one setting the game
+has. **Standard** is the whole job as described above. **Relaxed** ("Tự động nhận order") does two
+things in `tick()`: a customer arrives already `ordered` (`orderedAt: clock`, so the serve timer starts
+at once and the order-taking patience never applies), and `nextSpawnAt` is left at `clock`, so the next
+customer walks in as soon as a spot is free rather than after `spawnMin/MaxMs`. The only gap left is
+the 1.3 s `DEPARTURE_MS` the leaving customer needs to walk off their spot.
+
+The mode lives in game state, not in a React context or storage: `SET_MODE` can be sent at any time,
+`START_DAY` carries it over to the next day, and switching *to* relaxed mid-day also takes the order of
+anyone still `requesting` (nobody is coming to take it by hand any more) and pulls the next arrival
+forward. It is not persisted across app launches — there is no storage dependency.
+
+`SettingsSheet` is the card that sets it, opened from the title screen's "⚙️ Cài đặt" button and from
+the pause menu, so it can be changed between days or in the middle of one. The day-1 instructions on
+both the title screen and the opening sign change their first line to match the mode.
 
 The two pages share one shop's palette — warm wood, cream tile and the shop's pink — so swiping feels
 like turning around inside it. The Counter uses `ShopBackdrop`; the kitchen is `KitchenRoom`, drawn by

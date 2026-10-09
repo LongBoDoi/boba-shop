@@ -53,7 +53,13 @@ export default function App() {
     <SafeAreaProvider>
       <StatusBar style="dark" />
       <View style={{ flex: 1, backgroundColor: colors.wall }}>
-        {screen.phase === 'title' && <TitleScreen onStart={() => dispatch({ type: 'START_DAY', day: 1 })} />}
+        {screen.phase === 'title' && (
+          <TitleScreen
+            onStart={() => dispatch({ type: 'START_DAY', day: 1 })}
+            mode={screen.mode}
+            onChangeMode={(mode) => dispatch({ type: 'SET_MODE', mode })}
+          />
+        )}
         {screen.phase === 'playing' && <GameScreen state={screen} dispatch={dispatch} />}
         {screen.phase === 'dayEnd' && (
           <DayEndScreen

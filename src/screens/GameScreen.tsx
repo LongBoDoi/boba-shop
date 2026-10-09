@@ -17,6 +17,7 @@ import { Button } from '../components/Button';
 import { EffectsGeometry, EffectsLayer, Point } from '../components/Effects';
 import { Hud } from '../components/Hud';
 import { OpeningSign } from '../components/OpeningSign';
+import { SettingsSheet } from '../components/SettingsSheet';
 import { Ticket } from '../components/TicketRail';
 import { describeUnlocks } from '../game/levels';
 import { GameAction, GameState } from '../game/reducer';
@@ -39,6 +40,7 @@ export function GameScreen({ state, dispatch }: GameScreenProps) {
   const { width, height: windowHeight } = useWindowDimensions();
   const { config, paused } = state;
   const [opening, setOpening] = useState(true);
+  const [settings, setSettings] = useState(false);
   const [page, setPage] = useState(0);
   const [measureToken, setMeasureToken] = useState(0);
   // The pager must let go while the cup is being dragged around the kitchen.
@@ -172,7 +174,9 @@ export function GameScreen({ state, dispatch }: GameScreenProps) {
   const intro =
     state.day === 1
       ? [
-          'Chạm vào khách ở Quầy để nhận order.',
+          state.mode === 'relaxed'
+            ? 'Order tự được nhận — xem ở Pha chế.'
+            : 'Chạm vào khách ở Quầy để nhận order.',
           'Vuốt sang Pha chế ➜, kéo ly xuống dưới bình trà.',
           'Nhấn giữ vòi để rót — phải tới vạch "đủ", đừng để tràn!',
         ]
@@ -251,7 +255,21 @@ export function GameScreen({ state, dispatch }: GameScreenProps) {
           />
         )}
 
-        {paused && <PauseMenu onResume={() => dispatch({ type: 'SET_PAUSED', paused: false })} onQuit={() => dispatch({ type: 'GO_TO_TITLE' })} />}
+        {paused && (
+          <PauseMenu
+            onResume={() => dispatch({ type: 'SET_PAUSED', paused: false })}
+            onSettings={() => setSettings(true)}
+            onQuit={() => dispatch({ type: 'GO_TO_TITLE' })}
+          />
+        )}
+
+        {settings && (
+          <SettingsSheet
+            mode={state.mode}
+            onChangeMode={(mode) => dispatch({ type: 'SET_MODE', mode })}
+            onClose={() => setSettings(false)}
+          />
+        )}
       </View>
     </SafeAreaView>
   );
@@ -281,7 +299,7 @@ function Tab({ label, active, badge, onPress }: { label: string; active: boolean
   );
 }
 
-function PauseMenu({ onResume, onQuit }: { onResume: () => void; onQuit: () => void }) {
+function PauseMenu({ onResume, onSettings, onQuit }: { onResume: () => void; onSettings: () => void; onQuit: () => void }) {
   const appear = useSharedValue(0);
   useEffect(() => {
     appear.value = withTiming(1, timing());
@@ -295,6 +313,7 @@ function PauseMenu({ onResume, onQuit }: { onResume: () => void; onQuit: () => v
         <Animated.View style={[styles.pauseCard, cardStyle]}>
           <Text style={styles.pauseTitle}>Tạm dừng</Text>
           <Button label="Tiếp tục" onPress={onResume} />
+          <Button label="⚙️ Cài đặt" variant="secondary" onPress={onSettings} />
           <Button label="Về menu chính" variant="secondary" onPress={onQuit} />
         </Animated.View>
       </View>

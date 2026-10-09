@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withDelay, withTiming } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -7,8 +7,10 @@ import Svg, { Path, Rect } from 'react-native-svg';
 import { Character } from '../components/art/Character';
 import { Button } from '../components/Button';
 import { Cup } from '../components/Cup';
+import { SettingsSheet } from '../components/SettingsSheet';
 import { CustomerLook } from '../game/customers';
 import { Drink } from '../game/ingredients';
+import { GameMode } from '../game/reducer';
 import { DURATION, timing } from '../motion';
 import { colors, fonts } from '../theme';
 
@@ -24,15 +26,25 @@ const SHOWCASE_DRINK: Drink = {
 const LEFT_FAN: CustomerLook = { skin: '#F6C8A4', hair: '#2B1B17', hairStyle: 'bun', shirt: '#7FD6C2', accessory: 'none' };
 const RIGHT_FAN: CustomerLook = { skin: '#E9B48E', hair: '#6B4423', hairStyle: 'cap', shirt: '#FFCF6E', accessory: 'glasses' };
 
-const STEPS = [
-  '🧍 Chạm vào khách để xem món họ gọi',
-  '🧋 Cho từng nguyên liệu vào ly',
-  '💰 Phục vụ nhanh để được tip, đạt mục tiêu mỗi ngày!',
-];
+/** The three how-to-play lines; the first one depends on who takes the orders. */
+function stepsFor(mode: GameMode) {
+  return [
+    mode === 'relaxed' ? '⚡ Order tự được nhận, khách tới liên tục' : '🧍 Chạm vào khách để nhận order',
+    '🧋 Cho từng nguyên liệu vào ly',
+    '💰 Phục vụ nhanh để được tip, đạt mục tiêu mỗi ngày!',
+  ];
+}
 
-export function TitleScreen({ onStart }: { onStart: () => void }) {
+interface TitleScreenProps {
+  onStart: () => void;
+  mode: GameMode;
+  onChangeMode: (mode: GameMode) => void;
+}
+
+export function TitleScreen({ onStart, mode, onChangeMode }: TitleScreenProps) {
   const { width, height } = useWindowDimensions();
   const cupWidth = Math.min(130, width * 0.32);
+  const [settings, setSettings] = useState(false);
 
   return (
     <View style={styles.screen}>
@@ -60,15 +72,20 @@ export function TitleScreen({ onStart }: { onStart: () => void }) {
 
         <SlideUp>
           <View style={styles.card}>
-            {STEPS.map((step) => (
+            {stepsFor(mode).map((step) => (
               <Text key={step} style={styles.step}>
                 {step}
               </Text>
             ))}
             <Button label="Mở cửa tiệm" onPress={onStart} style={styles.start} />
+            <Button label="⚙️ Cài đặt" variant="secondary" onPress={() => setSettings(true)} />
           </View>
         </SlideUp>
       </SafeAreaView>
+
+      {settings && (
+        <SettingsSheet mode={mode} onChangeMode={onChangeMode} onClose={() => setSettings(false)} />
+      )}
     </View>
   );
 }

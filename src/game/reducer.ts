@@ -19,6 +19,12 @@ export type Tone = 'good' | 'ok' | 'bad';
 export type Outcome = 'perfect' | 'close' | 'wrong' | 'timeout';
 /** `requesting` = waiting for the player to take the order; `ordered` = waiting for the drink. */
 export type CustomerStatus = 'requesting' | 'ordered';
+/**
+ * How the shop is run. `standard` is the whole job: every order is taken by hand at the counter and
+ * the next customer takes a while to walk in. `relaxed` takes the orders for you and keeps someone
+ * standing in every free spot, so the day is nothing but preparation.
+ */
+export type GameMode = 'standard' | 'relaxed';
 
 export interface Customer {
   id: number;
@@ -81,6 +87,7 @@ export interface DayStats {
 export interface GameState {
   phase: Phase;
   paused: boolean;
+  mode: GameMode;
   day: number;
   config: DayConfig;
   /** Game time in ms since the day started; only advances while playing. */
@@ -107,6 +114,7 @@ export type GameAction =
   | { type: 'START_DAY'; day: number }
   | { type: 'GO_TO_TITLE' }
   | { type: 'SET_PAUSED'; paused: boolean }
+  | { type: 'SET_MODE'; mode: GameMode }
   | { type: 'TICK'; dt: number }
   | { type: 'TAKE_ORDER'; slot: number }
   | { type: 'SELECT_SLOT'; slot: number }
@@ -127,14 +135,15 @@ const MAX_TIP = 3;
 const DEPARTURE_MS = 1_300;
 
 export function createInitialState(seed: number): GameState {
-  return { ...buildDay(1, seed), phase: 'title' };
+  return { ...buildDay(1, seed, 'standard'), phase: 'title' };
 }
 
-function buildDay(day: number, seed: number): GameState {
+function buildDay(day: number, seed: number, mode: GameMode): GameState {
   const config = getDayConfig(day);
   return {
     phase: 'playing',
     paused: false,
+    mode,
     day,
     config,
     clock: 0,
@@ -145,7 +154,8 @@ function buildDay(day: number, seed: number): GameState {
     build: EMPTY_BUILD,
     cupId: 1,
     discarded: null,
-    nextSpawnAt: FIRST_CUSTOMER_AT_MS,
+    // In the relaxed mode nobody is kept waiting for a customer, not even at opening.
+    nextSpawnAt: mode === 'relaxed' ? 0 : FIRST_CUSTOMER_AT_MS,
     nextId: 1,
     stats: { served: 0, perfect: 0, missed: 0, tips: 0 },
     feedback: [],
@@ -157,11 +167,13 @@ function buildDay(day: number, seed: number): GameState {
 export function gameReducer(state: GameState, action: GameAction): GameState {
   switch (action.type) {
     case 'START_DAY':
-      return buildDay(action.day, state.seed);
+      return buildDay(action.day, state.seed, state.mode);
     case 'GO_TO_TITLE':
       return { ...state, phase: 'title', paused: false };
     case 'SET_PAUSED':
       return state.phase === 'playing' ? { ...state, paused: action.paused } : state;
+    case 'SET_MODE':
+      return setMode(state, action.mode);
     case 'TICK':
       return tick(state, action.dt);
     case 'TAKE_ORDER':
@@ -192,6 +204,8 @@ function isActive(state: GameState) {
 function tick(state: GameState, dt: number): GameState {
   if (!isActive(state)) return state;
   const { config } = state;
+  // Relaxed: the order is taken the moment they arrive, and the next one is already at the door.
+  const auto = state.mode === 'relaxed';
   const clock = state.clock + dt;
   const rng = createRng(state.seed);
   const slots = [...state.slots];
@@ -227,15 +241,16 @@ function tick(state: GameState, dt: number): GameState {
         look: generateLook(rng),
         name: rng.pick(NAMES),
         order: generateOrder(config, rng),
-        status: 'requesting',
+        status: auto ? 'ordered' : 'requesting',
         arrivedAt: clock,
         orderPatienceMs: config.orderPatienceMs,
-        orderedAt: null,
+        orderedAt: auto ? clock : null,
         patienceMs: config.patienceMs,
       };
-      nextSpawnAt = clock + rng.int(config.spawnMinMs, config.spawnMaxMs);
+      nextSpawnAt = auto ? clock : clock + rng.int(config.spawnMinMs, config.spawnMaxMs);
     } else {
-      nextSpawnAt = clock + RETRY_SPAWN_MS;
+      // Every spot is taken (or being vacated): look again next tick, or after a short beat.
+      nextSpawnAt = auto ? clock : clock + RETRY_SPAWN_MS;
     }
   }
 
@@ -272,6 +287,28 @@ function resolveSelection(slots: (Customer | null)[], current: number | null): n
     }
   }
   return best;
+}
+
+/**
+ * Change how the shop is run, mid-day if need be. Switching to `relaxed` also takes the order of
+ * everyone still waiting at the counter — nobody is coming to take it by hand any more — and brings
+ * the next arrival forward to now.
+ */
+function setMode(state: GameState, mode: GameMode): GameState {
+  if (mode === state.mode) return state;
+  if (mode !== 'relaxed') return { ...state, mode };
+  const slots = state.slots.map((customer) =>
+    customer?.status === 'requesting'
+      ? { ...customer, status: 'ordered' as const, orderedAt: state.clock }
+      : customer,
+  );
+  return {
+    ...state,
+    mode,
+    slots,
+    nextSpawnAt: Math.min(state.nextSpawnAt, state.clock),
+    selectedSlot: resolveSelection(slots, state.selectedSlot),
+  };
 }
 
 /** Take a waiting customer's order: reveal the recipe as a ticket and start the serve timer. */
