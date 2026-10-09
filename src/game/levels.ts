@@ -42,14 +42,16 @@ export function getDayConfig(day: number): DayConfig {
     options,
     maxToppings: day >= 5 ? 2 : 1,
     slots: day === 1 ? 2 : 3,
-    durationMs: 90_000,
-    // Taking the order is quick, so this window is short and tightens a little each day.
-    orderPatienceMs: Math.max(9_000, 14_000 - (day - 1) * 500),
+    // A shift you can settle into: four minutes, not a minute and a half.
+    durationMs: 240_000,
+    // Taking the order is quick, so this window is the shorter of the two; it tightens by the day.
+    orderPatienceMs: Math.max(20_000, 30_000 - (day - 1) * 1_000),
     // More categories take longer to build, so they buy extra patience.
-    patienceMs: Math.max(25_000, 40_000 + categories.length * 2_000 - (day - 1) * 2_500),
+    patienceMs: Math.max(60_000, 90_000 + categories.length * 4_000 - (day - 1) * 5_000),
     spawnMinMs,
     spawnMaxMs: spawnMinMs + 5_000,
-    goal: Math.min(30 + (day - 1) * 9, 110),
+    // Scaled with the longer day, so a target still means the same day's work.
+    goal: Math.min(65 + (day - 1) * 20, 240),
   };
 }
 
