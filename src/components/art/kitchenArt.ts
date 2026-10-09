@@ -92,63 +92,77 @@ export const FOAM: Record<string, number> = {
   brulee: require('../../assets/kitchen/foam-brulee.png'),
 };
 
-export const PAN: Record<string, number> = {
-  pearls: require('../../assets/kitchen/pan-pearls.png'),
-  popping: require('../../assets/kitchen/pan-popping.png'),
-  lychee: require('../../assets/kitchen/pan-lychee.png'),
-  pudding: require('../../assets/kitchen/pan-pudding.png'),
-  grass: require('../../assets/kitchen/pan-grass.png'),
-  redbean: require('../../assets/kitchen/pan-redbean.png'),
-  ice: require('../../assets/kitchen/pan-ice.png'),
-};
-
 /**
- * The stand the pans are set into, painted whole — frame, back wall, deck and its own `Topping`
- * sign, which is why no sign is drawn over this one the way it is over the tea shelf. Cut off
- * `tools/sheets/topping-stand.png` by `tools/cut-topping-stand.ps1`.
+ * A topping, three ways. `BIN` is the **whole bin** — steel tray, what is in it and the scoop
+ * standing in it — cut off `tools/sheets/topping-bins.png` by `bins()` in `tools/cut-sheets.py`,
+ * and laid over one of the six empty bins the room's own plate paints. `SCOOPFUL` is the scoop of
+ * it you carry to the cup and `PIECE` one piece for the pile that lands in the drink; both come
+ * off `tools/sheets/toppings.png`. None of it is drawn in code — the bin used to be a loose heap
+ * tiled across the opening and clipped to it, and the scoop the bare `SCOOP` sprite with pieces
+ * laid into its bowl by hand; the design draws both better than any arrangement of parts did.
  */
-export const TOPPING_STAND = require('../../assets/kitchen/topping-stand.png');
-
-/** Where that stand takes its pans, in fractions of its own sprite. */
-export const STAND = {
-  /**
-   * The two bands of deck a row of pans stands on, back then front. `feet` is the line their feet
-   * are on and `x0`/`x1` the run of deck they divide — wider at the front than at the back,
-   * because the deck is painted going away from you. The deck is shallower than two pans are
-   * tall, so the front band overlaps the back one by about a fifth and is drawn over it, which is
-   * what a second row behind a first one looks like anyway.
-   */
-  rows: [
-    { feet: 0.52, x0: 0.13, x1: 0.8 },
-    { feet: 0.768, x0: 0.104, x1: 0.828 },
-  ],
-  /** The back of the deck, which is as deep as a single row of pans may get. */
-  deck: 0.346,
-  /** How many pans a band holds before the day's range needs a wider one. */
-  across: 3,
+export const BIN: Record<string, number> = {
+  pearls: require('../../assets/kitchen/bin-pearls.png'),
+  popping: require('../../assets/kitchen/bin-popping.png'),
+  pudding: require('../../assets/kitchen/bin-pudding.png'),
+  pandan: require('../../assets/kitchen/bin-pandan.png'),
+  lychee: require('../../assets/kitchen/bin-lychee.png'),
+  grass: require('../../assets/kitchen/bin-grass.png'),
 };
 
-/** One of whatever is in a pan — for the scoop you carry and the pile in the cup. */
+/** A bin with nothing in it, for a place on the tray the week has not reached yet. It is cut into
+ *  the same box as the full ones, so every bin on the tray is exactly the same size. */
+export const BIN_EMPTY = require('../../assets/kitchen/bin-empty.png');
+
+export const SCOOPFUL: Record<string, number> = {
+  pearls: require('../../assets/kitchen/scoop-pearls.png'),
+  popping: require('../../assets/kitchen/scoop-popping.png'),
+  pudding: require('../../assets/kitchen/scoop-pudding.png'),
+  pandan: require('../../assets/kitchen/scoop-pandan.png'),
+  lychee: require('../../assets/kitchen/scoop-lychee.png'),
+  grass: require('../../assets/kitchen/scoop-grass.png'),
+};
+
 export const PIECE: Record<string, number> = {
-  pearls: require('../../assets/kitchen/piece-pearl.png'),
+  pearls: require('../../assets/kitchen/piece-pearls.png'),
   popping: require('../../assets/kitchen/piece-popping.png'),
-  lychee: require('../../assets/kitchen/piece-ice.png'),
-  pudding: require('../../assets/kitchen/piece-cube.png'),
+  pudding: require('../../assets/kitchen/piece-pudding.png'),
+  pandan: require('../../assets/kitchen/piece-pandan.png'),
+  lychee: require('../../assets/kitchen/piece-lychee.png'),
   grass: require('../../assets/kitchen/piece-grass.png'),
-  redbean: require('../../assets/kitchen/piece-redbean.png'),
   ice: require('../../assets/kitchen/piece-ice.png'),
 };
 
 /** Each piece's own proportions, so a pearl stays round and a cube stays square. */
 export const PIECE_ART: Record<string, number> = {
-  pearls: 37 / 36,
-  popping: 39 / 38,
-  lychee: 31 / 35,
-  pudding: 35 / 41,
-  grass: 35 / 41,
-  redbean: 37 / 36,
+  pearls: 96 / 93,
+  popping: 96 / 95,
+  pudding: 87 / 96,
+  pandan: 88 / 96,
+  lychee: 96 / 95,
+  grass: 89 / 96,
   ice: 31 / 35,
 };
+
+/** And each scoopful's, since what is heaped over the bowl differs from topping to topping. */
+export const SCOOP_ART: Record<string, number> = {
+  pearls: 262 / 307,
+  popping: 269 / 307,
+  pudding: 265 / 307,
+  pandan: 268 / 307,
+  lychee: 264 / 307,
+  grass: 245 / 306,
+};
+
+/**
+ * How far down a bin sprite the tray's own rim begins — above it is the scoop standing in the
+ * bin, which reaches well over the back of it. The station lines *this* line up with the painted
+ * bin's rim, not the top of the sprite.
+ */
+export const BIN_HEAD = 0.1713;
+
+/** The ice pan, which is the last of the old pans the room still stands on its bench. */
+export const ICE_PAN = require('../../assets/kitchen/pan-ice.png');
 
 // ------------------------------------------------------------------ the room around it
 /**
@@ -159,29 +173,44 @@ export const PIECE_ART: Record<string, number> = {
 export const ROOM_BG = require('../../assets/kitchen/room-bg.png');
 
 /**
- * Where that plate draws its surfaces, in its own 940x1674 pixels. Nothing in the room is
+ * Where that plate draws its surfaces, in its own 941x1672 pixels. Nothing in the room is
  * measured in fractions of the phone any more: a station stands on the line the painting puts
  * under it, projected through `fitRoom`. Re-cut the plate and these are what to re-measure.
  */
 export const ROOM = {
-  width: 940,
-  height: 1674,
+  width: 941,
+  height: 1672,
   /**
    * The open shelf across the top: `board` is where its own top board begins — the face a sign
    * is mounted on — `top` the ceiling of the recess under it, and `base` the board things stand
-   * on.
+   * on. `x0`/`x1` are the back wall of the recess, which is narrower than the board in front of
+   * it; a jar standing between them is plainly inside the shelf rather than lapping over its end.
    */
-  shelf: { x0: 48, x1: 586, board: 309, top: 376, base: 512 },
-  /** The tiled recess under it, and the ledge in front of the fridge at the same height. */
-  alcove: { top: 566, base: 744 },
-  ledge: { x0: 617, top: 560, base: 740 },
+  shelf: { x0: 42, x1: 581, board: 309, top: 373, base: 506 },
+  /** The tiled recess under it, and the ledge in front of the fridge at the same height. Both
+   *  `base` lines are the *front* of the board's lit top face, where a thing standing on it has
+   *  its feet — the back edge, against the wall, reads as floating behind the board. */
+  alcove: { top: 556, base: 743 },
+  ledge: { x0: 613, top: 516, base: 685 },
   /** The work top through the middle: where a cup stands on it, and the edge it turns down at. */
-  table: { top: 820, stand: 900, base: 918 },
+  table: { top: 789, stand: 870, base: 888 },
   /** The lower counter in front of that, a step down and nearer the viewer. */
-  bench: { top: 1040, base: 1072 },
+  bench: { top: 1005, base: 1035 },
+  /**
+   * The open cubby under the fridge, inside its own frame, which the topping bins stand in. Each
+   * bin is a whole sprite of its own (`BIN`) and this box is what the grid of them is fitted to:
+   * `x0`/`x1` is the run they fill across, `top` the line the **back** row's trays have their
+   * tops on, and `base` the front lip of the floor, which the **front** row's trays have their
+   * feet on. The depth between the two is what the two rows divide.
+   *
+   * `top` is set a little below the cubby's own ceiling (691). Taken right up to it the back row
+   * rides high in the cubby, its scoops crowding the board above, and the tray reads as two
+   * shelves rather than one set of bins.
+   */
+  tray: { x0: 613, x1: 900, top: 700, base: 825 },
   /** The pink units at the foot of the room, and the tiled floor in front of them. */
-  cabinets: 1376,
-  floor: 1510,
+  cabinets: 1339,
+  floor: 1463,
 };
 
 /**
@@ -281,7 +310,7 @@ export const ART = {
   jar: 116 / 205,
   cup: 113 / 174,
   pan: 235 / 239,
-  stand: 760 / 454,
+  bin: 256 / 226,
   scoop: 102 / 64,
   milk: 99 / 157,
   syrup: 77 / 167,

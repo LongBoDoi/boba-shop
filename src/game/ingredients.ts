@@ -58,10 +58,10 @@ export const TEAS: Tea[] = [
 export const TOPPINGS: Topping[] = [
   { id: 'pearls', name: 'Trân châu đen', color: '#3A2318', shape: 'pearl', price: 1 },
   { id: 'popping', name: 'Trân châu nổ', color: '#F0506E', shape: 'pearl', price: 1 },
-  { id: 'lychee', name: 'Thạch vải', color: '#F4EEDC', shape: 'cube', price: 1 },
+  { id: 'lychee', name: 'Thạch vải', color: '#F4EEDC', shape: 'pearl', price: 1 },
   { id: 'pudding', name: 'Pudding trứng', color: '#F5C84C', shape: 'cube', price: 1 },
   { id: 'grass', name: 'Sương sáo', color: '#2F3A2A', shape: 'cube', price: 1 },
-  { id: 'redbean', name: 'Đậu đỏ', color: '#8A2E2E', shape: 'pearl', price: 1 },
+  { id: 'pandan', name: 'Thạch lá dứa', color: '#6DBA23', shape: 'cube', price: 1 },
 ];
 
 export const ICE_LEVELS: IceLevel[] = [

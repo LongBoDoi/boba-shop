@@ -108,7 +108,6 @@ tools/                  cut-sheets.py: cuts the asset sheets into those sprites
                         cut-tea-jars.ps1: a whole dispenser per tea, off the kitchen sheet
                         cut-cup-design.ps1: the cup and its drink, off the cup design
                         cut-tea-front.ps1: the tea window's greenery, back out of its own plate
-                        cut-topping-stand.ps1: the topping stand, off the checkerboard it came on
 src/motion.ts           shared animation timings/easings
 src/theme.ts            colours and font family names
 ```
@@ -203,37 +202,44 @@ Dropping the cup still standing on the work top sends it home.
   (`MIN_FILL`). The tea stands *inside* the tube, so full is the tube less its wall at both ends.
   A dashed ring printed round a cup this small was never easy to read against the drink behind it,
   so the glass is left clear.
-- **The toppings are a piece of furniture, not a row.** They used to be loose pans along the ledge,
-  a row that ran off the room and was swiped back; they stand in a painted stand now
-  (`TOPPING_STAND`, cut by `tools/cut-topping-stand.ps1`), on the right of the work top under the
-  fridge, where the design puts it — the only surface on that side deep enough to take it, since
-  the ledge the fridge stands on is a hand's width of board. It **lies on that top**, right down
-  at the front edge of it (`ROOM.table.base`), nearer the viewer than the cup — set back against
-  the wall behind it instead, it rose far enough to cover the bottom of the fridge, which is worse
-  than anything it hides from down there. It is pushed out past the right of the *screen* by
-  `STAND_PUSH`, not set against the right of the room, because the room is cropped at the sides on
-  most phones and anchoring it to the painting would lose its last column; what goes past the edge
-  is the outer arm of its frame, which has nothing standing on it. Its left edge is held off the
-  cup, and `STAND_TRIM` of what is between the two is all it gets — filling that gap made it the
-  biggest thing on the work top by some way — which is why the pans in it are smaller than
-  anything else in the room. Everything in the stand is a share of its width, so `STAND_TRIM` is
-  the one number that resizes the pans with it. It carries its own `Topping` across it, so unlike the tea shelf
-  nothing is drawn over it.
-  `standToppings` sets the day's pans into a grid of its deck (`STAND.rows`, fractions of the
-  sprite): two bands, the front one wider and lower because the deck is painted going away from
-  you. The deck is shallower than two pans are tall, so the front band overlaps the back one by
-  about a fifth and is pushed later so it is drawn over it — which is what a second row behind a
-  first one looks like anyway. What a short day changes is the *shape* of the grid: up to three
-  toppings stand in a **single band at the front** of the deck, where a hand reaches, and spread
-  to fill the tray — a shop with two toppings keeps two big pans, not two small ones adrift in a
-  crate — stopping at `STAND.deck`, which is as deep as a pan can be and still be standing on the
-  deck. The odd one on a day of five goes to the front band, the nearer and the easier to reach.
-  They wear **no name plaques** (the stand is named, and
-  six Vietnamese topping names would not fit under six pans this size) and cast **no pool of their
-  own** (`shadow={false}` — they are set into a tray that is painted with its own shadow). What a
-  pan holds is said on the hint line the moment it is picked up instead, which is what `onGrab`
-  on `useCarryGesture` is for.
-- **Everything else — carry it to the cup.** The topping pans, the ice pan, the syrup bottle, the milk
+- **The toppings are in the bins the room is painted with.** They used to be loose pans along the
+  ledge, a row that ran off the room and was swiped back; then a painted stand of their own
+  (`TOPPING_STAND`) standing on the work top. Both are gone. The plate now paints the whole
+  station — the tray under the fridge, its six steel bins, its `Topping` sign and the shadow
+  around them — so there is no furniture left to place and a topping is simply a **heap of
+  itself standing in one of those bins** (`ROOM.bins`, measured off the plate like every other
+  line in the room). `fillBins` puts the day's toppings into them.
+  Three things it has to get right:
+  **A full bin is one sprite** (`BIN[id]`) — steel tray, what is in it and the scoop standing in
+  it. The six are **not** fitted to the bins the plate happens to paint under the fridge: they are
+  laid out to fill the **cubby** the plate paints under the fridge (`ROOM.tray`): three across
+  shoulder to shoulder at `BIN_GRID.pitch`, read off their own sheet, and sized to the run the
+  cubby gives them. How far the front row stands in front of the back one is not a number — the
+  two rows **divide the cubby's own depth**, the back row's trays starting at its ceiling and the
+  front row's ending at the lip of its floor, so they fill it however deep it is painted. A place
+  the week has not reached yet gets `BIN_EMPTY` instead (`layout.emptyBins`), laid down before the
+  rows so a bin the day *does* have is simply drawn over the one standing where it goes. That is
+  safe in both directions because a row only reaches the back one once the front is full, so a
+  full bin is never drawn over an empty one standing in front of it.
+  Each is hung by the **tray's own rim** (`BIN_HEAD`), not by the top of the sprite: above that
+  line is the scoop, which reaches well over the back of the bin.
+  Before the sprites arrived this was built out of parts, and the parts are worth not rebuilding:
+  a loose heap laid in the bin is a golf ball in a shoe box, grown to fill it it laps over the
+  rims, squashed to the bin's foreshortened depth it turns pearls into ovals, and tiled into a bed
+  and clipped to the opening it is only as good as the grain survives — which at 2x it does not.
+  Ask for the sprite.
+  **Which bins.** Up to three toppings stand in the **front** row, the nearer and the easier to
+  reach, and the rest fill from the back; a row that is not full sits as near its middle as three
+  bins allow, so a day with one topping uses the middle bin and a day with two the left and the
+  middle. The back row is pushed first, so where a front heap laps the bin behind it the front one
+  is drawn over — which is what a second row standing behind a first one looks like anyway.
+  **The touch target** is the whole bin, not the heap in it: the bins tile along the tray exactly,
+  so there is no dead steel between two of them and none of them reaches over its neighbour.
+  They wear **no name plaques** (the tray is named, and six Vietnamese topping names would not fit
+  under six bins this size) and cast **no pool of their own** (`shadow={false}` — the tray is
+  painted with its own shadow). What a bin holds is said on the hint line the moment it is picked
+  up instead, which is what `onGrab` on `useCarryGesture` is for.
+- **Everything else — carry it to the cup.** The topping bins, the ice pan, the syrup bottle, the milk
   cartons and the foam tubs are dragged: `useCarry` keeps what's in hand, draws the tool following the
   finger above everything else, and on release either tips it into the cup (`SCOOP` / `ICE_SCOOP` /
   `SUGAR_PUMP`, or `POUR` of `MILK_SPLASH` for a carton) or puts it back. The cup doesn't move for these —
@@ -348,14 +354,42 @@ ring came off. The fill is still `MIN_FILL`, and `Cup` on the counter page still
 Nearly everything in the prep room is a **painted sprite**. `tools/cut-sheets.py` cuts
 `tools/sheets/*.png` into `src/assets/kitchen/`, and
 [kitchenArt.ts](src/components/art/kitchenArt.ts) is the only place that names those files. The
-sprites are generated — change the script (or the sheet), re-run it, never hand-edit a PNG. The `pan-*.png`
-set came from a 1024px rendering of the kitchen sheet that no longer exists; those crops live in
-`tools/sheets/pans/` as source art — four of the seven are recolours that exist nowhere else —
-and `unclip()` finishes them off. Every one was cut too tight, losing the cap of the scoop
+sprites are generated — change the script (or the sheet), re-run it, never hand-edit a PNG.
+
+`pan-ice.png` came from a 1024px rendering of the kitchen sheet that no longer exists; those crops
+live in `tools/sheets/pans/` as source art — four of the seven are recolours that exist nowhere
+else — and `unclip()` finishes them off. Every one was cut too tight, losing the cap of the scoop
 standing in it and the foot of its tray, and the sheet still draws one pan whole: the same steel
-and the same red in all seven, so that one fills in for the lot. They are then trimmed to a
-single box around the tray's front edge, because a row of them is laid out from one aspect. The dispensers and the cup have
-scripts of their own — see "Liquids are cut, never drawn".
+and the same red in all seven, so that one fills in for the lot. Only the ice pan is written now —
+the toppings have `tools/sheets/toppings.png` to themselves — but the box is still measured across
+all seven crops, and they are all kept, because four of them exist nowhere else.
+
+**The toppings come off two sheets, cut two different ways.**
+
+`toppings.png` is three rows of six painted on transparency, and it is cut by `islands()`: the
+sprites lean into their neighbours' boxes without ever touching them, so a crop would bring a
+slice of the next one with it, and `islands()` lifts each as its own connected run of pixels
+instead and hands them back in reading order. Only two of its rows are used now — the scoopful you
+carry, which is carried at nearly the size it is drawn and keeps it, and one piece for the cup,
+which is a dozen pixels across there and is cut down rather than shipping ten times the pixels it
+is drawn with. Its top row, the topping as a loose heap, is left on the sheet.
+
+`topping-bins.png` is the six bins whole, and it is cut by `bins()` on a **measured grid**: the six
+abut on that sheet, so there are no islands to find, and the columns are taken where the trays'
+lower bodies part. They are the same bin drawn six times, so any difference between their boxes is
+noise in the drawing — each is padded until the tray's rim starts at the same fraction down the
+sprite, then all six are resized together, which leaves one `ART.bin` and one `BIN_HEAD` for the
+station to place them by instead of six of each.
+
+The **empty** bin is a seventh, off `topping-bin-empty.png`, and it is drawn a good deal shallower
+than the full ones — 1.95 wide to tall against 1.38. It is brought into the same box as the rest
+rather than keeping its own shape, which stretches it about two fifths taller. That is deliberate:
+a row in which the empty bins are shallower than the ones beside them reads as two different trays,
+and a steel box this size has no perspective cue strong enough for the stretch to show.
+
+Both sheets' columns are the toppings in *their* own order, which is not the game's list order —
+the mapping is the `TOPPINGS` list in `cut-sheets.py`. The dispensers and the cup have scripts of
+their own — see "Liquids are cut, never drawn".
 
 Anything that has to *move* is drawn against a window the script cleared out of the artwork, which
 keeps the painted ticks, highlights and the cat decal on top of it:
@@ -373,13 +407,17 @@ keeps the painted ticks, highlights and the cat decal on top of it:
   inside a container whose height follows the level, so it is revealed from the bottom as the cup
   fills; the toppings and ice are the sheet's own pieces, placed low enough to clear the cat.
   Nothing can escape the glass, because everything is inside the clip;
-- the **carried scoop** is `scoop.png` with the pieces heaped into its bowl, over the sprite —
-  the bowl is solid chrome, so anything behind it is invisible;
-- the **pans, cartons, syrup, foam tubs and every fitting** (wall, lamps, shelf, steel counter,
+- a **scoop of topping** is one whole painted sprite, `SCOOPFUL[id]`, heap and all. It used to be
+  the bare `SCOOP` with pieces laid into its bowl by hand, which was the same mistake the teas
+  were — the design draws what a scoop of this looks like, so take its word for it. The six are
+  drawn to a common **height**, because the scoop is identical in all of them and only what mounds
+  over the bowl differs; matched on width instead, a heaped one shrinks beside a flat one. Ice and
+  foam still take the bare `SCOOP`, ice with pieces heaped in its bowl and foam with a blob drawn
+  in it — the bowl is solid chrome, so anything behind it is invisible;
+- the **ice pan, cartons, syrup, foam tubs and every fitting** (wall, lamps, shelf, steel counter,
   cabinets, rail, coaster, plant, poster, cup stack, towel) are whole sprites
   that [KitchenRoom](src/components/art/KitchenRoom.tsx) and the station place by the layout's
-  lines. Three pans and two pieces had no art of their own and are repainted from the ones that do,
-  by `repaint()`, which keeps the shading and leaves the red scoop alone;
+  lines;
 - **the room itself is one painted plate**, `room-bg.png` — the tiled wall and its lamps, the
   dispenser shelf, the fridge, the work top, the bench and the pink units at its foot, all of
   it painted rather than assembled. It used to be assembled: a wall tile set to repeat, a shelf
@@ -388,6 +426,9 @@ keeps the painted ticks, highlights and the cat decal on top of it:
   and a seam to get wrong. Those sprites are still cut (a station may yet want the stainless),
   but the room no longer draws any of them. Each piece of equipment now sits in a contact
   shadow of its own (`Frame`), because there is no well in a counter to sink it into.
+  The **open cubby under the fridge** is painted into it too — empty, with no bins in it, which is
+  why there is no stand sprite any more; `ROOM.tray` is that cubby, and the six bins are laid out
+  to fill it.
 
 **The prep page is all kitchen.** There is no ticket rail or order slip above it: the room fills
 everything between the tabs and the action buttons, which is what gives the equipment the size it has
@@ -414,7 +455,7 @@ Three things about it are deliberate:
 becomes "Trà sữa Thái", "Hồng trà" becomes "Hồng trà sữa".
 
 ### Standing things on a painting
-The plate is `tools/sheets/room-bg.png`, 940x1674, and `ROOM` in
+The plate is `tools/sheets/room-bg.png`, 941x1672, and `ROOM` in
 [kitchenArt.ts](src/components/art/kitchenArt.ts) is **where it draws its surfaces, in its own
 pixels**: the shelf's board, the ceiling over it and the face of the board above that (where its
 sign is mounted), the ledge, the line a cup stands on along the work top, the bench, the cabinets. Nothing in the room is a fraction of the phone any more —
@@ -428,7 +469,10 @@ floor be what goes. Anything that must stay reachable in a short room has to cla
 view — the hint pill does, because the pink units it sits on can be cropped away.
 
 If the plate is re-cut, `ROOM` is what to re-measure: read a column of it for the horizontal
-lines and a row for the vertical ones.
+lines and a row for the vertical ones. Two lines that look alike and are not: `shelf.x0`/`x1` are
+the **back wall** of the recess, which is narrower than the board in front of it, and every
+`base` is the **front** of a board's lit top face. A row of jars divided across the back wall
+stands plainly inside the shelf; divided across the board it laps over the ends of it.
 
 
 ## Conventions

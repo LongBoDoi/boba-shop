@@ -13,10 +13,11 @@ script rather than the PNGs. Two things happen beyond plain cropping:
 * the props at the right of the work top are cut out of `reference.png` — the mockup — rather
   than the pack, because only the design has them arranged (see `clear_room`).
 
-The `pan-*.png` set came from a 1024px rendering of the kitchen sheet that we no longer have a
-copy of. Those crops are kept in `tools/sheets/pans/` as the source art — four of the seven are
-recolours that exist nowhere else — and are finished here: every one of them was cut too tight,
-losing the cap of the scoop standing in it and the foot of its tray, which this sheet still has.
+`pan-ice.png` came from a 1024px rendering of the kitchen sheet that we no longer have a copy of.
+Those crops are kept in `tools/sheets/pans/` as the source art — four of the seven are recolours
+that exist nowhere else — and are finished here: every one of them was cut too tight, losing the
+cap of the scoop standing in it and the foot of its tray, which this sheet still has. Only the ice
+pan is written now; the toppings have `tools/sheets/toppings.png` to themselves.
 
 Two other scripts cut the things the game used to draw for itself, and neither output is touched
 here:
@@ -25,8 +26,6 @@ here:
   together, off tools/sheets/kitchen.png;
 * `tools/cut-cup-design.ps1` writes `cup.png`, `cup-base.png` and `drink-<tea>.png` off
   tools/sheets/cup-design.png, which is the same cup drawn twice, empty and full;
-* `tools/cut-topping-stand.ps1` writes `topping-stand.png` off tools/sheets/topping-stand.png,
-  which arrived flattened onto a painted checkerboard rather than with an alpha channel.
 
 One more runs *after* this script rather than beside it: `tools/cut-tea-front.ps1` lifts the tea
 window's vines and potted plant back out of the `tea-room.png` written below, so the dispensers
@@ -235,6 +234,129 @@ def repaint(src, target):
     return im
 
 
+def islands(im, floor=24, least=400):
+    """
+    Every separate sprite on a sheet painted on transparency, as its own island of pixels.
+
+    A box will not do for these: the heaps in the top row of the topping sheet and the scoop
+    handles in the middle one lean into their neighbours' boxes without ever touching them, so a
+    crop would bring a slice of the next sprite along with it. Each island is lifted by its own
+    pixels instead, and anything smaller than `least` is a stray speck.
+
+    They come back in reading order — down the sheet in bands, then left to right.
+    """
+    W, H = im.size
+    alpha = im.getchannel('A').tobytes()
+    mask = bytearray(1 if alpha[i] > floor else 0 for i in range(W * H))
+    seen = bytearray(W * H)
+    src = im.load()
+    found = []
+    for start in range(W * H):
+        if not mask[start] or seen[start]:
+            continue
+        q = deque([start])
+        seen[start] = 1
+        pts = []
+        x0 = y0 = 1 << 30
+        x1 = y1 = -1
+        while q:
+            p = q.popleft()
+            pts.append(p)
+            x, y = p % W, p // W
+            x0, x1 = min(x0, x), max(x1, x)
+            y0, y1 = min(y0, y), max(y1, y)
+            for dy in (-1, 0, 1):
+                for dx in (-1, 0, 1):
+                    nx, ny = x + dx, y + dy
+                    if 0 <= nx < W and 0 <= ny < H:
+                        n = ny * W + nx
+                        if mask[n] and not seen[n]:
+                            seen[n] = 1
+                            q.append(n)
+        if len(pts) >= least:
+            found.append((x0, y0, x1, y1, pts))
+    # Bands first, then left to right inside a band: a sprite that hangs a little lower than its
+    # neighbour is still on the same row, so a row is everything that starts before the lowest
+    # foot in it rather than everything at the same height.
+    found.sort(key=lambda c: c[1])
+    rows, floor_y = [], -1
+    for c in found:
+        if rows and c[1] <= floor_y:
+            rows[-1].append(c)
+            floor_y = max(floor_y, c[3])
+        else:
+            rows.append([c])
+            floor_y = c[3]
+    out = []
+    for row in rows:
+        for x0, y0, x1, y1, pts in sorted(row, key=lambda c: c[0]):
+            cut = Image.new('RGBA', (x1 - x0 + 1, y1 - y0 + 1))
+            dst = cut.load()
+            for p in pts:
+                x, y = p % W, p // W
+                dst[x - x0, y - y0] = src[x, y]
+            out.append(cut)
+    return out
+
+
+def bins(toppings, wide=256):
+    """
+    The six topping bins, whole — steel tray, what is in it and the scoop standing in it, one
+    sprite each, off `tools/sheets/topping-bins.png`. The room's own plate paints six empty bins
+    into the topping tray and these are laid over them, so a bin the day has not reached yet is
+    simply the painted one showing through.
+
+    They are not cut as islands: the six abut on the sheet, and each one's scoop leans over the
+    bin beside it without touching it. The grid is measured instead — the columns part cleanly
+    across the trays' lower bodies, the rows across the gap between the two scoop rows.
+
+    All six are then brought to **one box**. They are the same bin drawn six times, so any
+    difference in their boxes is noise in the drawing; each is padded until the tray's own rim
+    starts at the same fraction down the sprite (the deepest scoop on the sheet sets it), and then
+    they are all resized together. That leaves a single aspect and a single `BIN_HEAD` for the
+    station to place them by, instead of six of each.
+
+    The **empty** bin comes on a sheet of its own, `topping-bin-empty.png`, and is drawn a good
+    deal shallower than the full ones — 1.95 wide to tall against 1.38. It is brought into the
+    same box as the rest rather than keeping its own shape, which stretches it about two fifths
+    taller. That is deliberate: a row in which the empty bins are shallower than the ones beside
+    them reads as two different trays, and a steel box this size has no perspective cue strong
+    enough for the stretch to show.
+    """
+    sheet = Image.open(SHEETS / 'topping-bins.png').convert('RGBA')
+    COLS = [(31, 525), (526, 1010), (1011, 1508)]
+    ROWS = [(77, 508), (512, 936)]
+    cells = []
+    for y0, y1 in ROWS:
+        for x0, x1 in COLS:
+            cell = sheet.crop((x0, y0, x1 + 1, y1 + 1))
+            px = cell.getchannel('A').load()
+            w, h = cell.size
+            # the tray's own top: the first row the sprite is wide on, since the scoop alone is thin
+            rim = next(y for y in range(h) if sum(1 for x in range(w) if px[x, y] > 24) > w * 0.5)
+            cells.append((cell, rim))
+    assert len(cells) == len(toppings), f'topping bins cut into {len(cells)} cells'
+    head = max(rim / cell.height for cell, rim in cells)
+    boxed = []
+    for cell, rim in cells:
+        body = cell.height - rim
+        pad = round(body * head / (1 - head))
+        box = Image.new('RGBA', (cell.width, pad + body))
+        box.alpha_composite(cell, (0, pad - rim))
+        boxed.append(box)
+    # the box is taken off the full bins alone, then the empty one is brought into it
+    tall = round(wide * max(b.height for b in boxed) / max(b.width for b in boxed))
+    bare = Image.open(SHEETS / 'topping-bin-empty.png').convert('RGBA')
+    bare = bare.crop(bare.getchannel('A').point(lambda v: 255 if v > 24 else 0).getbbox())
+    pad = round(bare.height * head / (1 - head))
+    box = Image.new('RGBA', (bare.width, pad + bare.height))
+    box.alpha_composite(bare, (0, pad))
+    boxed.append(box)
+    for name, box in zip([*toppings, 'empty'], boxed):
+        box.resize((wide, tall), Image.LANCZOS).save(OUT / f'bin-{name}.png', optimize=True)
+    print(f'  bins: {wide}x{tall}, ART.bin = {wide}/{tall}, BIN_HEAD = {head:.4f}')
+
+
 def blank_card(card):
     """Wipe the printed note clean, keeping its torn edge and the coloured header band."""
     px = card.load()
@@ -307,17 +429,12 @@ def main():
             if blue and (c[2] > 110 or (x > SW * 0.55 and y > SH * 0.5)):
                 sp[x, y] = (0, 0, 0, 0)
     scoop.crop(scoop.getbbox()).save(OUT / 'scoop.png')
-    pearl = cut(kitchen, (465, 392, 502, 428), 'piece-pearl.png')  # one dark pearl
-    cut(kitchen, (464, 434, 503, 472), 'piece-popping.png')    # one popping pearl
-    cube = cut(kitchen, (452, 476, 487, 517), 'piece-cube.png')
-    ice = cut(kitchen, (489, 479, 520, 514), 'piece-ice.png')  # one clear cube
-    # two toppings have no piece of their own, so they borrow a shape and a colour
-    repaint(cube, (73, 87, 63)).save(OUT / 'piece-grass.png')
-    repaint(pearl, (138, 46, 46)).save(OUT / 'piece-redbean.png')
+    cut(kitchen, (489, 479, 520, 514), 'piece-ice.png')        # one clear cube
     cut(kitchen, (548, 224, 629, 368), 'card-order.png')       # the "Order" slip
-    # The topping pans, each finished off with the one the sheet still draws whole, then all
-    # of them trimmed to one box around the front edge of the tray — they have to be the same
-    # shape as each other, because a row of them is laid out from a single aspect.
+    # The ice pan, finished off with the one pan the sheet still draws whole. Only this one is
+    # written now that the toppings have a sheet of their own, but the box is still measured
+    # across all of `tools/sheets/pans` — four of those crops are recolours that exist nowhere
+    # else, so they are kept as source art even though nothing is cut from them any more.
     whole = kitchen.crop((10, 374, 153, 520))
     pans = {}
     for pan in sorted((SHEETS / 'pans').iterdir()):
@@ -329,9 +446,34 @@ def main():
     up = max(y - fy for _, (_, fy, _, _), (y, _) in pans.values())
     down = max(fy + fh - y for _, (_, fy, _, fh), (y, _) in pans.values())
     for name, (im, _, (y, x)) in pans.items():
+        if name != 'ice.png':
+            continue
         box = Image.new('RGBA', (left + right, up + down))
         box.alpha_composite(im, (left - x, up - y))
         box.save(OUT / f'pan-{name}')
+
+    # ------------------------------------------------------------------ the toppings
+    # Three rows of six, painted on transparency: the heap that sits in a bin, the scoopful you
+    # carry, and one piece of it for the pile in the cup. The columns are the toppings in this
+    # order, which is the sheet's own, not the game's list order.
+    # The sheet draws them all at about 250px. The scoop is carried at nearly that size and keeps
+    # it; a piece is a dozen pixels across in the cup, so it is cut down rather than shipping ten
+    # times the pixels it is drawn with. The sheet's top row — the topping as a loose heap — is no
+    # longer used: a bin is a sprite of its own now, off `topping-bins.png` below.
+    TOPPINGS = ['pearls', 'popping', 'pudding', 'pandan', 'lychee', 'grass']
+    ROWS = [(None, 0), ('scoop', 0), ('piece', 96)]
+    sprites = islands(Image.open(SHEETS / 'toppings.png').convert('RGBA'))
+    assert len(sprites) == len(ROWS) * len(TOPPINGS), f'topping sheet cut into {len(sprites)} sprites'
+    for i, sprite in enumerate(sprites):
+        row, most = ROWS[i // len(TOPPINGS)]
+        if row is None:
+            continue
+        if most and max(sprite.size) > most:
+            k = most / max(sprite.size)
+            sprite = sprite.resize((round(sprite.width * k), round(sprite.height * k)), Image.LANCZOS)
+        sprite.save(OUT / f'{row}-{TOPPINGS[i % len(TOPPINGS)]}.png', optimize=True)
+
+    bins(TOPPINGS)
 
     # ------------------------------------------------------------------ fittings and equipment
     raw = Image.open(SHEETS / 'equipment.png').convert('RGBA')

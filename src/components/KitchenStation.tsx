@@ -27,19 +27,22 @@ import { colors, fonts } from '../theme';
 import { fitRoom, KitchenRoom, Shadow, SHOP } from './art/KitchenRoom';
 import {
   ART,
+  BIN,
+  BIN_EMPTY,
+  BIN_HEAD,
   FOAM,
+  ICE_PAN,
   JAR_SPOUT,
   JAR_TEA,
   MILK,
-  PAN,
   PIECE,
   PIECE_ART,
   ROOM,
   SCOOP,
+  SCOOP_ART,
   SCOOP_BOWL,
-  STAND,
+  SCOOPFUL,
   SYRUP,
-  TOPPING_STAND,
 } from './art/kitchenArt';
 import { KitchenCup } from './KitchenCup';
 import { GRABBY } from './pour';
@@ -102,14 +105,6 @@ export interface TeaBay {
   base: number;
 }
 
-/** Where the painted topping stand goes, which its pans are then set into. */
-export interface ToppingStand {
-  x: number;
-  y: number;
-  w: number;
-  h: number;
-}
-
 /** A row the player can swipe along, and how far it may go. */
 interface PanRow {
   offset: SharedValue<number>;
@@ -117,14 +112,22 @@ interface PanRow {
   onHold: (held: boolean) => void;
 }
 
+/** A place on the topping tray the week has not reached yet, which an empty bin stands in. */
+export interface Box {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
 export interface KitchenLayout {
   stations: Station[];
   strips: RowStrip[];
+  /** The places on the topping tray with nothing in them yet, back row first. */
+  emptyBins: Box[];
   /** Both null on a day with no dispensers at all, which cannot happen in play. */
   teaSign: TeaSign | null;
   teaBay: TeaBay | null;
-  /** Null on a day with no toppings. */
-  toppingStand: ToppingStand | null;
   /** Where a cup stands on the work top through the middle of the room. */
   tableLine: number;
   /** Where the pink units at the foot of the room start. */
@@ -134,9 +137,6 @@ export interface KitchenLayout {
   homeX: number;
   homeY: number;
 }
-
-/** How much wider than its own art a pan is drawn, towards the design's wider pans. */
-const PAN_WIDEN = 1.16;
 
 /** The least board between two jars, on the day the shelf is full and has none to spare. */
 const TEA_GAP = 2;
@@ -150,27 +150,27 @@ const TEA_GAP = 2;
  */
 const TEA_SHELF = 7;
 
-/** The pans are drawn wider than they are tall; everything else keeps its own art's shape. */
-const widened = (kind: StationKind) => kind === 'topping' || kind === 'ice';
+/** The ice pan is drawn wider than it is tall; everything else keeps its own art's shape. */
+const widened = (kind: StationKind) => kind === 'ice';
 
-/** How wide the topping stand may get, as a fraction of the screen — a backstop for a screen so
- *  wide that the gap between the cup and its right edge would otherwise hand it half the room. */
-const STAND_WIDTH = 0.52;
-/** How far past the right of the screen it hangs, as a fraction of that screen: pushed out of the
- *  way rather than set neatly against the edge, which also buys it the width to push off. */
-const STAND_PUSH = 0.03;
 /**
- * And how much of the gap between the cup and that edge it actually takes. Filling the gap makes
- * it the biggest thing on the work top by some way; this holds it back off the cup so it reads as
- * something standing beside the work rather than crowding it. Everything in the stand is a share
- * of its width, so this is the one number that sizes the pans with it.
+ * How the six topping bins stand in their cubby. `across` is how many to a row and `pitch` the
+ * step from one to the next across, as a share of a bin's width — just under 1, read off
+ * `tools/sheets/topping-bins.png`, which draws them shoulder to shoulder the way a topping bar's
+ * are. How far the front row stands in front of the back one is **not** a number here: the two
+ * rows simply divide the depth `ROOM.tray` gives them, so they fill the cubby the plate paints
+ * however deep it is. `LEAN` is the most they may be pushed together if that depth is ever too
+ * little for two trays to both stay in view.
  */
-const STAND_TRIM = 0.88;
+const BIN_GRID = { across: 3, pitch: 0.995 };
+/** The least a row may stand in front of the one behind it, as a share of a tray's own depth. */
+const LEAN = 0.55;
 
 /** How wide a piece of equipment may get, as a fraction of the room's width. */
 const MAX_WIDTH: Record<StationKind, number> = {
   tea: 0.26,
   milk: 0.21,
+  // toppings are sized by the bin they stand in, not by the room
   topping: 0.4,
   ice: 0.3,
   sugar: 0.17,
@@ -237,15 +237,15 @@ export function layoutKitchen(config: DayConfig, W: number, H: number): KitchenL
 
   const stations: Station[] = [];
   const strips: RowStrip[] = [];
+  const emptyBins: Box[] = [];
   let teaSign: TeaSign | null = null;
   let teaBay: TeaBay | null = null;
-  let toppingStand: ToppingStand | null = null;
 
   rows.forEach((items, r) => {
     const kind = items[0].kind;
     if (kind === 'topping') {
-      toppingStand = standToppings(items, r, W, py, cupW, cupH, stations);
-      strips.push({ scroll: false, span: toppingStand.w });
+      fillBins(items, r, px, py, stations, emptyBins);
+      strips.push({ scroll: false, span: 0 });
       return;
     }
 
@@ -281,7 +281,7 @@ export function layoutKitchen(config: DayConfig, W: number, H: number): KitchenL
     // One height for the whole row, and each box as wide as its own art — so a bottle stays a
     // bottle and a carton a carton, instead of every one of them taking the first one's shape.
     const widths = items.map((item) =>
-      Math.round(h * ASPECT[tea ? 'tea' : item.kind] * (widened(item.kind) ? PAN_WIDEN : 1)),
+      Math.round(h * ASPECT[tea ? 'tea' : item.kind]),
     );
     // The board is cut into `TEA_SHELF` equal places and the day's jars take them in turn, so the
     // gap between any two of them is the same on every day of the week and a full shelf fills the
@@ -347,9 +347,9 @@ export function layoutKitchen(config: DayConfig, W: number, H: number): KitchenL
   return {
     stations,
     strips,
+    emptyBins,
     teaSign,
     teaBay,
-    toppingStand,
     tableLine,
     cabinetTop: Math.round(py(ROOM.cabinets)),
     cupW,
@@ -361,79 +361,62 @@ export function layoutKitchen(config: DayConfig, W: number, H: number): KitchenL
 
 
 /**
- * Set the day's toppings into the painted stand, and say where the stand itself goes. The
- * toppings used to be a row of loose pans along the ledge that ran off the room and was swiped
- * back; they are one piece of furniture now, standing on the right of the work top under the
- * fridge, with its pans in a grid of its deck.
+ * Stand the day's toppings on their tray under the fridge. There is no furniture to place and
+ * nothing to assemble: a topping is one whole painted bin — tray, what is in it and the scoop
+ * standing in it — and the six are laid out in the grid their own sheet draws them in
+ * (`BIN_GRID`), sized to the run `ROOM.tray` gives them and stood on its front line.
  *
- * Nothing about the grid depends on the day: a pan is the same size with two of them as with six,
- * the way a dispenser is the same size on day one as on day seven. What a short day changes is how
- * many bands the grid has — up to three pans stand in a single band through the middle of the deck
- * rather than huddled at the back of it — and the odd one on a day of five goes to the front band,
- * which is the nearer and the easier to reach.
+ * Nothing about a bin depends on the day — it is the same size with two toppings as with six, the
+ * way a dispenser is the same size on day one as on day seven. What a short day changes is
+ * *which* bins are used: up to three stand in the **front** row, which is the nearer and the
+ * easier to reach, and the rest fill from the back. A row that does not fill its three sits as
+ * near its middle as three bins allow.
  *
- * The pans are pushed back band first, so the front band is drawn over it where the two overlap.
+ * The back row is pushed first, so the front row is drawn over it where the two meet — which is
+ * what a second row standing behind a first one looks like anyway.
  */
-function standToppings(
+function fillBins(
   items: { id: string; kind: StationKind }[],
   row: number,
-  W: number,
+  px: (x: number) => number,
   py: (y: number) => number,
-  cupW: number,
-  cupH: number,
   stations: Station[],
-): ToppingStand {
-  // On the right of the work top, under the fridge, where the design puts it. It is the only
-  // surface on that side deep enough to take it: the ledge the fridge stands on is a hand's width
-  // of board, and the alcove the toppings used to spread along is over on the left.
-  // It lies on the work top itself, right down at the front edge of it — nearer the viewer than
-  // the cup, and the furthest forward the top goes. Set back against the wall behind it instead,
-  // it rose far enough to cover the bottom of the fridge, which is worse than anything it hides
-  // from down here.
-  const base = Math.round(py(ROOM.table.base));
-  // And out past the right-hand edge of the **screen**, not of the room: a phone taller than the
-  // painting crops the room at the sides, so the room's own right-hand end is well off the screen
-  // and a stand anchored to it would lose its last column. What goes past the edge is the outer
-  // arm of the frame, which has nothing standing on it.
-  const right = W + Math.round(W * STAND_PUSH);
-  // And its left edge off the cup, which stands on its coaster through the middle of that top.
-  // What is left between the two is all the stand gets; it is the narrowest the room has to offer
-  // and the reason the pans here are smaller than they were in the alcove.
-  const clear = Math.round(W / 2 + cupW * 0.58);
-  const w = Math.round(Math.min(right - clear, W * STAND_WIDTH) * STAND_TRIM);
-  const h = Math.round(w / ART.stand);
-  const stand: ToppingStand = { x: right - w, y: base - h, w, h };
-  const left = stand.x;
+  emptyBins: Box[],
+): void {
+  const { across } = BIN_GRID;
+  // The tray holds six and there is nowhere to put a seventh, so a day that somehow brought more
+  // would show the first six.
+  const day = items.slice(0, across * 2);
+  const back = Math.max(0, day.length - across);
+  // the back row first, so the front row is drawn over it
+  const bands = [day.slice(0, back), day.slice(back)];
 
-  const back = items.length > STAND.across ? Math.floor(items.length / 2) : 0;
-  const bands = back > 0 ? [items.slice(0, back), items.slice(back)] : [items];
-  // Two bands take the deck's own two; a band of its own stands at the **front** of the deck,
-  // where a hand reaches, rather than adrift in the middle of a tray that is empty all round it.
-  const depth = (i: number) => (bands.length === 1 ? 1 : i);
-  const across = Math.max(STAND.across, Math.ceil(items.length / 2));
+  const run = px(ROOM.tray.x1) - px(ROOM.tray.x0);
+  const w = Math.round(run / (1 + (across - 1) * BIN_GRID.pitch));
+  const h = Math.round(w / ART.bin);
+  // the tray alone, without the scoop standing over the back of it
+  const deep = h * (1 - BIN_HEAD);
+  const foot = Math.round(py(ROOM.tray.base));
+  // The two rows divide the cubby's own depth: the back row's trays start at its ceiling and the
+  // front row's end at the lip of its floor, so the bins fill it rather than sitting in it.
+  const step = Math.max(Math.round(deep * LEAN), Math.round(foot - py(ROOM.tray.top) - deep));
 
-  bands.forEach((band, i) => {
-    const t = depth(i);
-    const mix = (pick: (band: { feet: number; x0: number; x1: number }) => number) =>
-      pick(STAND.rows[0]) + (pick(STAND.rows[1]) - pick(STAND.rows[0])) * t;
-    const runX0 = left + w * mix((b) => b.x0);
-    const runX1 = left + w * mix((b) => b.x1);
-    const feet = Math.round(stand.y + h * mix((b) => b.feet));
-    const run = runX1 - runX0;
-    // A single row spreads to fill the tray instead of standing three pans' worth apart in it: a
-    // shop with two toppings keeps two big pans, not two small ones in a crate. It stops at the
-    // depth of the deck, which is as deep as a pan can be and still be standing on it.
-    const deep = Math.round(h * (STAND.rows[1].feet - STAND.deck));
-    const wide = Math.round(run / (bands.length === 1 ? band.length : across));
-    const paneH = Math.min(Math.round(wide / (ART.pan * PAN_WIDEN)), bands.length === 1 ? deep : Infinity);
-    const paneW = Math.min(wide, Math.round(paneH * ART.pan * PAN_WIDEN));
-    // A band that is not full stands in the middle of its run rather than at one end of it.
-    let x = runX0 + (run - paneW * band.length) / 2;
-
-    band.forEach((item) => {
+  bands.forEach((band, r) => {
+    // A row that does not fill its three sits as near the middle as three bins allow: one topping
+    // takes the middle bin, two the left and the middle.
+    const first = Math.floor((across - band.length) / 2);
+    const base = foot - (1 - r) * step;
+    const at = (c: number) => Math.round(px(ROOM.tray.x0) + c * w * BIN_GRID.pitch);
+    // The places this row has nothing for. They are collected row by row, so an empty bin in the
+    // back row is laid down before the front row's — and because a row only reaches the back one
+    // once the front is full, a bin is never drawn over an empty one standing in front of it.
+    for (let c = 0; c < across; c += 1) {
+      if (c < first || c >= first + band.length) emptyBins.push({ x: at(c), y: base - h, w, h });
+    }
+    band.forEach((item, i) => {
       const option = getIngredient('toppings', item.id);
-      const cx = Math.round(x + paneW / 2);
-      x += paneW;
+      const x = at(first + i);
+      const y = base - h;
       stations.push({
         key: `${item.kind}-${item.id}`,
         kind: item.kind,
@@ -441,23 +424,21 @@ function standToppings(
         name: option?.name ?? item.id,
         color: option?.color ?? colors.sky,
         row,
-        x: cx - Math.round(paneW / 2),
-        y: feet - paneH,
-        w: paneW,
-        h: paneH,
-        cx,
-        // The touch target is the pan itself: there is no plaque to leave room for, and a wider
-        // one would reach over the pan beside it.
-        slot: paneW,
-        labelW: paneW,
-        base: feet,
-        spout: Math.round(paneH * 0.2),
-        dockY: feet + cupH + 8,
+        x,
+        y,
+        w,
+        h,
+        cx: x + Math.round(w / 2),
+        // The touch target is the sprite, scoop and all. The bins stand shoulder to shoulder, so
+        // there is no dead steel between two of them; there is no plaque to leave room for either.
+        slot: w,
+        labelW: w,
+        base,
+        spout: Math.round(h * 0.2),
+        dockY: base + h,
       });
     });
   });
-
-  return stand;
 }
 
 function categoryOf(kind: StationKind) {
@@ -510,7 +491,7 @@ export function KitchenStation({
   cupRef,
 }: KitchenStationProps) {
   const layout = useMemo(() => layoutKitchen(config, W, H), [config, W, H]);
-  const { stations, strips, teaSign, teaBay, toppingStand, tableLine, cabinetTop, cupW, cupH, homeX, homeY } =
+  const { stations, strips, emptyBins, teaSign, teaBay, tableLine, cabinetTop, cupW, cupH, homeX, homeY } =
     layout;
 
   const cupX = useSharedValue(homeX);
@@ -641,22 +622,18 @@ export function KitchenStation({
 
       {teaSign && <ShelfSign sign={teaSign} />}
 
-      {/* The topping stand, which its pans are then set into — so it goes down before the rows
-          rather than with them. It is wrapped rather than given `pointerEvents` of its own: that
-          is not a prop on an Image, and on the web the bare deck around the pans would otherwise
-          swallow a touch meant for the room. */}
-      {toppingStand && (
+      {/* The bins the week has not reached yet. They go down before the rows, so a bin the day
+          does have is simply laid over the one standing where it goes. Wrapped rather than given
+          `pointerEvents` of their own, which is not a prop on an Image. */}
+      {emptyBins.length > 0 && (
         <View style={StyleSheet.absoluteFill} pointerEvents="none">
-          <Image
-            source={TOPPING_STAND}
-            style={{
-              position: 'absolute',
-              left: toppingStand.x,
-              top: toppingStand.y,
-              width: toppingStand.w,
-              height: toppingStand.h,
-            }}
-          />
+          {emptyBins.map((bin) => (
+            <Image
+              key={`${bin.x}-${bin.y}`}
+              source={BIN_EMPTY}
+              style={{ position: 'absolute', left: bin.x, top: bin.y, width: bin.w, height: bin.h }}
+            />
+          ))}
         </View>
       )}
 
@@ -1004,7 +981,7 @@ function SwipeRow({ offset, children }: { offset: SharedValue<number>; children:
   );
 }
 
-/** What a station puts in your hand: the shop's scoop, a carton, or the syrup bottle. */
+/** What a station puts in your hand: a scoopful, a carton, or the syrup bottle. */
 function Tool({ station, size }: { station: Station; size: number }) {
   const S = size;
   if (station.kind === 'sugar') {
@@ -1013,28 +990,30 @@ function Tool({ station, size }: { station: Station; size: number }) {
   if (station.kind === 'milk') {
     return <Image source={MILK[station.id] ?? MILK.whole} style={{ width: S * 0.7, height: (S * 0.7) / ART.milk }} />;
   }
+  // A scoop of topping is one painted sprite, heap and all. It used to be the bare `SCOOP` with
+  // pieces laid into its bowl by hand, which is the same mistake the teas were: the design draws
+  // what a scoop of this looks like, so take its word for it. They are drawn to a common
+  // **height**, because the scoop is the same in all six and only what mounds over the bowl
+  // differs — matched on width instead, a heaped one shrinks beside a flat one.
+  if (station.kind === 'topping') {
+    const full = SCOOPFUL[station.id];
+    if (full) {
+      const SH = S / ART.scoop;
+      return <Image source={full} style={{ width: SH * (SCOOP_ART[station.id] ?? 0.86), height: SH }} />;
+    }
+  }
 
-  // A scoop of something: the pieces are heaped in its bowl, with the scoop drawn over them.
+  // Ice and foam still take the empty scoop, with what they are drawn into its bowl.
   const SH = S / ART.scoop;
   const bowl = { x: S * SCOOP_BOWL.cx, y: SH * SCOOP_BOWL.cy, r: S * SCOOP_BOWL.r };
-  const art = station.kind === 'ice' ? 'ice' : station.id;
-  const piece = PIECE[art];
+  const piece = PIECE.ice;
   // a small heap, wider than it is tall — the bowl is a shallow one
-  const spread =
-    station.kind === 'ice'
-      ? [
-          [-0.46, 0.06],
-          [0.46, 0.08],
-          [0, -0.3],
-        ]
-      : [
-          [-0.62, 0.1],
-          [0, 0.14],
-          [0.62, 0.08],
-          [-0.32, -0.24],
-          [0.32, -0.22],
-        ];
-  const r = bowl.r * (station.kind === 'ice' ? 0.62 : 0.52);
+  const spread = [
+    [-0.46, 0.06],
+    [0.46, 0.08],
+    [0, -0.3],
+  ];
+  const r = bowl.r * 0.62;
 
   return (
     <View style={{ width: S, height: SH }}>
@@ -1054,7 +1033,6 @@ function Tool({ station, size }: { station: Station; size: number }) {
           }}
         />
       ) : (
-        piece &&
         spread.map(([fx, fy], i) => (
           <Image
             key={i}
@@ -1062,9 +1040,9 @@ function Tool({ station, size }: { station: Station; size: number }) {
             style={{
               position: 'absolute',
               left: bowl.x + fx * bowl.r - r,
-              top: bowl.y + fy * bowl.r - r / (PIECE_ART[art] ?? 1),
+              top: bowl.y + fy * bowl.r - r / PIECE_ART.ice,
               width: r * 2,
-              height: (r * 2) / (PIECE_ART[art] ?? 1),
+              height: (r * 2) / PIECE_ART.ice,
             }}
           />
         ))
@@ -1266,11 +1244,10 @@ function MilkCarton({ station, cup, carry, pan }: EquipProps) {
 // --------------------------------------------------------------------------- the topping bar
 
 /**
- * One pan in the topping stand. It wears no plaque and casts no pool of its own: it is set into a
- * stand whose own sign names the station, standing in a tray that is already painted with the
- * shadow around it, and six Vietnamese topping names would not fit under six pans this size
- * anyway. What a pan is holding is said out loud instead, on the line along the bottom, the moment
- * it is picked up.
+ * One topping, heaped in the bin the room paints for it. It wears no plaque and casts no pool of
+ * its own: the tray it stands in is painted with its own sign and its own shadow, and six
+ * Vietnamese topping names would not fit under six bins this size anyway. What a bin is holding
+ * is said out loud instead, on the line along the bottom, the moment it is picked up.
  */
 function ToppingBin({ station, cup, max, carry, pan, onNudge }: EquipProps & { max: number }) {
   const { w: W, h: H } = station;
@@ -1289,7 +1266,7 @@ function ToppingBin({ station, cup, max, carry, pan, onNudge }: EquipProps & { m
       press={press}
       handlers={handlers}
     >
-      <Image source={PAN[station.id] ?? PAN.pearls} style={{ width: W, height: H }} />
+      <Image source={BIN[station.id] ?? BIN.pearls} style={{ width: W, height: H }} />
     </Frame>
   );
 }
@@ -1309,7 +1286,7 @@ function IceChest({ station, build, carry, pan }: EquipProps) {
       press={press}
       handlers={handlers}
     >
-      <Image source={PAN.ice} style={{ width: W, height: H }} />
+      <Image source={ICE_PAN} style={{ width: W, height: H }} />
       {/* how many scoops already went in the cup */}
       <View style={[styles.tool, { left: W * 0.12, top: H * 0.1, flexDirection: 'row', gap: W * 0.05 }]}>
         {[0, 1].map((i) => (
