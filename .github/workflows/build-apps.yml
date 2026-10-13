@@ -7,6 +7,10 @@ on:
         description: 'Publish a GitHub Release with the .apk and .ipa'
         type: boolean
         default: true
+      android_build_id:
+        description: 'Reuse this finished EAS build instead of starting a new one (optional)'
+        type: string
+        default: ''
 
 permissions:
   contents: write
@@ -55,17 +59,23 @@ jobs:
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
           NODE_OPTIONS: --dns-result-order=ipv4first
+          REUSE: ${{ inputs.android_build_id }}
         run: |
           if [ -z "$EXPO_TOKEN" ]; then
             echo "::error::Add an Expo access token as the EXPO_TOKEN repository Actions secret. See docs/deployment.md."
             exit 1
           fi
-          npx --yes eas-cli@latest build \
-            --platform android \
-            --profile apk \
-            --non-interactive \
-            --wait \
-            --json > eas-build.json
+          if [ -n "$REUSE" ]; then
+            echo "Reusing EAS build $REUSE instead of starting a new one"
+            npx --yes eas-cli@latest build:view "$REUSE" --json > eas-build.json
+          else
+            npx --yes eas-cli@latest build \
+              --platform android \
+              --profile apk \
+              --non-interactive \
+              --wait \
+              --json > eas-build.json
+          fi
 
       - name: Download the APK
         run: |
@@ -74,7 +84,7 @@ jobs:
             const build = Array.isArray(builds) ? builds[0] : builds;
             const url = build?.artifacts?.applicationArchiveUrl;
             if (!url) {
-              console.error("No applicationArchiveUrl in the EAS build result");
+              console.error("No applicationArchiveUrl in the EAS build result; status is " + build?.status);
               process.exit(1);
             }
             console.log(url);
@@ -115,13 +125,22 @@ jobs:
         id: scheme
         run: |
           workspace="$(ls -d ios/*.xcworkspace | head -1)"
-          scheme="$(xcodebuild -workspace "$workspace" -list -json | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>console.log(JSON.parse(s).workspace.schemes.filter(n=>n!=="Pods")[0]))')"
+          # The app scheme is named after the generated .xcodeproj. Listing the
+          # workspace instead also returns every CocoaPods scheme, and picking one
+          # of those archives a pod library rather than the app.
+          scheme="$(basename "$(ls -d ios/*.xcodeproj | head -1)" .xcodeproj)"
+          if ! xcodebuild -workspace "$workspace" -list -json \
+            | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const n=JSON.parse(s).workspace.schemes;if(!n.includes(process.argv[1])){console.error("Schemes found: "+n.join(", "));process.exit(1)}})' "$scheme"; then
+            echo "::error::Scheme '$scheme' is not in $workspace"
+            exit 1
+          fi
           echo "workspace=$workspace" >> "$GITHUB_OUTPUT"
           echo "scheme=$scheme" >> "$GITHUB_OUTPUT"
           echo "Building scheme '$scheme' from $workspace"
 
       - name: Archive without signing
         run: |
+          set -o pipefail
           xcodebuild archive \
             -workspace '${{ steps.scheme.outputs.workspace }}' \
             -scheme '${{ steps.scheme.outputs.scheme }}' \
@@ -132,11 +151,27 @@ jobs:
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
             CODE_SIGN_ENTITLEMENTS="" \
-            > "$RUNNER_TEMP/xcodebuild.log" 2>&1 || {
-              echo '::error::xcodebuild archive failed; last 200 lines follow'
-              tail -200 "$RUNNER_TEMP/xcodebuild.log"
-              exit 1
-            }
+            2>&1 | tee "$RUNNER_TEMP/xcodebuild.log" | { xcbeautify --quieter || cat; }
+
+      - name: Show what failed
+        if: failure()
+        run: |
+          echo '::group::Lines reporting an error'
+          grep -nE '(^|[[:space:]])error:|\*\* ARCHIVE FAILED|The following build commands failed' \
+            "$RUNNER_TEMP/xcodebuild.log" | head -60 || echo '(no error: lines found)'
+          echo '::endgroup::'
+          echo '::group::Last 100 lines'
+          tail -100 "$RUNNER_TEMP/xcodebuild.log"
+          echo '::endgroup::'
+          echo '::error::xcodebuild archive failed. The full log is in the xcodebuild-log artifact.'
+
+      - name: Upload the Xcode log
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: xcodebuild-log
+          path: ${{ runner.temp }}/xcodebuild.log
+          if-no-files-found: ignore
 
       - name: Package the .ipa
         run: |
