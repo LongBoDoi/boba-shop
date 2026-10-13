@@ -33,10 +33,13 @@ jobs:
         run: npm ci
 
       - name: Lint
-        run: npx expo lint
+        run: npm run lint
 
       - name: Typecheck
-        run: npx tsc --noEmit
+        run: npm run typecheck
+
+      - name: Run regression checks
+        run: npm test
 
       - name: Export web app
         run: npx expo export --platform web

@@ -2,10 +2,8 @@ import { CustomerLook, generateLook, NAMES } from './customers';
 import {
   Drink,
   EMPTY_DRINK,
-  GOOD_FILL,
   iceLevelForScoops,
   MAX_ICE_SCOOPS,
-  MIN_FILL,
   SUGAR_STEPS,
   sweetnessForPumps,
 } from './ingredients';
@@ -67,7 +65,7 @@ export interface Departure {
  * cup tracks how full it is and how many scoops/pumps went in — not just which options were picked.
  */
 export interface CupBuild {
-  /** How much of the cup holds liquid, 0–1. Must reach `MIN_FILL` before it can be served. */
+  /** How much of the cup holds liquid, 0–1; used for rendering and overflow. */
   fill: number;
   /** Poured past the brim at some point, so the drink is messy: no tip. */
   spilled: boolean;
@@ -401,8 +399,7 @@ function clearCup(state: GameState): GameState {
 function serve(state: GameState): GameState {
   const slot = state.selectedSlot;
   const customer = slot === null ? null : state.slots[slot];
-  // A cup is only a drink once there's enough liquid in it.
-  if (slot === null || !customer || !state.cup.tea || state.build.fill < MIN_FILL) return state;
+  if (slot === null || !customer || !state.cup.tea) return state;
 
   const { quality } = evaluateDrink(state.cup, customer.order, state.config.categories);
   const price = drinkPrice(customer.order);
@@ -420,10 +417,9 @@ function serve(state: GameState): GameState {
     text = `Tràn ly… +${formatMoney(earned)}`;
     tone = 'ok';
   } else if (quality === 'perfect') {
-    // Filling close to the brim without spilling is a clean pour, and worth an extra coin.
-    tip = Math.max(1, Math.round(patienceLeft * MAX_TIP)) + (state.build.fill >= GOOD_FILL ? 1 : 0);
+    tip = Math.max(1, Math.round(patienceLeft * MAX_TIP));
     earned = price + tip;
-    text = state.build.fill >= GOOD_FILL ? `Rót chuẩn! +${formatMoney(earned)}` : `Hoàn hảo! +${formatMoney(earned)}`;
+    text = `Hoàn hảo! +${formatMoney(earned)}`;
     tone = 'good';
   } else if (quality === 'close') {
     earned = Math.ceil(price / 2);

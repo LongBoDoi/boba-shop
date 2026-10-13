@@ -4,6 +4,7 @@ import Animated, { Easing, interpolate, useAnimatedStyle, useSharedValue, withTi
 
 import { Tone } from '../game/reducer';
 import { fonts, toneColor } from '../theme';
+import { pointerEventsStyles } from '../pointerEvents';
 
 /** A short message that fades in, drifts up a little and fades out once, on mount. */
 export function FloatingText({ text, tone, top }: { text: string; tone: Tone; top: number }) {
@@ -18,7 +19,7 @@ export function FloatingText({ text, tone, top }: { text: string; tone: Tone; to
   }));
 
   return (
-    <Animated.View pointerEvents="none" style={[styles.chip, { top, borderColor: toneColor[tone] }, style]}>
+    <Animated.View style={[styles.chip, { top, borderColor: toneColor[tone] }, style, pointerEventsStyles.none]}>
       <Text style={[styles.text, { color: toneColor[tone] }]} numberOfLines={1}>
         {text}
       </Text>

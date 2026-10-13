@@ -7,11 +7,13 @@ import { Button } from '../components/Button';
 import { Point } from '../components/Effects';
 import { cupSizeFor, KitchenStation } from '../components/KitchenStation';
 import { OrderBubble } from '../components/OrderBubble';
+import { PourMeterState } from '../components/PourFeedback';
 import { Ticket } from '../components/TicketRail';
-import { Drink, MIN_FILL } from '../game/ingredients';
+import { Drink } from '../game/ingredients';
 import { DayConfig } from '../game/levels';
 import { Customer, CupBuild } from '../game/reducer';
 import { colors } from '../theme';
+import { pointerEventsStyles } from '../pointerEvents';
 
 export interface PrepGeometry {
   /** Where the cup is standing, in window coordinates. */
@@ -40,6 +42,7 @@ interface PrepPageProps {
   onIce: () => void;
   onSugar: () => void;
   onDragging: (dragging: boolean) => void;
+  onMeterChange: (meter: PourMeterState | null) => void;
   onClear: () => void;
   onServe: () => void;
   machineRef: React.RefObject<View | null>;
@@ -65,25 +68,20 @@ export function PrepPage({
   onIce,
   onSugar,
   onDragging,
+  onMeterChange,
   onClear,
   onServe,
   machineRef,
   trashRef,
 }: PrepPageProps) {
   const [scene, setScene] = useState({ width: 0, height: 0 });
-  // How much of the room the order card floats over, so a window opened in the room can keep
-  // clear of it. The card grows with the recipe, so it is measured rather than guessed.
-  const [orderH, setOrderH] = useState(0);
   const insets = useSafeAreaInsets();
-  const enough = build.fill >= MIN_FILL;
-  const canServe = Boolean(selectedCustomer && cup.tea && enough);
+  const canServe = Boolean(selectedCustomer && cup.tea);
   const serveLabel = !selectedCustomer
     ? 'Chọn order để pha'
     : !cup.tea
       ? 'Rót trà vào ly'
-      : !enough
-        ? 'Chưa đủ trà'
-        : `Phục vụ ${selectedCustomer.name} ➜`;
+      : `Phục vụ ${selectedCustomer.name} ➜`;
   const cupWidth = scene.width > 0 ? cupSizeFor(scene.width, scene.height).width : 56;
 
   // Report where the cup and bin sit (window coordinates) whenever the layout or page changes,
@@ -122,15 +120,13 @@ export function PrepPage({
               onIce={onIce}
               onSugar={onSugar}
               onDragging={onDragging}
-              topInset={Math.round(scene.height * 0.012) + orderH}
+              onMeterChange={onMeterChange}
               cupRef={machineRef}
             />
             {/* The order is spoken back over the room rather than pinned inside it, so it can
                 be read at a glance and nothing it covers is something you reach for. */}
             <View
-              style={[styles.order, { top: Math.round(scene.height * 0.012) }]}
-              pointerEvents="box-none"
-              onLayout={(event: LayoutChangeEvent) => setOrderH(Math.round(event.nativeEvent.layout.height))}
+              style={[styles.order, { top: Math.round(scene.height * 0.012) }, pointerEventsStyles.boxNone]}
             >
               <OrderBubble
                 customer={selectedCustomer}

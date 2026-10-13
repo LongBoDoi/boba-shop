@@ -11,6 +11,7 @@ import { formatMoney } from '../game/money';
 import { GameState } from '../game/reducer';
 import { DURATION, timing } from '../motion';
 import { colors, fonts } from '../theme';
+import { pointerEventsStyles } from '../pointerEvents';
 
 interface DayEndScreenProps {
   state: GameState;
@@ -96,7 +97,7 @@ export function DayEndScreen({ state, onNextDay, onRetry, onMenu }: DayEndScreen
         </Animated.View>
       </SafeAreaView>
       {passed && (
-        <View style={StyleSheet.absoluteFill} pointerEvents="none">
+        <View style={[StyleSheet.absoluteFill, pointerEventsStyles.none]}>
           <Confetti at={{ x: width * 0.5, y: 150 }} delay={900} pieces={16} power={1.2} />
         </View>
       )}
@@ -175,7 +176,7 @@ function SunRays({ width }: { width: number }) {
     return `M50 50 L${50 + Math.cos(a) * r} ${50 + Math.sin(a) * r} L${50 + Math.cos(b) * r} ${50 + Math.sin(b) * r} Z`;
   }).join(' ');
   return (
-    <View style={[styles.rays, { width: size, height: size, left: (width - size) / 2, top: 130 - size / 2 }]} pointerEvents="none">
+    <View style={[styles.rays, { width: size, height: size, left: (width - size) / 2, top: 130 - size / 2 }, pointerEventsStyles.none]}>
       <Svg width={size} height={size} viewBox="0 0 100 100">
         <Path d={rays} fill="#FFFFFF" opacity={0.45} />
       </Svg>

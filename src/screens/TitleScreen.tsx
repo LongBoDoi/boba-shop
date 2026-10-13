@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { Platform, StyleSheet, Text, TextStyle, useWindowDimensions, View } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withDelay, withTiming } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Svg, { Path, Rect } from 'react-native-svg';
@@ -13,6 +13,7 @@ import { Drink } from '../game/ingredients';
 import { GameMode } from '../game/reducer';
 import { DURATION, timing } from '../motion';
 import { colors, fonts } from '../theme';
+import { pointerEventsStyles } from '../pointerEvents';
 
 const SHOWCASE_DRINK: Drink = {
   toppings: ['pearls'],
@@ -139,7 +140,7 @@ function Pearls({ width, height }: { width: number; height: number }) {
     size: 10 + ((i * 7) % 14),
   }));
   return (
-    <View style={StyleSheet.absoluteFill} pointerEvents="none">
+    <View style={[StyleSheet.absoluteFill, pointerEventsStyles.none]}>
       {pearls.map((pearl) => (
         <View
           key={pearl.key}
@@ -196,9 +197,15 @@ const styles = StyleSheet.create({
     lineHeight: 66,
     fontFamily: fonts.display,
     color: colors.ink,
-    textShadowColor: '#FFFFFF',
-    textShadowOffset: { width: 0, height: 4 },
-    textShadowRadius: 0,
+    // React Native Web uses CSS textShadow; native keeps its platform text styles.
+    ...Platform.select<TextStyle & { textShadow?: string }>({
+      web: { textShadow: '0px 4px 0px #FFFFFF' },
+      default: {
+        textShadowColor: '#FFFFFF',
+        textShadowOffset: { width: 0, height: 4 },
+        textShadowRadius: 0,
+      },
+    }),
   },
   subtitle: {
     fontSize: 17,

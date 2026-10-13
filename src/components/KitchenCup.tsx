@@ -1,31 +1,29 @@
-import { useEffect, useId } from 'react';
+import { memo, useId } from 'react';
 import { Image, StyleSheet, View } from 'react-native';
 import Animated, {
   SharedValue,
   useAnimatedStyle,
-  useSharedValue,
-  withTiming,
 } from 'react-native-reanimated';
 import Svg, { ClipPath, Defs, Ellipse, G, Image as SvgImage, Path } from 'react-native-svg';
 
 import { Drink, getIngredient, ICE_LEVELS, Tea } from '../game/ingredients';
-import { DURATION, timing } from '../motion';
+import { TeaLiquid } from './TeaLiquid';
+import { CUP_SURFACE_BOTTOM, CUP_SURFACE_RUN, CUP_WELL, pourLevel } from './cupGeometry';
 import { shade } from './art/Character';
 import {
   CUP_BASE,
   CUP_DECAL,
   CUP_EDGE,
   CUP_SPRITE,
-  DRINK,
-  DRINK_MILKY,
-  DRINK_MILKY_TOP,
-  DRINK_TOP,
   PIECE,
   PIECE_ART,
 } from './art/kitchenArt';
+import { pointerEventsStyles } from '../pointerEvents';
+
+export { pourLevel } from './cupGeometry';
 
 /**
- * The cup on the prep bench: the painted sprite with the drink poured *inside* it. Everything the
+ * The cup on the prep bench: painted glass with a shaded, animated liquid inside it. Everything the
  * player adds is drawn in the sprite's own coordinate space and clipped to the glass, so nothing
  * ever spills out past the walls, and it all sits below the cat printed on the front.
  */
@@ -44,8 +42,8 @@ const GLASS_TINT = 0.45;
  * The inside of the glass, traced off the full cup on  — where the
  * liquid stands there *is* the well, so none of this is guessed.
  */
-const WELL = 'M14 48 L22 156 Q24 163 37 163 H73 Q87 163 89 156 L99 48 Z';
-export const WELL_TOP = 48 / ART.h;
+const WELL = CUP_WELL;
+export const WELL_TOP = (CUP_SURFACE_BOTTOM - CUP_SURFACE_RUN) / ART.h;
 /**
  * The upper edge of the near lip — the first thing on the way down that the glass puts in front of
  * what is behind it. Read off the design at the cup's middle, where the rim bands are plain: the
@@ -53,48 +51,12 @@ export const WELL_TOP = 48 / ART.h;
  * through), and the near lip y 28–31, bright and solid.
  *
  * A pour splits here — in front of the cup above it, behind below — so it has to be the lip's edge
- * and not somewhere inside the lip, and not `WELL_TOP` (y 48), which is where the liquid sits and
- * is a good 20 further down.
+ * and not somewhere inside the lip, and not `WELL_TOP` (y 43), which is the center of the full
+ * liquid surface further down.
  */
 export const CUP_LIP = 28 / ART.h;
-export const WELL_BOTTOM = 162 / ART.h;
+export const WELL_BOTTOM = CUP_SURFACE_BOTTOM / ART.h;
 export const WELL_RUN = WELL_BOTTOM - WELL_TOP;
-/** The foot of the well and how deep it runs, which the surface sits on the way up. */
-const WELL_Y = 162;
-const WELL_DEPTH = 114;
-/**
- * The oval surface sprite: a whole ellipse, so it reaches below the line where the liquid meets
- * the glass as well as above it — `DRINK_RISE` above, `DRINK_DROP` below. The sprite is cut to the
- * ellipse and fades out as it closes, so its lower half melts into the body behind it rather than
- * ending on a rim, and it stays inside the glass even down in the foot.
- */
-const DRINK_RISE = 10;
-const DRINK_DROP = 12;
-/**
- * A pour never shows less than this. The surface carries twelve rows of ellipse below the line, and
- * the glass has nothing like that much room left once the level is in the foot, so the first drop
- * shows as a shallow pool rather than a sliver with its underside hanging out of the glass.
- *
- * It is eased in rather than clamped. Clamped, the drink snapped to a tenth and then stood still
- * for the ~180ms it takes to actually pour that much, which reads as the tap stalling before it
- * gets going. Instead the first `POUR_EASE` of the level is squeezed into the room above the floor,
- * so the drink moves from the instant the tap opens and is honest again from there up.
- */
-const MIN_POUR = 0.1;
-const POUR_EASE = 0.3;
-export function pourLevel(raw: number) {
-  'worklet';
-  if (raw >= POUR_EASE) return raw;
-  return MIN_POUR + (raw / POUR_EASE) * (POUR_EASE - MIN_POUR);
-}
-/** WELL's straight run, for working out how wide the glass is at the surface. */
-const WELL_TOP_Y = 48;
-const WELL_KNEE_Y = 156;
-const WELL_TOP_L = 14;
-const WELL_TOP_W = 86;
-const WELL_KNEE_L = 22;
-const WELL_KNEE_W = 67;
-
 /** Where the ice floats and where the toppings pile up, in sprite units. */
 const ICE_SPOTS = [
   { x: 29, y: 112, r: 15 },
@@ -121,9 +83,10 @@ interface KitchenCupProps {
   height: number;
   /** Driven by the station while a tap is held open, so the level rises with the hold. */
   level: SharedValue<number>;
+  pouring?: boolean;
 }
 
-export function KitchenCup({ drink, width, height, level }: KitchenCupProps) {
+export const KitchenCup = memo(function KitchenCup({ drink, width, height, level, pouring = false }: KitchenCupProps) {
   const uid = useId().replace(/:/g, '');
   const tea = drink.tea ? (getIngredient('tea', drink.tea) as Tea) : undefined;
   const milk = drink.milk && drink.milk !== 'none' ? getIngredient('milk', drink.milk) : undefined;
@@ -134,36 +97,9 @@ export function KitchenCup({ drink, width, height, level }: KitchenCupProps) {
   const padBottom = (1 - WELL_BOTTOM) * height;
   const runPx = WELL_RUN * height;
 
-  const milkiness = useSharedValue(milk ? 1 : 0);
-  useEffect(() => {
-    milkiness.set(withTiming(milk ? 1 : 0, timing(DURATION.slow)));
-  }, [milk, milkiness]);
-
-  // The drink is revealed from the bottom as it fills; the sprite is already cut to the glass, so
-  // the window is a plain rectangle run up from the cup's foot. The rows below the tea's own last
-  // one are empty in the sprite, which is why the window can start there rather than at the well's
-  // floor without showing anything.
-  const reveal = useAnimatedStyle(() => {
-    const raw = Math.max(0, Math.min(1, level.get()));
-    return { height: raw <= 0 ? 0 : padBottom + pourLevel(raw) * runPx };
-  });
-  const milky = useAnimatedStyle(() => ({ opacity: milkiness.get() }));
-  // The oval surface stands on that line, stretched to however wide the glass is there.
-  const surfaceStyle = useAnimatedStyle(() => {
-    const raw = Math.max(0, Math.min(1, level.get()));
-    const filled = pourLevel(raw);
-    const acrossWell = (WELL_Y - filled * WELL_DEPTH - WELL_TOP_Y) / (WELL_KNEE_Y - WELL_TOP_Y);
-    return {
-      opacity: raw <= 0 ? 0 : 1,
-      bottom: padBottom + filled * runPx - DRINK_DROP * scale,
-      left: (WELL_TOP_L + (WELL_KNEE_L - WELL_TOP_L) * acrossWell) * scale,
-      width: (WELL_TOP_W + (WELL_KNEE_W - WELL_TOP_W) * acrossWell) * scale,
-      height: (DRINK_RISE + DRINK_DROP) * scale,
-    };
-  });
   const foamStyle = useAnimatedStyle(() => ({
     bottom: padBottom + pourLevel(Math.max(0, Math.min(1, level.get()))) * runPx - 4 * scale,
-  }));
+  }), [level, padBottom, runPx, scale]);
 
   return (
     <View style={{ width, height }}>
@@ -172,34 +108,11 @@ export function KitchenCup({ drink, width, height, level }: KitchenCupProps) {
         tintColor={GLASS}
         style={[styles.layer, { width, height, opacity: GLASS_TINT }]}
       />
-      {/* The empty cup, which the drink is laid over rather than drawn behind: the drink sprite is
-          the design's *full* cup, glass and all, so wherever it covers it simply is the design. */}
+      {/* Keep the original glass and decal; liquid is clipped inside their silhouette. */}
       <Image source={CUP_SPRITE} style={[styles.layer, { width, height }]} />
 
-      {/* The drink: the sheet's own, revealed to the level. */}
-      {tea && (
-        <>
-          <Animated.View style={[styles.reveal, { bottom: 0 }, reveal]}>
-            <View style={{ position: 'absolute', bottom: 0, width, height }}>
-              <Image source={DRINK[drink.tea as string]} style={{ width, height }} />
-              {/* milk turns the whole drink creamy as it goes in */}
-              {milk && (
-                <Animated.View style={[styles.layer, { width, height }, milky]}>
-                  <Image source={DRINK_MILKY[drink.tea as string]} style={{ width, height }} />
-                </Animated.View>
-              )}
-            </View>
-          </Animated.View>
-          <Animated.View style={[styles.surface, surfaceStyle]} pointerEvents="none">
-            <Image source={DRINK_TOP[drink.tea as string]} style={styles.fill} resizeMode="stretch" />
-            {milk && (
-              <Animated.View style={[styles.layer, styles.fill, milky]}>
-                <Image source={DRINK_MILKY_TOP[drink.tea as string]} style={styles.fill} resizeMode="stretch" />
-              </Animated.View>
-            )}
-          </Animated.View>
-        </>
-      )}
+      {tea && <TeaLiquid width={width} height={height} color={tea.color} teaId={tea.id}
+        milkColor={milk?.color} level={level} pouring={pouring} />}
 
       {/* ice and toppings live in the drink, never outside the glass */}
       <Svg style={StyleSheet.absoluteFill} width={width} height={height} viewBox={`0 0 ${ART.w} ${ART.h}`}>
@@ -244,7 +157,7 @@ export function KitchenCup({ drink, width, height, level }: KitchenCupProps) {
       </Svg>
 
       {foam && (
-        <Animated.View style={[styles.foam, { height: 9 * scale }, foamStyle]} pointerEvents="none">
+        <Animated.View style={[styles.foam, { height: 9 * scale }, foamStyle, pointerEventsStyles.none]}>
           <Svg width={width} height={9 * scale} viewBox="0 0 113 9">
             <Ellipse cx={56.5} cy={4.8} rx={41} ry={4.4} fill={foam.color} stroke={shade(foam.color, -16)} strokeWidth={0.9} />
             <Ellipse cx={47} cy={3.9} rx={15} ry={2} fill="#FFFFFF" opacity={0.5} />
@@ -258,26 +171,13 @@ export function KitchenCup({ drink, width, height, level }: KitchenCupProps) {
       <Image source={CUP_DECAL} style={[styles.layer, { width, height }]} />
     </View>
   );
-}
+});
 
 const styles = StyleSheet.create({
   layer: {
     position: 'absolute',
     left: 0,
     top: 0,
-  },
-  reveal: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    overflow: 'hidden',
-  },
-  surface: {
-    position: 'absolute',
-  },
-  fill: {
-    width: '100%',
-    height: '100%',
   },
   foam: {
     position: 'absolute',

@@ -1,6 +1,6 @@
 # Web deployment
 
-Every push to `main` runs the [Deploy web workflow](https://github.com/LongBoDoi/boba-shop/actions/workflows/deploy.yml). After dependency installation, lint, typecheck, and web export succeed, it publishes the game to [boba-shop.expo.app](https://boba-shop.expo.app) using EAS Hosting.
+Every push to `main` runs the [Deploy web workflow](https://github.com/LongBoDoi/boba-shop/actions/workflows/deploy.yml). After dependency installation, lint, typecheck, regression checks, and web export succeed, it publishes the game to [boba-shop.expo.app](https://boba-shop.expo.app) using EAS Hosting. Lint warnings fail the workflow.
 
 Deployments run one at a time. GitHub keeps the latest pending run when several commits arrive during a deployment. Pushes to other branches do not deploy production.
 

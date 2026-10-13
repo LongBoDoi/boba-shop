@@ -15,25 +15,25 @@ import {
   getIngredient,
   MAX_ICE_SCOOPS,
   MILK_SPLASH,
-  MIN_FILL,
   SUGAR_STEPS,
-  Tea,
   Topping,
 } from '../game/ingredients';
 import { DayConfig } from '../game/levels';
 import { CupBuild } from '../game/reducer';
 import { DURATION, ease, timing } from '../motion';
 import { colors, fonts } from '../theme';
-import { fitRoom, KitchenRoom, Shadow, SHOP } from './art/KitchenRoom';
+import { fitRoom, KitchenRoom, kitchenTableFor, Shadow, SHOP } from './art/KitchenRoom';
 import {
   ART,
   BIN,
   BIN_EMPTY,
   BIN_HEAD,
+  COASTER_WIDTH_RATIO,
   FOAM,
   ICE_PAN,
-  JAR_SPOUT,
-  JAR_TEA,
+  ROOM_BG_SIZE,
+  ROOM_BG_TEA_SHELF,
+  TEA_TANK_ART,
   MILK,
   PIECE,
   PIECE_ART,
@@ -45,8 +45,12 @@ import {
   SYRUP,
 } from './art/kitchenArt';
 import { KitchenCup } from './KitchenCup';
-import { GRABBY } from './pour';
-import { TeaWindow } from './TeaWindow';
+import { CupContactShadow, PourMeterState } from './PourFeedback';
+import { GRABBY, Spill, Stream, useHoldPour } from './pour';
+import { TankGraphic } from './TeaLiquid';
+import { TeaTankMount } from './art/TeaTankMount';
+import { fitBackground } from './art/PannableBackground';
+import { pointerEventsStyles } from '../pointerEvents';
 
 // --------------------------------------------------------------------------- layout
 
@@ -77,6 +81,8 @@ interface Station {
   spout: number;
   /** Where the cup's bottom goes while you hold this tap open. */
   dockY: number;
+  dockScale?: number;
+  mount?: number;
 }
 
 /** A row of equipment, and whether there is more of it than the room is wide. */
@@ -84,25 +90,6 @@ export interface RowStrip {
   scroll: boolean;
   /** How wide the row's contents are altogether. */
   span: number;
-}
-
-/** The little wooden sign on the dispenser shelf's top board, naming the station under it. */
-export interface TeaSign {
-  cx: number;
-  top: number;
-  height: number;
-}
-
-/**
- * The dispenser shelf taken as one thing. The cup is no longer carried to a particular tap: it is
- * lifted anywhere onto this and the pouring window opens on the tap nearest where it was let go.
- */
-export interface TeaBay {
-  x0: number;
-  x1: number;
-  /** The jars' shoulders, and the board they stand on. */
-  top: number;
-  base: number;
 }
 
 /** A row the player can swipe along, and how far it may go. */
@@ -125,9 +112,6 @@ export interface KitchenLayout {
   strips: RowStrip[];
   /** The places on the topping tray with nothing in them yet, back row first. */
   emptyBins: Box[];
-  /** Both null on a day with no dispensers at all, which cannot happen in play. */
-  teaSign: TeaSign | null;
-  teaBay: TeaBay | null;
   /** Where a cup stands on the work top through the middle of the room. */
   tableLine: number;
   /** Where the pink units at the foot of the room start. */
@@ -137,18 +121,6 @@ export interface KitchenLayout {
   homeX: number;
   homeY: number;
 }
-
-/** The least board between two jars, on the day the shelf is full and has none to spare. */
-const TEA_GAP = 2;
-/**
- * How many dispensers the shelf is cut to hold, which is what sets the spacing rather than how
- * many the day happens to have. The board is divided into this many equal places and the day's
- * teas fill them **from the left**, so the row grows along the shelf as the week goes on and a
- * full shelf fills it exactly. A jar is therefore the same size and in the same place on day one
- * as on day seven, and the places the day has not reached yet are bare board at the right-hand
- * end. Lower it to the number of teas there actually are and the row always fills the shelf.
- */
-const TEA_SHELF = 7;
 
 /** The ice pan is drawn wider than it is tall; everything else keeps its own art's shape. */
 const widened = (kind: StationKind) => kind === 'ice';
@@ -193,9 +165,12 @@ const EQUIPMENT_NAMES: Record<string, string> = {
   sugar: 'Đường',
 };
 
-/** The cup the player builds, sized to the room it has. */
+/** Size the cup and its holder to the flat countertop in the new background. */
 export function cupSizeFor(W: number, H: number) {
-  const width = Math.round(Math.max(40, Math.min(70, W * 0.165, H * 0.14)));
+  const table = kitchenTableFor(W, H);
+  // Leave room for the holder's front rim and shadow, both of which extend past the cup's feet.
+  const holderHeight = (table.base - table.top) * 0.75;
+  const width = Math.round(Math.max(40, Math.min(80, W * 0.2, holderHeight * ART.coaster / COASTER_WIDTH_RATIO)));
   // The cup sprite is this much taller than it is wide.
   const height = Math.round(width / ART.cup);
   return { width, height };
@@ -238,8 +213,6 @@ export function layoutKitchen(config: DayConfig, W: number, H: number): KitchenL
   const stations: Station[] = [];
   const strips: RowStrip[] = [];
   const emptyBins: Box[] = [];
-  let teaSign: TeaSign | null = null;
-  let teaBay: TeaBay | null = null;
 
   rows.forEach((items, r) => {
     const kind = items[0].kind;
@@ -249,51 +222,46 @@ export function layoutKitchen(config: DayConfig, W: number, H: number): KitchenL
       return;
     }
 
+    if (kind === 'tea') {
+      const background = fitBackground(W, H, ROOM_BG_SIZE.width, ROOM_BG_SIZE.height);
+      const shelf = ROOM_BG_TEA_SHELF;
+      const slot = (shelf.x1 - shelf.x0) * background.scale / Math.max(shelf.capacity, items.length);
+      const w = Math.min(shelf.tankWidth * background.scale, slot - 8 * background.scale);
+      const h = w * TEA_TANK_ART.height / TEA_TANK_ART.width;
+      const base = background.top + shelf.bottom * background.scale;
+      const y = background.top + shelf.mount * background.scale - h * TEA_TANK_ART.collar;
+      const spout = h * TEA_TANK_ART.spout;
+      const dockHeight = base - (y + spout + 6 * background.scale);
+      const dockScale = Math.min(1, dockHeight / cupH);
+      items.forEach((item, i) => {
+        const option = getIngredient('tea', item.id)!;
+        const cx = shelf.x0 * background.scale + (i + 0.5) * slot;
+        stations.push({ key: `tea-${item.id}`, kind: 'tea', id: item.id,
+          name: option.name, color: option.color, row: r,
+          x: cx - w / 2, y, w, h, cx, slot, labelW: w, base, spout,
+          dockY: base, dockScale, mount: background.top + shelf.mount * background.scale });
+      });
+      strips.push({ scroll: false, span: background.drawnWidth });
+      return;
+    }
+
     const level = LEVELS[Math.min(r, LEVELS.length - 1)];
-    const tea = kind === 'tea';
 
     const base = Math.round(py(level.base));
     // The plaque hangs below the surface, so all of this is the box's: what the shelf above
     // leaves it.
     const headroom = base - Math.round(py(level.ceiling));
-    let left = Math.round(px(level.x0));
-    let run = Math.round(px(level.x1)) - left;
-    if (tea) {
-      // A phone taller than the painting keeps the painting's shape and crops it at the sides, and
-      // the end of the shelf can go with it. The jars divide what is actually on screen, so the
-      // one at the end is not left standing half off the edge of it.
-      const end = Math.min(left + run, W);
-      left = Math.max(left, 0);
-      run = end - left;
-    }
-
-    // Every box is as big as its own art goes in the space above the surface — never shrunk so
-    // that the day's whole range fits across at once, which is what used to turn a late day's
-    // dispensers into thumbnails. The counters below, which do overflow, run off the right of the
-    // room and are swiped back instead. The shelf cannot be swiped, so it is the one row held to
-    // its own run — and to a full shelf's worth of it rather than the day's, so that a jar does
-    // not change size as the week brings more of them.
-    const w = tea
-      ? Math.min(W * MAX_WIDTH[kind], headroom * ASPECT[kind], run / TEA_SHELF - TEA_GAP)
-      : Math.min(W * MAX_WIDTH[kind], headroom * ASPECT[kind]);
+    const left = Math.round(px(level.x0));
+    const w = Math.min(W * MAX_WIDTH[kind], headroom * ASPECT[kind]);
     const h = Math.round(w / ASPECT[kind]);
 
     // One height for the whole row, and each box as wide as its own art — so a bottle stays a
     // bottle and a carton a carton, instead of every one of them taking the first one's shape.
     const widths = items.map((item) =>
-      Math.round(h * ASPECT[tea ? 'tea' : item.kind]),
+      Math.round(h * ASPECT[item.kind]),
     );
-    // The board is cut into `TEA_SHELF` equal places and the day's jars take them in turn, so the
-    // gap between any two of them is the same on every day of the week and a full shelf fills the
-    // board exactly. Pans sit shoulder to shoulder, since their row runs off the room and is
-    // swiped; a bottle or a carton takes a column of its own, wide enough to put its name under.
-    const slots = items.map((item, i) =>
-      tea
-        ? run / Math.max(TEA_SHELF, items.length)
-        : widened(item.kind)
-          ? widths[i]
-          : Math.max(widths[i], Math.round(W * 0.2)),
-    );
+    const slots = items.map((item, i) => widened(item.kind)
+      ? widths[i] : Math.max(widths[i], Math.round(W * 0.2)));
     const span = slots.reduce((sum, slot) => sum + slot, 0);
     // Everything starts hard against the left of what it stands on: the counters then run off the
     // right if they have to, and the shelf leaves the places the day has not reached yet bare.
@@ -322,39 +290,25 @@ export function layoutKitchen(config: DayConfig, W: number, H: number): KitchenL
         // the width of its box would break "Đường" across two lines.
         labelW: Math.max(slot - 2, 70),
         base,
-        spout: item.kind === 'tea' ? Math.round(h * JAR_SPOUT) : Math.round(h * 0.2),
+        spout: Math.round(h * 0.2),
         dockY: base + cupH + 8,
       });
     });
 
-    if (tea) {
-      // The whole board, not just the run the jars happen to use: the row stands in the middle of
-      // it, so the bare ends are between the jars and the edge rather than off to one side, and a
-      // cup put down on one is plainly meant for the shelf.
-      teaBay = { x0: left, x1: left + run, top: base - h, base };
-      teaSign = {
-        // Over the jars that are there rather than over the middle of the board, since the row
-        // fills the board from the left and only reaches the far end on a full shelf.
-        cx: left + Math.round(span / 2),
-        top: Math.round(py(ROOM.shelf.board)) - 2,
-        height: Math.max(15, Math.round(py(ROOM.shelf.top) - py(ROOM.shelf.board))),
-      };
-    }
-    strips.push({ scroll: !tea && span > W, span });
+    strips.push({ scroll: span > W, span });
   });
 
-  const tableLine = Math.round(py(ROOM.table.stand));
+  const table = kitchenTableFor(W, H);
+  const tableLine = (table.top + table.base) / 2;
   return {
     stations,
     strips,
     emptyBins,
-    teaSign,
-    teaBay,
     tableLine,
     cabinetTop: Math.round(py(ROOM.cabinets)),
     cupW,
     cupH,
-    homeX: Math.round(W / 2 - cupW / 2),
+    homeX: (W - cupW) / 2,
     homeY: tableLine - cupH,
   };
 }
@@ -460,16 +414,15 @@ interface KitchenStationProps {
   onSugar: () => void;
   /** The pager must stop swiping while something is being dragged around the kitchen. */
   onDragging: (dragging: boolean) => void;
-  /** How much of the top of the room the page floats the order card over. */
-  topInset: number;
+  onMeterChange: (meter: PourMeterState | null) => void;
   /** Measured for the coin/toss effects. */
   cupRef: React.RefObject<View | null>;
 }
 
 /**
  * The kitchen you actually work in. Two gestures, both held in the hand:
- * - **drag the cup** up under a tea dispenser or a milk carton and **hold the tap** — how long you
- *   hold is how much runs in, and the cup has to reach the "đủ" line to be worth serving;
+ * - **drag the cup** up under a tea dispenser and **hold the tap** — how long you
+ *   hold is how much runs in, with a floating meter showing the live amount;
  * - **drag a topping, a scoop of ice, the syrup bottle or a spoon of foam straight onto the cup**,
  *   wherever the cup happens to be standing.
  *
@@ -487,92 +440,126 @@ export function KitchenStation({
   onIce,
   onSugar,
   onDragging,
-  topInset,
+  onMeterChange,
   cupRef,
 }: KitchenStationProps) {
   const layout = useMemo(() => layoutKitchen(config, W, H), [config, W, H]);
-  const { stations, strips, emptyBins, teaSign, teaBay, tableLine, cabinetTop, cupW, cupH, homeX, homeY } =
+  const { stations, strips, emptyBins, tableLine, cabinetTop, cupW, cupH, homeX, homeY } =
     layout;
 
   const cupX = useSharedValue(homeX);
   const cupY = useSharedValue(homeY);
-  /** 0 = standing on the table, 1 = held up to a tap. */
-  const lift = useSharedValue(0);
+  const cupScale = useSharedValue(1);
   /** The live liquid level, which a held-open tap drives straight past the committed fill. */
   const level = useSharedValue(build.fill);
 
-  // Whether the station is open. A fresh cup (served or tipped out) shuts it.
-  const [station, setStation] = useState<{ cupId: number; open: boolean }>({ cupId, open: false });
-  if (station.cupId !== cupId) setStation({ cupId, open: false });
+  const panOffset = useSharedValue(0);
+  const [interacting, setInteracting] = useState(false);
+  const handleDragging = useCallback((held: boolean) => {
+    setInteracting(held);
+    onDragging(held);
+  }, [onDragging]);
+  const [dock, setDock] = useState<{ cupId: number; key: string | null }>({ cupId, key: null });
+  const docked = dock.cupId === cupId ? stations.find((item) => item.key === dock.key) : undefined;
+  const [pouring, setPouring] = useState<{ id: string; color: string; x: number; top: number; running: boolean } | null>(null);
+  if (dock.cupId !== cupId) {
+    setDock({ cupId, key: null });
+    setPouring(null);
+  }
+  const pouringId = pouring?.id;
+  // Prepare the selected tank's painted liquid while docking, before the first flowing frame.
+  const previewTea = pouringId ?? docked?.id;
+  const inCup = useMemo(() => previewTea ? { ...cup, tea: cup.tea ?? previewTea } : cup, [cup, previewTea]);
+  const returnTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const running = Boolean(pouring?.running);
+  useEffect(() => {
+    onMeterChange(docked ? { level, color: docked.color, running } : null);
+  }, [docked, level, running, onMeterChange]);
+  useEffect(() => () => onMeterChange(null), [onMeterChange]);
+  useEffect(() => () => {
+    if (returnTimer.current) clearTimeout(returnTimer.current);
+  }, []);
   const nudge = useNudge();
-  /** The day's dispensers, for the station window to put on its own shelf. */
-  const teas = stations.filter((item) => item.kind === 'tea').map(({ id, name, color }) => ({ id, name, color }));
 
   useEffect(() => {
     cupX.set(withTiming(homeX, timing(DURATION.slow)));
     cupY.set(withTiming(homeY, timing(DURATION.slow)));
-    lift.set(withTiming(0, timing()));
+    cupScale.set(withTiming(1, timing()));
+    if (returnTimer.current) clearTimeout(returnTimer.current);
     // A new cup starts empty, back on the table.
-  }, [cupId, cupX, cupY, lift, homeX, homeY]);
+  }, [cupId, cupX, cupY, cupScale, homeX, homeY]);
 
   useEffect(() => {
     level.set(withTiming(build.fill, timing(DURATION.base)));
   }, [build.fill, cupId, level]);
 
+  const cancelReturn = useCallback(() => {
+    if (returnTimer.current) clearTimeout(returnTimer.current);
+  }, []);
+
   /** Send the cup back to its coaster, wherever it was left. */
   const standCupDown = useCallback(() => {
+    if (returnTimer.current) clearTimeout(returnTimer.current);
+    setDock({ cupId, key: null });
+    setPouring(null);
     cupX.set(withTiming(homeX, timing(DURATION.slow)));
     cupY.set(withTiming(homeY, timing(DURATION.slow)));
-    lift.set(withTiming(0, timing(DURATION.slow)));
-  }, [cupX, cupY, lift, homeX, homeY]);
+    cupScale.set(withTiming(1, timing(DURATION.slow)));
+  }, [cupId, cupX, cupY, cupScale, homeX, homeY]);
 
-  /**
-   * Open the station. The cup is put straight back down in the room — in the window it is
-   * standing on that room's own work top — and the pager is frozen so that a swipe inside the
-   * window cannot take the page with it.
-   */
-  const openTea = useCallback(() => {
-    setStation({ cupId, open: true });
-    standCupDown();
-    onDragging(true);
-  }, [cupId, standCupDown, onDragging]);
+  const startPouring = (station: Station, running: boolean) => {
+    if (returnTimer.current) clearTimeout(returnTimer.current);
+    setPouring(running ? { id: station.id, color: station.color, running: true,
+      x: station.cx - panOffset.get(), top: station.y + station.spout }
+      : (previous) => previous ? { ...previous, running: false } : null);
+    handleDragging(running);
+    if (!running) returnTimer.current = setTimeout(standCupDown, 420);
+  };
 
   const pan = useMemo(() => {
     const grab = { x: homeX, y: homeY };
     const settle = () => {
-      onDragging(false);
-      // Left standing on the work top it goes home; lifted up onto the shelf it opens the window.
-      const lifted = cupY.get() + cupH < tableLine - 10;
-      const found = lifted ? findStation(stations, teaBay, cupX.get(), cupY.get(), cupW, cupH) : null;
-      if (found) openTea();
-      else standCupDown();
+      handleDragging(false);
+      const scale = cupScale.get();
+      const found = findStation(stations, cupX.get(), cupY.get(), cupW * scale, cupH * scale, panOffset.get(), W);
+      if (found) {
+        setDock({ cupId, key: found.key });
+        const scale = found.dockScale ?? 1;
+        cupScale.set(withTiming(scale, timing(DURATION.base)));
+        cupX.set(withTiming(found.cx - panOffset.get() - cupW * scale / 2, timing(DURATION.base)));
+        cupY.set(withTiming(found.dockY - cupH * scale, timing(DURATION.base)));
+      } else standCupDown();
     };
+    // PanResponder stores these handlers; timer refs are read only when a gesture runs.
+    // eslint-disable-next-line react-hooks/refs
     return PanResponder.create({
       onStartShouldSetPanResponder: () => true,
       onMoveShouldSetPanResponder: () => true,
       onMoveShouldSetPanResponderCapture: () => true,
+      onPanResponderTerminationRequest: () => false,
       onPanResponderGrant: () => {
-        grab.x = cupX.get();
-        grab.y = cupY.get();
-        onDragging(true);
-        lift.set(withTiming(1, timing(DURATION.fast)));
+        cancelReturn();
+        setDock({ cupId, key: null });
+        // Keep the cup's center beneath the finger while it grows back to its carrying size.
+        const scale = cupScale.get();
+        grab.x = cupX.get() - cupW * (1 - scale) / 2;
+        grab.y = cupY.get() - cupH * (1 - scale) / 2;
+        cupX.set(withTiming(grab.x, timing(DURATION.fast)));
+        cupY.set(withTiming(grab.y, timing(DURATION.fast)));
+        cupScale.set(withTiming(1, timing(DURATION.fast)));
+        handleDragging(true);
       },
       onPanResponderMove: (_event, gesture) => {
-        cupX.set(Math.max(-cupW * 0.15, Math.min(W - cupW * 0.85, grab.x + gesture.dx)));
-        cupY.set(Math.max(-4, Math.min(H - cupH * 0.65, grab.y + gesture.dy)));
+        cupX.set(Math.max(-cupW * 0.15, Math.min(W - cupW * 0.85, grab.x + gesture.dx + cupW * (1 - cupScale.get()) / 2)));
+        cupY.set(Math.max(-4, Math.min(H - cupH * 0.65, grab.y + gesture.dy + cupH * (1 - cupScale.get()) / 2)));
       },
       onPanResponderRelease: settle,
-      onPanResponderTerminate: settle,
+      onPanResponderTerminate: () => { handleDragging(false); standCupDown(); },
     });
-  }, [stations, teaBay, cupW, cupH, homeX, homeY, tableLine, W, H, cupX, cupY, lift, onDragging, openTea, standCupDown]);
+  }, [stations, cupId, cupW, cupH, homeX, homeY, W, H, cupX, cupY, cupScale, panOffset, handleDragging, standCupDown, cancelReturn]);
 
-  const closeTea = () => {
-    setStation({ cupId, open: false });
-    onDragging(false);
-  };
 
-  // How far each row has been swiped along. There are never more than three, and the top one —
-  // the dispensers — never moves, because the cup is carried to a particular tap.
+  // The remaining equipment keeps its existing independent row gestures.
   const swipe = [useSharedValue(0), useSharedValue(0), useSharedValue(0)];
   // A new day rearranges the counters, so anything swiped out of the way is brought back into
   // range — otherwise a row that no longer overflows would sit permanently off to one side.
@@ -599,16 +586,19 @@ export function KitchenStation({
     onIce,
     onSugar,
     onPour,
-    onDragging,
+    onDragging: handleDragging,
     onNudge: nudge.show,
   });
 
   const cupStyle = useAnimatedStyle(() => ({
-    transform: [{ translateX: cupX.value }, { translateY: cupY.value }, { scale: 1 + lift.value * 0.05 }],
+    // Compensate for React Native's center transform origin so cupX/Y stay its visible top-left.
+    transform: [{ translateX: cupX.get() - cupW * (1 - cupScale.get()) / 2 },
+      { translateY: cupY.get() - cupH * (1 - cupScale.get()) / 2 }, { scale: cupScale.get() }],
   }));
 
-  const hint = nudge.text || hintFor(cup, build);
+  const hint = nudge.text || hintFor(cup, docked);
   const shared = { cup, build, onNudge: nudge.show, carry };
+  const matW = Math.round(cupW * COASTER_WIDTH_RATIO);
 
   return (
     <View style={StyleSheet.absoluteFill}>
@@ -616,17 +606,23 @@ export function KitchenStation({
         width={W}
         height={H}
         tableLine={tableLine}
-        matX={homeX - Math.round(cupW * 0.25)}
-        matW={Math.round(cupW * 1.5)}
-      />
-
-      {teaSign && <ShelfSign sign={teaSign} />}
+        matX={(W - matW) / 2}
+        matW={matW}
+        panOffset={panOffset}
+        scrollEnabled={!interacting}
+        onPanBegin={standCupDown}
+      >
+        {stations.filter((station) => station.kind === 'tea').map((station) => (
+          <TeaDispenser key={station.key} station={station} {...shared}
+            active={docked?.key === station.key} level={level} onPour={onPour} onPouring={startPouring} />
+        ))}
+      </KitchenRoom>
 
       {/* The bins the week has not reached yet. They go down before the rows, so a bin the day
           does have is simply laid over the one standing where it goes. Wrapped rather than given
           `pointerEvents` of their own, which is not a prop on an Image. */}
       {emptyBins.length > 0 && (
-        <View style={StyleSheet.absoluteFill} pointerEvents="none">
+        <View style={[StyleSheet.absoluteFill, pointerEventsStyles.none]}>
           {emptyBins.map((bin) => (
             <Image
               key={`${bin.x}-${bin.y}`}
@@ -638,13 +634,12 @@ export function KitchenStation({
       )}
 
       {strips.map((strip, r) => {
-        const row = stations.filter((station) => station.row === r);
-        const pan = strip.scroll ? { offset: swipe[r], min: W - strip.span, onHold: onDragging } : undefined;
+        const row = stations.filter((station) => station.row === r && station.kind !== 'tea');
+        if (!row.length) return null;
+        const pan = strip.scroll ? { offset: swipe[r], min: W - strip.span, onHold: handleDragging } : undefined;
         const boxes = row.map((station) => {
           const props = { station, pan, ...shared };
           switch (station.kind) {
-            case 'tea':
-              return <TeaDispenser key={station.key} {...props} onOpen={openTea} />;
             case 'milk':
               return <MilkCarton key={station.key} {...props} />;
             case 'topping':
@@ -662,14 +657,15 @@ export function KitchenStation({
             {boxes}
           </SwipeRow>
         ) : (
-          <View key={r} style={StyleSheet.absoluteFill} pointerEvents="box-none">
+          <View key={r} style={[StyleSheet.absoluteFill, pointerEventsStyles.boxNone]}>
             {boxes}
           </View>
         );
       })}
 
-      {/* The cup: a thing on the table you pick up and carry to the taps. It needs no shadow of
-          its own — the coaster it stands in casts one. */}
+      {docked && <CupContactShadow cupX={cupX} cupY={cupY} cupScale={cupScale} cupW={cupW} cupH={cupH} />}
+      {/* The cup grows in the hand and rests at the shelf's scale when docked. */}
+      {pouring && <Stream {...pouring} cupY={cupY} cupH={cupH} cupScale={cupScale} level={level} side="back" />}
       <Animated.View
         ref={cupRef}
         {...pan.panHandlers}
@@ -678,34 +674,17 @@ export function KitchenStation({
         style={[styles.cup, { width: cupW, height: cupH }, cupStyle]}
       >
         <FreshCup key={cupId} width={cupW} height={cupH}>
-          <KitchenCup drink={cup} width={cupW} height={cupH} level={level} />
+          <KitchenCup drink={inCup} width={cupW} height={cupH} level={level} pouring={Boolean(pouring?.running)} />
+          {pouring && <Spill level={level} cupW={cupW} cupH={cupH} color={pouring.color} />}
         </FreshCup>
       </Animated.View>
 
       {carry.node}
 
-      {/* The station, opened: the room behind it goes quiet while the cup is being poured. */}
-      {station.open && (
-        <TeaWindow
-          width={W}
-          height={H}
-          topInset={topInset}
-          teas={teas}
-          cup={cup}
-          build={build}
-          level={level}
-          onPour={onPour}
-          onNudge={nudge.show}
-          onClose={closeTea}
-        />
-      )}
+      {pouring && <Stream {...pouring} cupY={cupY} cupH={cupH} cupScale={cupScale} level={level} side="front" />}
 
-      {/* The line along the bottom tells you what to do with the room — nothing, while a window
-          is up over it. */}
-      {!station.open && (
         <View
-          style={[styles.hintRow, { top: Math.min(H - 22, cabinetTop + Math.max(3, (H - cabinetTop - 18) / 2)) }]}
-          pointerEvents="none"
+          style={[styles.hintRow, { top: Math.min(H - 22, cabinetTop + Math.max(3, (H - cabinetTop - 18) / 2)) }, pointerEventsStyles.none]}
         >
           <View style={styles.hint}>
             <Text style={styles.hintText} numberOfLines={2}>
@@ -713,48 +692,33 @@ export function KitchenStation({
             </Text>
           </View>
         </View>
-      )}
     </View>
   );
 }
 
-/**
- * Which tap the cup was lifted to. The shelf is one station now, so anywhere along it counts —
- * the cup no longer has to be lined up under a particular jar — and the nearest tap is the one
- * the window opens on.
- */
-function findStation(
-  stations: Station[],
-  bay: TeaBay | null,
-  x: number,
-  y: number,
-  cupW: number,
-  cupH: number,
-): Station | null {
-  if (!bay) return null;
-  const cx = x + cupW / 2;
-  // Did it reach the shelf at all? Half a cup past either end, and anywhere between the jars'
-  // shoulders and a cup's height below the board they stand on.
-  if (cx < bay.x0 - cupW * 0.5 || cx > bay.x1 + cupW * 0.5) return null;
-  if (y + cupH < bay.top || y > bay.base + cupH * 0.9) return null;
-
+/** Find a visible tap directly above the released cup, accounting for the panorama's pan. */
+function findStation(stations: Station[], x: number, y: number, cupW: number, cupH: number, offset: number, width: number): Station | null {
   let best: Station | null = null;
-  let bestDx = Infinity;
+  let score = Infinity;
   for (const station of stations) {
-    // Only the dispensers are poured from; everything else is carried over to the cup.
     if (station.kind !== 'tea') continue;
-    const dx = Math.abs(cx - station.cx);
-    if (dx < bestDx) {
-      bestDx = dx;
-      best = station;
-    }
+    const cx = station.cx - offset;
+    if (cx < cupW / 2 || cx > width - cupW / 2) continue;
+    const dx = Math.abs(x + cupW / 2 - cx) / (station.slot / 2);
+    // The carried cup is full size; accept its mouth near the spout or its base near the shelf.
+    const targetTop = station.dockY - cupH * (station.dockScale ?? 1);
+    const dy = Math.min(Math.abs(y - targetTop), Math.abs(y + cupH - station.dockY)) / (cupH * 0.65);
+    if (dx <= 1 && dy <= 1 && dx + dy < score) { best = station; score = dx + dy; }
   }
   return best;
 }
 
-function hintFor(cup: Drink, build: CupBuild): string {
-  if (!cup.tea) return 'Kéo ly lên kệ trà để mở bàn pha';
-  if (build.fill < MIN_FILL) return 'Chưa đủ trà — mở lại kệ trà và rót thêm';
+function hintFor(cup: Drink, docked?: Station): string {
+  if (docked) {
+    if (cup.tea && cup.tea !== docked.id) return 'Ly đã có trà khác — đổ bỏ để pha lại';
+    return `Giữ vòi ${docked.name} để rót — xem thanh lượng trà`;
+  }
+  if (!cup.tea) return 'Kéo ly dưới bình trà, rồi giữ vòi để rót';
   return 'Kéo topping, đá, đường… thả thẳng vào ly';
 }
 
@@ -963,7 +927,7 @@ function useCarry({
   }));
 
   const node = (
-    <Animated.View pointerEvents="none" style={[styles.carried, { width: size, height: size }, style]}>
+    <Animated.View style={[styles.carried, { width: size, height: size }, style, pointerEventsStyles.none]}>
       {held && <Tool station={held} size={size} />}
     </Animated.View>
   );
@@ -975,7 +939,7 @@ function useCarry({
 function SwipeRow({ offset, children }: { offset: SharedValue<number>; children: ReactNode }) {
   const style = useAnimatedStyle(() => ({ transform: [{ translateX: offset.get() }] }));
   return (
-    <Animated.View style={[StyleSheet.absoluteFill, style]} pointerEvents="box-none">
+    <Animated.View style={[StyleSheet.absoluteFill, style, pointerEventsStyles.boxNone]}>
       {children}
     </Animated.View>
   );
@@ -1065,7 +1029,7 @@ interface EquipProps {
 
 interface FrameProps {
   station: Station;
-  /** Left off where the equipment speaks for itself — the dispensers are told apart by colour. */
+  /** Optional plaque beneath equipment; tea tanks carry a name tag on their glass. */
   label?: string;
   locked?: boolean;
   /** Off for anything set into a surface rather than stood on one. */
@@ -1168,53 +1132,43 @@ function useCarryGesture(
   };
 }
 
-// --------------------------------------------------------------------------- the tea shelf
-
-/** The little wooden sign on the shelf's top board, naming the station under it. */
-function ShelfSign({ sign }: { sign: TeaSign }) {
-  const w = Math.round(sign.height * 2.6);
-  return (
-    <View
-      pointerEvents="none"
-      style={[styles.sign, { left: sign.cx - w / 2, top: sign.top, width: w, height: sign.height }]}
-    >
-      <Text style={[styles.signText, { fontSize: Math.round(sign.height * 0.56) }]} numberOfLines={1}>
-        Trà
-      </Text>
-    </View>
-  );
-}
-
 // --------------------------------------------------------------------------- tea dispensers
 
-function TeaDispenser({ station, cup, onOpen }: EquipProps & { onOpen: () => void }) {
+function TeaDispenser({ station, cup, build, onNudge, active, level, onPour, onPouring }: EquipProps & {
+  active: boolean;
+  level: SharedValue<number>;
+  onPour: KitchenStationProps['onPour'];
+  onPouring: (station: Station, running: boolean) => void;
+}) {
   const { w: W, h: H } = station;
-  const tea = getIngredient('tea', station.id) as Tea;
+  const mountW = W * 1.18;
+  const mountH = mountW * 28 / 120;
   const locked = cup.tea !== null && cup.tea !== station.id;
   const press = useSharedValue(1);
-  // Nothing is poured where the jars stand any more: touching one is the other way into the
-  // station, the same as carrying the cup up to it.
-  const handlers = {
-    ...GRABBY,
-    onResponderGrant: () => press.set(withTiming(0.95, { duration: 80 })),
-    onResponderRelease: () => {
-      press.set(withTiming(1, timing(DURATION.fast)));
-      onOpen();
-    },
-    onResponderTerminate: () => press.set(withTiming(1, timing(DURATION.fast))),
-  };
-
+  const { handlers, pouring } = useHoldPour({ enabled: active && !locked, fill: build.fill, level, press,
+    onStart: (running) => onPouring(station, running),
+    onCommit: (amount) => onPour('tea', station.id, amount),
+    onBlocked: () => onNudge(locked ? 'Ly đã có trà khác — đổ bỏ để pha lại' : `Kéo ly dưới bình ${station.name} trước`),
+  });
   return (
-    <Frame
-      station={station}
-      locked={locked}
-      accessibilityLabel={`Bình ${tea.name}`}
-      press={press}
-      handlers={handlers}
-    >
-      {/* Glass and tea together, as the sheet paints them. */}
-      <Image source={JAR_TEA[station.id] ?? JAR_TEA.black} style={{ width: W, height: H }} />
-    </Frame>
+    <View {...handlers} accessible accessibilityRole="button"
+      accessibilityLabel={`Bình ${station.name} — giữ vòi để rót`}
+      accessibilityState={{ selected: active, disabled: locked }}
+      style={{ position: 'absolute', left: station.cx - station.slot / 2, top: station.y,
+        width: station.slot, height: Math.max(44, H), alignItems: 'center' }}>
+      <View style={[{ position: 'absolute',
+        top: (station.mount ?? station.y) - station.y - mountH * 0.45, width: mountW, height: mountH }, pointerEventsStyles.none]}>
+        <TeaTankMount width={mountW} height={mountH} />
+      </View>
+      <TankGraphic width={W} height={H} color={station.color} teaId={station.id} pouring={pouring} />
+      <View style={[{ position: 'absolute', bottom: '100%', width: station.slot - 4,
+        minHeight: 22, marginBottom: 3, justifyContent: 'center', alignItems: 'center',
+        backgroundColor: '#FFF5DB', borderColor: active ? '#FF5D96' : '#80573D',
+        borderWidth: 1.5, borderRadius: 5, paddingHorizontal: 3 }, pointerEventsStyles.none]}>
+        <Text numberOfLines={2} style={{ textAlign: 'center', fontFamily: fonts.bold,
+          fontSize: 10, lineHeight: 12, color: '#663722' }}>{station.name}</Text>
+      </View>
+    </View>
   );
 }
 
@@ -1381,21 +1335,6 @@ const styles = StyleSheet.create({
     borderRadius: 4,
     paddingHorizontal: 5,
     overflow: 'hidden',
-  },
-  sign: {
-    position: 'absolute',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: SHOP.plaque,
-    borderWidth: 2,
-    borderBottomWidth: 3,
-    borderColor: SHOP.woodEdge,
-    borderRadius: 7,
-  },
-  signText: {
-    fontFamily: fonts.bold,
-    color: '#6B4422',
-    includeFontPadding: false,
   },
   tool: {
     position: 'absolute',

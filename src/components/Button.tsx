@@ -31,7 +31,7 @@ export function Button({ label, onPress, variant = 'primary', disabled, style, i
       accessibilityState={{ disabled }}
       style={[styles.button, primary ? styles.primary : styles.secondary, disabled && styles.disabled, style, animatedStyle]}
     >
-      {icon && <Image source={icon} style={styles.icon} />}
+      {icon && <Image source={icon} style={styles.icon} resizeMode="contain" />}
       <Text style={[styles.label, !primary && styles.secondaryLabel]} numberOfLines={1}>
         {label}
       </Text>
@@ -53,7 +53,6 @@ const styles = StyleSheet.create({
   icon: {
     width: 21,
     height: 21,
-    resizeMode: 'contain',
   },
   primary: {
     backgroundColor: colors.primary,

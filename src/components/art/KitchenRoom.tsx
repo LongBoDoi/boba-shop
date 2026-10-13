@@ -1,9 +1,11 @@
-import { memo } from 'react';
+import { memo, ReactNode } from 'react';
 import { Image, StyleSheet, View } from 'react-native';
 import Svg, { Ellipse } from 'react-native-svg';
+import { SharedValue } from 'react-native-reanimated';
 
-import { ART, COASTER, ROOM, ROOM_BG, ROOM_BG_SIZE } from './kitchenArt';
-import { PannableBackground } from './PannableBackground';
+import { ART, COASTER, ROOM, ROOM_BG, ROOM_BG_SIZE, ROOM_BG_TABLE } from './kitchenArt';
+import { fitBackground, PannableBackground } from './PannableBackground';
+import { pointerEventsStyles } from '../../pointerEvents';
 
 /** Warm tones the hand-drawn bits borrow so they sit with the painted ones. */
 export const SHOP = {
@@ -61,6 +63,15 @@ export function fitRoom(W: number, H: number): RoomFit {
   return { scale, px: (x: number) => dx + x * scale, py: (y: number) => dy + y * scale };
 }
 
+/** The countertop moves horizontally with the painting, but its height is constant while panning. */
+export function kitchenTableFor(width: number, height: number) {
+  const { scale, top } = fitBackground(width, height, ROOM_BG_SIZE.width, ROOM_BG_SIZE.height);
+  return {
+    top: top + ROOM_BG_TABLE.top * scale,
+    base: top + ROOM_BG_TABLE.base * scale,
+  };
+}
+
 /**
  * The soft pool a thing standing on a surface casts around its foot: nested ellipses, each barely
  * there, piling up towards the middle. A `View` cannot be an ellipse — its border radius clamps to
@@ -71,7 +82,7 @@ const SHADOW_RINGS = [1, 0.86, 0.72, 0.58, 0.44, 0.3];
 
 export function Shadow({ cx, cy, rx, ry }: { cx: number; cy: number; rx: number; ry: number }) {
   return (
-    <Svg style={{ position: 'absolute', left: cx - rx, top: cy - ry, width: rx * 2, height: ry * 2 }} pointerEvents="none">
+    <Svg style={[{ position: 'absolute', left: cx - rx, top: cy - ry, width: rx * 2, height: ry * 2 }, pointerEventsStyles.none]}>
       {SHADOW_RINGS.map((k) => (
         <Ellipse key={k} cx={rx} cy={ry} rx={rx * k} ry={ry * k} fill="#5C3A18" opacity={0.055} />
       ))}
@@ -80,12 +91,16 @@ export function Shadow({ cx, cy, rx, ry }: { cx: number; cy: number; rx: number;
 }
 
 interface KitchenRoomProps {
+  children?: ReactNode;
   width: number;
   height: number;
   /** Where the cup stands on the work top, so its coaster goes under it. */
   tableLine: number;
   matX: number;
   matW: number;
+  panOffset: SharedValue<number>;
+  scrollEnabled: boolean;
+  onPanBegin: () => void;
 }
 
 /**
@@ -93,22 +108,27 @@ interface KitchenRoomProps {
  * work top, the bench and the pink units at the foot of it. All of it is scenery — the equipment
  * the player touches is drawn on top, standing on the surfaces the plate already has.
  */
-export const KitchenRoom = memo(function KitchenRoom({ width: W, height: H, tableLine, matX, matW }: KitchenRoomProps) {
+export const KitchenRoom = memo(function KitchenRoom({ width: W, height: H, tableLine, matX, matW, children, panOffset, scrollEnabled, onPanBegin }: KitchenRoomProps) {
   if (W <= 0 || H <= 0) return null;
 
   const coasterH = matW / ART.coaster;
 
   return (
-    <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
+    <View style={[StyleSheet.absoluteFill, pointerEventsStyles.boxNone]}>
       <PannableBackground
         source={ROOM_BG}
         imageWidth={ROOM_BG_SIZE.width}
         imageHeight={ROOM_BG_SIZE.height}
         width={W}
         height={H}
-      />
+        offset={panOffset}
+        scrollEnabled={scrollEnabled}
+        onPanBegin={onPanBegin}
+      >
+        {children}
+      </PannableBackground>
 
-      <View style={StyleSheet.absoluteFill} pointerEvents="none">
+      <View style={[StyleSheet.absoluteFill, pointerEventsStyles.none]}>
         {/* The coaster is a disc lying on the work top, so a cup standing at `tableLine` meets it
             at its middle while the near rim carries on in front, its shadow tucked under that rim. */}
         <Shadow cx={matX + matW / 2} cy={tableLine + coasterH * 0.38} rx={matW * 0.52} ry={coasterH * 0.26} />

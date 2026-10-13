@@ -11,6 +11,7 @@ import { Counter } from './art/Counter';
 import { ShopBackdrop } from './art/ShopBackdrop';
 import { Cup } from './Cup';
 import { FloatingText } from './FloatingText';
+import { pointerEventsStyles } from '../pointerEvents';
 
 export const COUNTER_HEIGHT = 44;
 /** Customers stand raised so the counter hides their waist, not their shoulders. */
@@ -95,7 +96,7 @@ export function CustomerStage({ width, height, slots, departures, selectedSlot, 
           </Pressable>
         ))}
       </View>
-      <View style={styles.counter} pointerEvents="none">
+      <View style={[styles.counter, pointerEventsStyles.none]}>
         <Counter width={width} height={COUNTER_HEIGHT} />
       </View>
     </View>

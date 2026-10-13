@@ -4,6 +4,7 @@ import Animated, { Easing, useAnimatedStyle, useSharedValue, withRepeat, withSeq
 import Svg, { Circle, Defs, G, LinearGradient, Path, Rect, Stop, Text as SvgText } from 'react-native-svg';
 
 import { colors, fonts } from '../../theme';
+import { pointerEventsStyles } from '../../pointerEvents';
 
 interface ShopBackdropProps {
   width: number;
@@ -21,7 +22,7 @@ export const ShopBackdrop = memo(function ShopBackdrop({ width, height }: ShopBa
   const wainscot = height * 0.6;
 
   return (
-    <View style={StyleSheet.absoluteFill} pointerEvents="none">
+    <View style={[StyleSheet.absoluteFill, pointerEventsStyles.none]}>
       <Svg width={width} height={height}>
         <Defs>
           <LinearGradient id="sky" x1="0" y1="0" x2="0" y2="1">

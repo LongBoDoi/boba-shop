@@ -4,6 +4,7 @@ import Animated, { Extrapolation, interpolate, SharedValue, useAnimatedStyle } f
 import { Drink } from '../game/ingredients';
 import { colors } from '../theme';
 import { Cup } from './Cup';
+import { pointerEventsStyles } from '../pointerEvents';
 
 const BADGE_DRINK: Drink = { toppings: ['pearls'], sweetness: null, ice: null, tea: 'black', milk: 'whole', foam: null };
 
@@ -15,7 +16,7 @@ export function ScreenWipe({ progress }: { progress: SharedValue<number> }) {
   }));
 
   return (
-    <View style={StyleSheet.absoluteFill} pointerEvents="none">
+    <View style={[StyleSheet.absoluteFill, pointerEventsStyles.none]}>
       <Animated.View style={[StyleSheet.absoluteFill, styles.fade, fadeStyle]} />
       <Animated.View style={[styles.center, badgeStyle]}>
         <Cup drink={BADGE_DRINK} width={64} backgroundColor={colors.primary} straw sealed />

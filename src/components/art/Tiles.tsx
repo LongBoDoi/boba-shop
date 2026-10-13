@@ -3,6 +3,7 @@ import { StyleSheet } from 'react-native';
 import Svg, { Rect } from 'react-native-svg';
 
 import { colors } from '../../theme';
+import { pointerEventsStyles } from '../../pointerEvents';
 
 /** Kitchen backsplash tiles behind the work station. */
 export const Tiles = memo(function Tiles({ width, height }: { width: number; height: number }) {
@@ -10,7 +11,7 @@ export const Tiles = memo(function Tiles({ width, height }: { width: number; hei
   const cols = Math.ceil(width / size) + 1;
   const rows = Math.ceil(height / size) + 1;
   return (
-    <Svg width={width} height={height} style={StyleSheet.absoluteFill} pointerEvents="none">
+    <Svg width={width} height={height} style={[StyleSheet.absoluteFill, pointerEventsStyles.none]}>
       <Rect width={width} height={height} fill={colors.grout} />
       {Array.from({ length: rows }, (_, row) =>
         Array.from({ length: cols }, (_, col) => (

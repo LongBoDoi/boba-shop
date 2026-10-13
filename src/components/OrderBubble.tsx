@@ -1,4 +1,4 @@
-import { Image, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Image, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import Svg, { ClipPath, Defs, Path, Rect } from 'react-native-svg';
 
 import {
@@ -17,6 +17,7 @@ import { Character } from './art/Character';
 import { IngredientIcon } from './art/IngredientIcon';
 import { ICON_CUP } from './art/kitchenArt';
 import { Ticket } from './TicketRail';
+import { pointerEventsStyles } from '../pointerEvents';
 
 /**
  * The order is read, not built, so it is listed the way it would be said over the counter —
@@ -114,7 +115,7 @@ export function OrderBubble({
 
   return (
     <View style={{ width: W }}>
-      <View style={[styles.card, { padding: pad, borderRadius: Math.round(W * 0.055) }]} pointerEvents="none">
+      <View style={[styles.card, { padding: pad, borderRadius: Math.round(W * 0.055) }, pointerEventsStyles.none]}>
         <View style={styles.row}>
           {/* who it is for */}
           <View style={[styles.avatar, { width: avatar, height: avatar, borderRadius: avatar * 0.3 }]}>
@@ -281,11 +282,16 @@ const styles = StyleSheet.create({
     backgroundColor: colors.paper,
     borderWidth: 3,
     borderColor: '#FFFFFF',
-    shadowColor: '#6B4A32',
-    shadowOpacity: 0.22,
-    shadowRadius: 9,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 5,
+    ...Platform.select({
+      web: { boxShadow: '0px 4px 9px rgba(107, 74, 50, 0.22)' },
+      default: {
+        shadowColor: '#6B4A32',
+        shadowOpacity: 0.22,
+        shadowRadius: 9,
+        shadowOffset: { width: 0, height: 4 },
+        elevation: 5,
+      },
+    }),
   },
   row: {
     flexDirection: 'row',

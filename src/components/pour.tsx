@@ -1,10 +1,14 @@
-import { useEffect, useRef, useState } from 'react';
-import { GestureResponderHandlers, StyleSheet, View } from 'react-native';
-import Animated, { Easing, interpolate, SharedValue, useAnimatedStyle, useSharedValue, withRepeat, withTiming } from 'react-native-reanimated';
+import { useEffect, useId, useRef, useState } from 'react';
+import { GestureResponderHandlers, StyleSheet } from 'react-native';
+import Animated, { cancelAnimation, Easing, interpolate, SharedValue, useAnimatedStyle, useSharedValue, withRepeat, withTiming } from 'react-native-reanimated';
+
+import Svg, { Defs, LinearGradient, Path, Stop } from 'react-native-svg';
+import { shade } from './art/Character';
 
 import { MAX_POUR, POUR_RATE } from '../game/ingredients';
 import { DURATION, ease, timing } from '../motion';
 import { CUP_LIP, pourLevel, WELL_BOTTOM, WELL_RUN } from './KitchenCup';
+import { pointerEventsStyles } from '../pointerEvents';
 
 /** Claim a touch outright and never give it back until the finger lifts. */
 export const GRABBY = {
@@ -143,7 +147,7 @@ export function Spill({
 }) {
   const style = useAnimatedStyle(() => ({ opacity: level.value > 1.005 ? 1 : 0 }));
   return (
-    <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, style]}>
+    <Animated.View style={[StyleSheet.absoluteFill, style, pointerEventsStyles.none]}>
       {[0.18, 0.5, 0.82].map((at, i) => (
         <Drop key={at} level={level} left={cupW * at - 2} cupH={cupH} color={color} offset={i * 0.12} />
       ))}
@@ -194,117 +198,80 @@ function Drop({
  * the glass tint it and the cat cover it. Each half clips to its own side of the lip, so the two
  * never overlap and the stream is never drawn on itself.
  */
-export function Stream({
-  x,
-  top,
-  cupY,
-  cupH,
-  color,
-  level,
-  side,
-  width = 6,
-}: {
+export function Stream({ x, top, cupY, cupH, cupScale, color, level, side, running, width = 3.5 }: {
   x: number;
   top: number;
   cupY: SharedValue<number>;
   cupH: number;
+  cupScale: SharedValue<number>;
   color: string;
   level: SharedValue<number>;
   side: 'front' | 'back';
+  running: boolean;
   width?: number;
 }) {
-  const run = useSharedValue(0);
+  const uid = useId().replace(/[^a-zA-Z0-9]/g, '');
+  const flow = useSharedValue(0);
+  const phase = useSharedValue(0);
+  const tail = useSharedValue(0);
   useEffect(() => {
-    run.set(withTiming(1, { duration: 170, easing: Easing.linear }));
-    return () => {
-      run.set(0);
-    };
-  }, [run]);
-
-  // Both halves follow the cup where it actually is, not where it was sent: the cup is still
-  // gliding into place when a tap can first be held, and a split pinned to where it is headed
-  // would sit adrift of the glass for that moment.
+    flow.set(withTiming(running ? 1 : 0, { duration: running ? 160 : 140 }));
+    if (running) {
+      tail.set(0);
+      phase.set(0);
+      phase.set(withRepeat(withTiming(1, { duration: 360, easing: Easing.linear }), -1));
+    } else {
+      cancelAnimation(phase);
+      tail.set(withTiming(1, { duration: 220, easing: Easing.in(Easing.quad) }));
+    }
+    return () => cancelAnimation(phase);
+  }, [running, flow, phase, tail]);
   const clipStyle = useAnimatedStyle(() => {
-    const lip = cupY.get() + CUP_LIP * cupH;
+    const height = cupH * cupScale.get();
+    const lip = cupY.get() + CUP_LIP * height;
     if (side === 'front') return { top, height: Math.max(0, lip - top) };
-    return { top: lip, height: Math.max(0, cupY.get() + cupH - lip) };
+    return { top: lip, height: Math.max(0, cupY.get() + height - lip) };
   });
-  const style = useAnimatedStyle(() => {
-    const lip = cupY.get() + CUP_LIP * cupH;
-    const clipTop = side === 'front' ? top : lip;
-    const surface = cupY.get() + (WELL_BOTTOM - pourLevel(Math.min(1, Math.max(0, level.get()))) * WELL_RUN) * cupH;
-    return {
-      top: top - clipTop,
-      height: Math.max(0, surface - top) * run.get(),
-      opacity: Math.min(1, run.get() * 2.2),
-    };
+  const columnStyle = useAnimatedStyle(() => {
+    const height = cupH * cupScale.get();
+    const lip = cupY.get() + CUP_LIP * height;
+    const surface = cupY.get() + (WELL_BOTTOM - pourLevel(Math.min(1, Math.max(0, level.get()))) * WELL_RUN) * height;
+    return { top: top - (side === 'front' ? top : lip), height: Math.max(0, surface - top),
+      opacity: flow.get(), transform: [{ scaleX: 0.88 + Math.sin(phase.get() * Math.PI * 2) * 0.08 }] };
   });
-
+  const tailStyle = useAnimatedStyle(() => {
+    const height = cupH * cupScale.get();
+    const lip = cupY.get() + CUP_LIP * height;
+    const surface = cupY.get() + (WELL_BOTTOM - pourLevel(Math.min(1, Math.max(0, level.get()))) * WELL_RUN) * height;
+    return { top: top - (side === 'front' ? top : lip) + Math.max(0, surface - top) * tail.get(),
+      opacity: running ? 0 : Math.sin(tail.get() * Math.PI), transform: [{ scaleY: 1.2 }] };
+  });
   return (
-    <Animated.View
-      pointerEvents="none"
-      style={[{ position: 'absolute', left: 0, right: 0, overflow: 'hidden' }, clipStyle]}
-    >
-      <Animated.View pointerEvents="none" style={[{ position: 'absolute', left: x - width / 2, width }, style]}>
-        {/* the falling column, with the light down one side of it */}
-        <View style={[StyleSheet.absoluteFill, { backgroundColor: color, borderRadius: width * 0.5 }]} />
-        <View
-          style={{
-            position: 'absolute',
-            left: width * 0.16,
-            top: 0,
-            bottom: 0,
-            width: width * 0.26,
-            borderRadius: width,
-            backgroundColor: '#FFFFFF',
-            opacity: 0.32,
-          }}
-        />
-        {/* it leaves the spout as a fat drop */}
-        <View
-          style={{
-            position: 'absolute',
-            left: -width * 0.45,
-            right: -width * 0.45,
-            top: -width * 0.35,
-            height: width * 1.3,
-            borderRadius: width,
-            backgroundColor: color,
-          }}
-        />
-        {/* the splash belongs where the tea lands, which is inside the cup */}
-        {side === 'back' && <Ripple color={color} size={width * 3.4} />}
+    <Animated.View style={[{ position: 'absolute', left: 0, right: 0, overflow: 'hidden' }, clipStyle, pointerEventsStyles.none]}>
+      <Animated.View style={[{ position: 'absolute', left: x - width / 2, width, overflow: 'hidden' }, columnStyle]}>
+        <Svg width="100%" height="100%" viewBox="0 0 8 100" preserveAspectRatio="none">
+          <Defs>
+            <LinearGradient id={`stream-${uid}`} x1="0%" y1="0%" x2="100%" y2="0%">
+              <Stop offset="0" stopColor={shade(color, -40)} />
+              <Stop offset="0.36" stopColor={shade(color, 40)} />
+              <Stop offset="0.62" stopColor={color} />
+              <Stop offset="1" stopColor={shade(color, -25)} />
+            </LinearGradient>
+          </Defs>
+          <Path d="M1 0 Q0.5 8 1.5 20 Q2.5 50 1 100 H7 Q5.5 50 6.5 20 Q7.5 8 7 0 Z" fill={`url(#stream-${uid})`} />
+          <Path d="M2.7 0 Q2 35 3 70 L2.7 100" fill="none" stroke="#FFE6BB" strokeOpacity={0.7} strokeWidth={0.65} />
+        </Svg>
+        {[0, 0.33, 0.66].map((delay) => <FlowGlint key={delay} phase={phase} delay={delay} />)}
       </Animated.View>
+      <Animated.View style={[{ position: 'absolute', left: x - 1.2, width: 2.4, height: 3.5,
+        borderRadius: 2, backgroundColor: shade(color, 25) }, tailStyle]} />
     </Animated.View>
   );
 }
 
-/** Where the stream hits the drink: a ring that spreads and fades, over and over. */
-function Ripple({ color, size }: { color: string; size: number }) {
-  const spread = useSharedValue(0);
-  useEffect(() => {
-    spread.set(withRepeat(withTiming(1, { duration: 520, easing: Easing.linear }), -1, false));
-  }, [spread]);
-  const style = useAnimatedStyle(() => ({
-    opacity: 0.5 * (1 - spread.get()),
-    transform: [{ scaleX: 0.45 + spread.get() }, { scaleY: 0.45 + spread.get() * 0.5 }],
-  }));
-  return (
-    <Animated.View
-      pointerEvents="none"
-      style={[
-        {
-          position: 'absolute',
-          bottom: -size * 0.16,
-          left: -size / 2,
-          width: size * 2,
-          height: size * 0.5,
-          borderRadius: size,
-          borderWidth: Math.max(1.4, size * 0.1),
-          borderColor: color,
-        },
-        style,
-      ]}
-    />
-  );
+function FlowGlint({ phase, delay }: { phase: SharedValue<number>; delay: number }) {
+  const style = useAnimatedStyle(() => ({ top: `${((phase.get() + delay) % 1) * 100}%` as `${number}%`,
+    opacity: Math.sin(((phase.get() + delay) % 1) * Math.PI) * 0.65 }));
+  return <Animated.View style={[{ position: 'absolute', left: '30%', width: '25%', height: 3,
+    borderRadius: 3, backgroundColor: '#FFF8E4' }, style]} />;
 }

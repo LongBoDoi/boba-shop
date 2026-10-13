@@ -1,6 +1,6 @@
 /**
  * The painted kitchen, sprite by sprite, plus the geometry the code needs to line up with it.
- * Everything here is cut from `tools/sheets/` by `tools/cut-sheets.py` — read that script before
+ * Most sprites are cut from `tools/sheets/` by `tools/cut-sheets.py` — read that script before
  * adding to this one. Sprites that something is drawn *through* (a dispenser's glass, the cup) have
  * a window cleared out of them; the fractions for those are at the bottom of this file.
  */
@@ -8,21 +8,9 @@
 
 // ------------------------------------------------------------------ what you work with
 /**
- * A dispenser, full, one sprite per tea — the whole thing, glass and tea together, cut off the
- * design sheet by `tools/cut-tea-jars.ps1`. The tea is not drawn in code: its oval surface, its
- * even body and the way it runs to the foot behind the tap are all painted, and every attempt to
- * reproduce them with a gradient came out wrong.
- */
-/**
- * The drink standing in a cup, cut off `tools/sheets/cup-design.png` by `tools/cut-cup-design.ps1`.
- * As with the dispensers, none of it is drawn in code — these are the design's own *full* cup,
- * glass and all, which is why the cup is drawn first and the drink laid over it rather than behind.
- *
- * It comes in two pieces because the level moves: `DRINK` is the glass filled to the brim and cut
- * to the shape of the well, which the cup reveals from the bottom up, and `DRINK_TOP` is the oval
- * surface alone, which the cup stands on that reveal line and stretches to however wide the glass
- * is there. Revealing a sprite with the oval already in it would slice the oval off flat at every
- * level but full. The cat is left out of both, because the cup underneath has its own.
+ * Painted drink bodies and oval surfaces cut from the cup design. TeaLiquid reuses these as
+ * textures inside the cup and tank, adding live fill geometry, shading and pour ripples.
+ * The original glass, edge highlights and cat decal remain separate layers above the liquid.
  */
 export const DRINK: Record<string, number> = {
   black: require('../../assets/kitchen/drink-black.png'),
@@ -66,6 +54,11 @@ export const JAR_TEA: Record<string, number> = {
   taro: require('../../assets/kitchen/jar-taro.png'),
   matcha: require('../../assets/kitchen/jar-matcha.png'),
 };
+
+/** Dark-lidded glass dispenser frame; tea is visible through its transparent chamber. */
+export const TEA_TANK = require('../../assets/kitchen/tea-tank.png');
+// Geometry measured in the generated frame; see tools/tea-tank-prompt.md for its source.
+export const TEA_TANK_ART = { width: 971, height: 1619, collar: 0.83, spout: 0.96 };
 export const CUP_SPRITE = require('../../assets/kitchen/cup.png');
 export const CUP_BASE = require('../../assets/kitchen/cup-base.png');
 /**
@@ -174,6 +167,19 @@ export const ROOM_BG = require('../../assets/kitchen/kitchen-background.png');
 
 /** Background dimensions are separate from ROOM so replacing the painting doesn't move equipment. */
 export const ROOM_BG_SIZE = { width: 1870, height: 841 };
+
+/** The front countertop's flat surface, measured in the panorama's own pixels. */
+export const ROOM_BG_TABLE = { top: 505, base: 584 };
+
+/** The middle rack on the left: tank collars mount to its edge, cups rest on the shelf below. */
+export const ROOM_BG_TEA_SHELF = {
+  x0: 168, x1: 624, capacity: 6,
+  // Mounted on the front of the middle rack; the cup stands on the lowest shelf's top face.
+  tankWidth: 64, mount: 314, bottom: 398,
+};
+
+/** Keep the holder wide enough for the cup without letting it spill over the countertop. */
+export const COASTER_WIDTH_RATIO = 1.5;
 
 /**
  * The original portrait room's 941x1672 coordinate system, retained for the existing equipment.

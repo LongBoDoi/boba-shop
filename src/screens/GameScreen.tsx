@@ -17,6 +17,7 @@ import { Button } from '../components/Button';
 import { EffectsGeometry, EffectsLayer, Point } from '../components/Effects';
 import { Hud } from '../components/Hud';
 import { OpeningSign } from '../components/OpeningSign';
+import { PourMeter, PourMeterState } from '../components/PourFeedback';
 import { SettingsSheet } from '../components/SettingsSheet';
 import { Ticket } from '../components/TicketRail';
 import { describeUnlocks } from '../game/levels';
@@ -45,6 +46,7 @@ export function GameScreen({ state, dispatch }: GameScreenProps) {
   const [measureToken, setMeasureToken] = useState(0);
   // The pager must let go while the cup is being dragged around the kitchen.
   const [dragging, setDragging] = useState(false);
+  const [pourMeter, setPourMeter] = useState<PourMeterState | null>(null);
 
   useEffect(() => {
     if (paused || opening) return;
@@ -180,7 +182,7 @@ export function GameScreen({ state, dispatch }: GameScreenProps) {
             ? 'Order tự được nhận — xem ở Pha chế.'
             : 'Chạm vào khách ở Quầy để nhận order.',
           'Chạm Pha chế ➜, kéo ly xuống dưới bình trà.',
-          'Nhấn giữ vòi để rót — phải tới vạch "đủ", đừng để tràn!',
+          'Giữ vòi để rót — thanh nổi hiển thị lượng trà trong ly.',
         ]
       : describeUnlocks(state.day);
 
@@ -239,6 +241,7 @@ export function GameScreen({ state, dispatch }: GameScreenProps) {
             onIce={iceScoop}
             onSugar={sugarPump}
             onDragging={setDragging}
+            onMeterChange={setPourMeter}
             onClear={() => dispatch({ type: 'CLEAR_CUP' })}
             onServe={() => dispatch({ type: 'SERVE' })}
             machineRef={machineRef}
@@ -247,6 +250,7 @@ export function GameScreen({ state, dispatch }: GameScreenProps) {
         </ScrollView>
 
         <EffectsLayer departures={state.departures} discarded={state.discarded} geometry={geometry} cupWidth={prep.cupWidth} />
+        {page === 1 && pourMeter && <PourMeter {...pourMeter} screenHeight={windowHeight} />}
 
         {opening && (
           <OpeningSign

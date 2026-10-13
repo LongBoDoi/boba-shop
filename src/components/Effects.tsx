@@ -14,6 +14,7 @@ import { Departure } from '../game/reducer';
 import { easeInOut } from '../motion';
 import { colors, fonts } from '../theme';
 import { Cup } from './Cup';
+import { pointerEventsStyles } from '../pointerEvents';
 
 export interface Point {
   x: number;
@@ -39,7 +40,7 @@ interface EffectsLayerProps {
  */
 export function EffectsLayer({ departures, discarded, geometry, cupWidth }: EffectsLayerProps) {
   return (
-    <View style={StyleSheet.absoluteFill} pointerEvents="none">
+    <View style={[StyleSheet.absoluteFill, pointerEventsStyles.none]}>
       {discarded && <TossedCup key={discarded.id} drink={discarded.drink} from={geometry.cup} to={geometry.trash} cupWidth={cupWidth} />}
       {/* The served cup is carried off by the customer on the counter page, so here we only
           reward the sale: confetti and coins spring from the prep machine to the HUD wallet. */}

@@ -11,9 +11,10 @@ import Animated, {
 } from 'react-native-reanimated';
 import Svg, { Defs, LinearGradient, Path, Rect, Stop } from 'react-native-svg';
 
-import { Drink, getIngredient, GOOD_FILL, ICE_LEVELS, MIN_FILL, Tea, TOPPINGS } from '../game/ingredients';
+import { Drink, getIngredient, ICE_LEVELS, Tea, TOPPINGS } from '../game/ingredients';
 import { DURATION, timing } from '../motion';
 import { colors, fonts } from '../theme';
+import { pointerEventsStyles } from '../pointerEvents';
 
 interface CupProps {
   drink: Drink;
@@ -39,8 +40,6 @@ interface CupProps {
    * with the hold instead of jumping when the pour is committed.
    */
   levelSv?: SharedValue<number>;
-  /** Draw the "đủ" line and the brim line on the glass — the pouring mini-game's target. */
-  marks?: boolean;
 }
 
 const ICE_SPOTS = [
@@ -69,7 +68,6 @@ export const Cup = memo(function Cup({
   tapered = true,
   fill,
   levelSv,
-  marks,
 }: CupProps) {
   const height = Math.round(width * 1.3);
   const strawRise = straw ? Math.round(height * 0.2) : 0;
@@ -218,20 +216,6 @@ export const Cup = memo(function Cup({
           )}
           {sugarDrops > 0 && <SugarFall key={`sugar-${sugarDrops}`} width={width} fall={bodyHeight * 0.7} />}
 
-          {marks && (
-            <>
-              {/* "enough tea" line — the cup can't be served below it */}
-              <View style={[styles.mark, { bottom: MIN_FILL * bodyHeight, borderColor: colors.bad }]} />
-              {/* the clean-pour band: fill into it without going over the brim for a tip */}
-              <View
-                style={[
-                  styles.goodBand,
-                  { bottom: GOOD_FILL * bodyHeight, height: (1 - GOOD_FILL) * bodyHeight },
-                ]}
-              />
-            </>
-          )}
-
           {detailed && (
             <View
               style={[
@@ -336,8 +320,7 @@ function PourStream({ color, cupWidth, width, length }: { color: string; cupWidt
   });
   return (
     <Animated.View
-      pointerEvents="none"
-      style={[styles.stream, { left: (cupWidth - width) / 2, width, borderRadius: width / 2, backgroundColor: color }, style]}
+      style={[styles.stream, { left: (cupWidth - width) / 2, width, borderRadius: width / 2, backgroundColor: color }, style, pointerEventsStyles.none]}
     />
   );
 }
@@ -361,7 +344,7 @@ function Granule({ progress, left, offset, fall }: { progress: SharedValue<numbe
     const p = Math.max(0, Math.min(1, (progress.value - offset) / (1 - offset)));
     return { transform: [{ translateY: p * fall }], opacity: p >= 1 ? 0 : 1 };
   });
-  return <Animated.View pointerEvents="none" style={[styles.granule, { left }, style]} />;
+  return <Animated.View style={[styles.granule, { left }, style, pointerEventsStyles.none]} />;
 }
 
 interface ParticleProps {
@@ -527,23 +510,6 @@ const styles = StyleSheet.create({
     top: '15%',
     left: '20%',
     backgroundColor: 'rgba(255,255,255,0.55)',
-  },
-  mark: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    height: 0,
-    borderTopWidth: 1.5,
-    borderStyle: 'dashed',
-    opacity: 0.75,
-  },
-  goodBand: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    borderTopWidth: 1.5,
-    borderTopColor: colors.good,
-    backgroundColor: 'rgba(63,165,107,0.12)',
   },
   gloss: {
     position: 'absolute',

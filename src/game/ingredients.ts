@@ -143,10 +143,6 @@ export function effectiveId(drink: Drink, category: CategoryId): string | null {
   return drink[category] ?? DEFAULT_ID[category] ?? null;
 }
 
-/** Fraction of the cup that must hold liquid before it can be served. */
-export const MIN_FILL = 0.7;
-/** Fill at least this high without going over the brim for a "rót chuẩn" tip. */
-export const GOOD_FILL = 0.85;
 /** How much of the cup one second of holding a spigot pours. */
 export const POUR_RATE = 0.55;
 /** Holding this long past the brim is pure waste; the tea keeps running over until then. */
