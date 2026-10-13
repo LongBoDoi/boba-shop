@@ -247,7 +247,12 @@ The docked cup casts a soft elliptical contact shadow matched to its narrow foot
 ### Liquid and glass layers
 `TeaLiquid` renders the kitchen liquid inside the tank's transparent chamber and the cup's traced
 well. The existing glass sprites, linework, cat decal, ice, toppings and foam remain intact.
-The cup's existing painted tea textures blend with translucent shading and depth gradients.
+The cup's existing painted tea textures blend with opaque colour shading and depth gradients.
+The cup's glass sprite draws in front of the liquid, foam, ice and toppings so its reflections,
+rim and molded base remain visible. Over the filled portion only, the glass uses 22% opacity to
+retain rich tea colour; the empty portion, rim, walls and base keep their original glass opacity.
+The shared inner mask is inset from the painted wall highlights;
+the surface follows its taper, and foam uses the same mask and live surface width.
 Tank tea instead uses fully opaque vector shading with stronger color and depth; enlarged raster
 textures no longer soften its chamber. The original tank glass and hardware remain intact. The surface
 is a complete oval with the same perspective as the cup rim, narrowing with its tapered walls.
@@ -322,8 +327,8 @@ keeps the painted ticks, highlights and the cat decal on top of it:
   painted tea textures with shaded liquid, an oval surface and pour ripples. `JAR_TEA` retains
   the older complete jar sprites; the current shelf does not draw those;
 - the **cup** is [KitchenCup](src/components/KitchenCup.tsx), drawn in its 113×174 sprite space:
-  faint cool glass backing and the original cup sprite, then `TeaLiquid` inside the traced
-  `CUP_WELL`, followed by clipped ice/toppings, foam, edge highlights and the cat decal.
+  faint cool glass backing, then `TeaLiquid` inside the traced `CUP_WELL`, followed by clipped
+  ice/toppings and foam, glass reflections, edge highlights and the cat decal.
   Its surface is an elliptical plane whose width follows the tapered glass. The stream and foam
   use the same fill coordinates. Nothing can escape the glass because it stays inside the clip;
 - a **scoop of topping** is one whole painted sprite, `SCOOPFUL[id]`, heap and all. It used to be

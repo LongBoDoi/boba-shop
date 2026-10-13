@@ -9,7 +9,7 @@ import Svg, {
 
 import { shade } from './art/Character';
 import { DRINK, DRINK_MILKY, DRINK_MILKY_TOP, DRINK_TOP, TEA_TANK } from './art/kitchenArt';
-import { CUP_WELL, cupSurface } from './cupGeometry';
+import { CUP_FLOOR_FRONT, CUP_WELL, cupSurface } from './cupGeometry';
 import { pointerEventsStyles } from '../pointerEvents';
 
 const AnimatedEllipse = Animated.createAnimatedComponent(Ellipse);
@@ -69,7 +69,7 @@ export const TeaLiquid = memo(function TeaLiquid({ width, height, color, teaId, 
   }, [tank, level, phase, agitation]);
   const bodyProps = useAnimatedProps(() => {
     const s = surface.get();
-    return { y: s.y, height: (tank ? 1190 : 166) - s.y, opacity: s.opacity };
+    return { y: s.y, height: (tank ? 1190 : CUP_FLOOR_FRONT) - s.y, opacity: s.opacity };
   }, [surface, tank]);
   const surfaceProps = useAnimatedProps(() => {
     const s = surface.get();
@@ -89,10 +89,13 @@ export const TeaLiquid = memo(function TeaLiquid({ width, height, color, teaId, 
     const s = surface.get();
     const cx = vbW / 2;
     const x = cx - s.rx * 0.78;
-    const bottom = tank ? 1150 : 158;
+    const bottom = tank ? 1150 : CUP_FLOOR_FRONT - 2;
+    const start = Math.min(bottom, s.y + s.ry);
+    const middle = ((tank ? s.y : start) + bottom) / 2;
     const w = tank ? 48 : 3.5;
     const bend = Math.sin(phase.get() * Math.PI * 2) * agitation.get() * w * 0.5;
-    return { d: `M${x} ${s.y + s.ry} Q${x + w + bend} ${(s.y + bottom) / 2} ${x + w} ${bottom} L${x + w * 1.8} ${bottom} Q${x + w * 2 + bend} ${(s.y + bottom) / 2} ${x + w} ${s.y + s.ry} Z`, opacity: s.opacity * (tank ? 0.18 : 0.32) };
+    return { d: `M${x} ${start} Q${x + w + bend} ${middle} ${x + w} ${bottom} L${x + w * 1.8} ${bottom} Q${x + w * 2 + bend} ${middle} ${x + w} ${start} Z`,
+      opacity: start < bottom ? s.opacity * (tank ? 0.18 : 0.32) : 0 };
   }, [surface, vbW, tank, phase, agitation]);
   const glintProps = useAnimatedProps(() => {
     const s = surface.get();
@@ -128,7 +131,7 @@ export const TeaLiquid = memo(function TeaLiquid({ width, height, color, teaId, 
         </RadialGradient>
       </Defs>
       <AnimatedGroup clipPath={`url(#liquid-well-${uid})`} animatedProps={visibilityProps}>
-        <AnimatedRect x={0} width={vbW} fill={`url(#liquid-body-${uid})`} fillOpacity={tank ? 1 : milkColor ? 0.98 : 0.89} animatedProps={bodyProps} />
+        <AnimatedRect x={0} width={vbW} fill={`url(#liquid-body-${uid})`} animatedProps={bodyProps} />
         <G clipPath={`url(#liquid-body-clip-${uid})`}>
           {bodyArt && <SvgImage href={bodyArt} x={0} y={0}
             width={113} height={174} preserveAspectRatio="none" opacity={0.5} />}

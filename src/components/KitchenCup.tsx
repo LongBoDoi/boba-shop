@@ -2,13 +2,14 @@ import { memo, useId } from 'react';
 import { Image, StyleSheet, View } from 'react-native';
 import Animated, {
   SharedValue,
-  useAnimatedStyle,
+  useAnimatedProps,
+  useDerivedValue,
 } from 'react-native-reanimated';
 import Svg, { ClipPath, Defs, Ellipse, G, Image as SvgImage, Path } from 'react-native-svg';
 
 import { Drink, getIngredient, ICE_LEVELS, Tea } from '../game/ingredients';
 import { TeaLiquid } from './TeaLiquid';
-import { CUP_SURFACE_BOTTOM, CUP_SURFACE_RUN, CUP_WELL, pourLevel } from './cupGeometry';
+import { CUP_SURFACE_BOTTOM, CUP_SURFACE_RUN, CUP_WELL, cupSurface } from './cupGeometry';
 import { shade } from './art/Character';
 import {
   CUP_BASE,
@@ -30,6 +31,8 @@ export { pourLevel } from './cupGeometry';
 
 /** The sprite is drawn in this box; all the geometry below is in the same units. */
 const ART = { w: 113, h: 174 };
+const AnimatedEllipse = Animated.createAnimatedComponent(Ellipse);
+const AnimatedPath = Animated.createAnimatedComponent(Path);
 /**
  * The cup is clear plastic, so its silhouette is backed rather than filled: see-through enough to
  * show the room behind it, solid enough to be an object. The colour is the cool grey the sprite
@@ -39,8 +42,8 @@ const ART = { w: 113, h: 174 };
 const GLASS = '#DFE6EE';
 const GLASS_TINT = 0.45;
 /**
- * The inside of the glass, traced off the full cup on  — where the
- * liquid stands there *is* the well, so none of this is guessed.
+ * The inside of the glass, measured from the full cup in tools/sheets/cup-design.png.
+ * Keep the liquid inside the wall highlights and above the molded base.
  */
 const WELL = CUP_WELL;
 export const WELL_TOP = (CUP_SURFACE_BOTTOM - CUP_SURFACE_RUN) / ART.h;
@@ -51,7 +54,7 @@ export const WELL_TOP = (CUP_SURFACE_BOTTOM - CUP_SURFACE_RUN) / ART.h;
  * through), and the near lip y 28–31, bright and solid.
  *
  * A pour splits here — in front of the cup above it, behind below — so it has to be the lip's edge
- * and not somewhere inside the lip, and not `WELL_TOP` (y 43), which is the center of the full
+ * and not somewhere inside the lip, and not `WELL_TOP` (y 48), which is the center of the full
  * liquid surface further down.
  */
 export const CUP_LIP = 28 / ART.h;
@@ -92,14 +95,26 @@ export const KitchenCup = memo(function KitchenCup({ drink, width, height, level
   const milk = drink.milk && drink.milk !== 'none' ? getIngredient('milk', drink.milk) : undefined;
   const foam = drink.foam && drink.foam !== 'none' ? getIngredient('foam', drink.foam) : undefined;
   const ice = ICE_LEVELS.find((option) => option.id === drink.ice);
+  const hasTea = Boolean(tea);
 
-  const scale = height / ART.h;
-  const padBottom = (1 - WELL_BOTTOM) * height;
-  const runPx = WELL_RUN * height;
+  // Preserve the original glass above the fill and around the rim/base. Only the
+  // glass in front of the tea needs softer reflections to avoid bleaching its colour.
+  const filledGlass = useDerivedValue(() => {
+    const raw = level.get();
+    if (!hasTea || raw <= 0) return '';
+    const { y, rx, ry } = cupSurface(raw);
+    return `M${ART.w / 2 - rx} ${y} A${rx} ${ry} 0 0 1 ${ART.w / 2 + rx} ${y} L90 153 A33.5 7.8725 0 0 1 23 153 Z`;
+  }, [level, hasTea]);
+  const softGlassProps = useAnimatedProps(() => ({ d: filledGlass.get() || 'M0 0Z' }), [filledGlass]);
+  const clearGlassProps = useAnimatedProps(() => ({
+    d: `M0 0H${ART.w}V${ART.h}H0Z ${filledGlass.get()}`,
+  }), [filledGlass]);
 
-  const foamStyle = useAnimatedStyle(() => ({
-    bottom: padBottom + pourLevel(Math.max(0, Math.min(1, level.get()))) * runPx - 4 * scale,
-  }), [level, padBottom, runPx, scale]);
+  const foamProps = useAnimatedProps(() => {
+    const surface = cupSurface(level.get());
+    return { cy: surface.y - 0.2, rx: surface.rx - 0.5 };
+  }, [level]);
+  const foamGlintProps = useAnimatedProps(() => ({ cy: cupSurface(level.get()).y - 1.1 }), [level]);
 
   return (
     <View style={{ width, height }}>
@@ -108,17 +123,20 @@ export const KitchenCup = memo(function KitchenCup({ drink, width, height, level
         tintColor={GLASS}
         style={[styles.layer, { width, height, opacity: GLASS_TINT }]}
       />
-      {/* Keep the original glass and decal; liquid is clipped inside their silhouette. */}
-      <Image source={CUP_SPRITE} style={[styles.layer, { width, height }]} />
-
       {tea && <TeaLiquid width={width} height={height} color={tea.color} teaId={tea.id}
         milkColor={milk?.color} level={level} pouring={pouring} />}
 
       {/* ice and toppings live in the drink, never outside the glass */}
-      <Svg style={StyleSheet.absoluteFill} width={width} height={height} viewBox={`0 0 ${ART.w} ${ART.h}`}>
+      <Svg style={[StyleSheet.absoluteFill, pointerEventsStyles.none]} width={width} height={height} viewBox={`0 0 ${ART.w} ${ART.h}`}>
         <Defs>
           <ClipPath id={`wellp-${uid}`}>
             <Path d={WELL} />
+          </ClipPath>
+          <ClipPath id={`glass-filled-${uid}`}>
+            <AnimatedPath animatedProps={softGlassProps} />
+          </ClipPath>
+          <ClipPath id={`glass-clear-${uid}`}>
+            <AnimatedPath clipRule="evenodd" fillRule="evenodd" animatedProps={clearGlassProps} />
           </ClipPath>
         </Defs>
         <G clipPath={`url(#wellp-${uid})`}>
@@ -153,19 +171,21 @@ export const KitchenCup = memo(function KitchenCup({ drink, width, height, level
               );
             })}
 
+          {foam && (
+            <>
+              <AnimatedEllipse cx={56.5} ry={4.4} fill={foam.color} stroke={shade(foam.color, -16)}
+                strokeWidth={0.9} animatedProps={foamProps} />
+              <AnimatedEllipse cx={47} rx={15} ry={2} fill="#FFFFFF" opacity={0.5} animatedProps={foamGlintProps} />
+            </>
+          )}
         </G>
+        {/* Both glass layers stay in front of all ingredients; the tea retains its rich colour. */}
+        <SvgImage href={CUP_SPRITE} x={0} y={0} width={ART.w} height={ART.h}
+          clipPath={`url(#glass-clear-${uid})`} />
+        <SvgImage href={CUP_SPRITE} x={0} y={0} width={ART.w} height={ART.h}
+          clipPath={`url(#glass-filled-${uid})`} opacity={0.22} />
       </Svg>
 
-      {foam && (
-        <Animated.View style={[styles.foam, { height: 9 * scale }, foamStyle, pointerEventsStyles.none]}>
-          <Svg width={width} height={9 * scale} viewBox="0 0 113 9">
-            <Ellipse cx={56.5} cy={4.8} rx={41} ry={4.4} fill={foam.color} stroke={shade(foam.color, -16)} strokeWidth={0.9} />
-            <Ellipse cx={47} cy={3.9} rx={15} ry={2} fill="#FFFFFF" opacity={0.5} />
-          </Svg>
-        </Animated.View>
-      )}
-
-      {/* and the glass's own linework, so the drink cannot eat into the outline */}
       <Image source={CUP_EDGE} style={[styles.layer, { width, height }]} />
       {/* The cat is printed on the front of the glass, so it goes over the drink. */}
       <Image source={CUP_DECAL} style={[styles.layer, { width, height }]} />
@@ -178,10 +198,5 @@ const styles = StyleSheet.create({
     position: 'absolute',
     left: 0,
     top: 0,
-  },
-  foam: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
   },
 });
