@@ -1,0 +1,56 @@
+name: Deploy web
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: eas-hosting-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      CI: '1'
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npx expo lint
+
+      - name: Typecheck
+        run: npx tsc --noEmit
+
+      - name: Export web app
+        run: npx expo export --platform web
+
+      - name: Deploy to EAS Hosting
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+          NODE_OPTIONS: --dns-result-order=ipv4first
+        run: |
+          if [ -z "$EXPO_TOKEN" ]; then
+            echo "::error::Add an Expo access token as the EXPO_TOKEN repository Actions secret. See docs/deployment.md."
+            exit 1
+          fi
+          npx --yes eas-cli@latest deploy --prod --non-interactive
+
+      - name: Show production URL
+        run: echo '[Open the game](https://boba-shop.expo.app)' >> "$GITHUB_STEP_SUMMARY"
