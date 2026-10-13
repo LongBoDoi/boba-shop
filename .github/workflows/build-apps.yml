@@ -1,0 +1,192 @@
+name: Build apps
+
+on:
+  workflow_dispatch:
+    inputs:
+      publish_release:
+        description: 'Publish a GitHub Release with the .apk and .ipa'
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build-apps
+  cancel-in-progress: false
+
+jobs:
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.read.outputs.version }}
+      tag: ${{ steps.read.outputs.tag }}
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v7
+
+      - name: Read the app version
+        id: read
+        run: |
+          version="$(node -p "require('./app.json').expo.version")"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "tag=v$version+${{ github.run_number }}" >> "$GITHUB_OUTPUT"
+
+  android:
+    needs: version
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      CI: '1'
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build the APK on EAS
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+          NODE_OPTIONS: --dns-result-order=ipv4first
+        run: |
+          if [ -z "$EXPO_TOKEN" ]; then
+            echo "::error::Add an Expo access token as the EXPO_TOKEN repository Actions secret. See docs/deployment.md."
+            exit 1
+          fi
+          npx --yes eas-cli@latest build \
+            --platform android \
+            --profile apk \
+            --non-interactive \
+            --wait \
+            --json > eas-build.json
+
+      - name: Download the APK
+        run: |
+          url="$(node -e '
+            const builds = require("./eas-build.json");
+            const build = Array.isArray(builds) ? builds[0] : builds;
+            const url = build?.artifacts?.applicationArchiveUrl;
+            if (!url) {
+              console.error("No applicationArchiveUrl in the EAS build result");
+              process.exit(1);
+            }
+            console.log(url);
+          ')"
+          curl -fsSL -o "boba-shop-${{ needs.version.outputs.version }}.apk" "$url"
+          ls -lh ./*.apk
+
+      - name: Upload the APK
+        uses: actions/upload-artifact@v7
+        with:
+          name: apk
+          path: ./*.apk
+          if-no-files-found: error
+
+  ios:
+    needs: version
+    runs-on: macos-15
+    timeout-minutes: 60
+    env:
+      CI: '1'
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate the iOS project
+        run: npx expo prebuild --platform ios --clean
+
+      - name: Find the Xcode scheme
+        id: scheme
+        run: |
+          workspace="$(ls -d ios/*.xcworkspace | head -1)"
+          scheme="$(xcodebuild -workspace "$workspace" -list -json | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>console.log(JSON.parse(s).workspace.schemes.filter(n=>n!=="Pods")[0]))')"
+          echo "workspace=$workspace" >> "$GITHUB_OUTPUT"
+          echo "scheme=$scheme" >> "$GITHUB_OUTPUT"
+          echo "Building scheme '$scheme' from $workspace"
+
+      - name: Archive without signing
+        run: |
+          xcodebuild archive \
+            -workspace '${{ steps.scheme.outputs.workspace }}' \
+            -scheme '${{ steps.scheme.outputs.scheme }}' \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -archivePath "$RUNNER_TEMP/boba-shop.xcarchive" \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGN_ENTITLEMENTS="" \
+            > "$RUNNER_TEMP/xcodebuild.log" 2>&1 || {
+              echo '::error::xcodebuild archive failed; last 200 lines follow'
+              tail -200 "$RUNNER_TEMP/xcodebuild.log"
+              exit 1
+            }
+
+      - name: Package the .ipa
+        run: |
+          mkdir -p "$RUNNER_TEMP/Payload"
+          cp -R "$RUNNER_TEMP/boba-shop.xcarchive/Products/Applications/"*.app "$RUNNER_TEMP/Payload/"
+          (cd "$RUNNER_TEMP" && zip -qry "boba-shop-${{ needs.version.outputs.version }}-unsigned.ipa" Payload)
+          mv "$RUNNER_TEMP/boba-shop-${{ needs.version.outputs.version }}-unsigned.ipa" .
+          ls -lh ./*.ipa
+
+      - name: Upload the .ipa
+        uses: actions/upload-artifact@v7
+        with:
+          name: ipa
+          path: ./*.ipa
+          if-no-files-found: error
+
+  release:
+    needs: [version, android, ios]
+    if: inputs.publish_release
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Download the built apps
+        uses: actions/download-artifact@v8
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: List what will be published
+        run: ls -lhR dist
+
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.version.outputs.tag }}
+          VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          cat > notes.md <<'NOTES'
+          Tiệm Trà Sữa, built from this commit.
+
+          | File | Platform | Notes |
+          | --- | --- | --- |
+          | `.apk` | Android | Signed with the project's EAS keystore. Copy it to the phone and open it; allow installs from that source. |
+          | `.ipa` | iOS | **Unsigned.** iOS will not install it as-is. Re-sign it with Sideloadly or AltStore using a free Apple ID (the app then runs for 7 days per install), or with a paid Apple Developer certificate. |
+
+          You can also just play the game in a browser: https://boba-shop.expo.app
+          NOTES
+          gh release create "$TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "Tiệm Trà Sữa $VERSION (build ${{ github.run_number }})" \
+            --notes-file notes.md \
+            dist/*.apk dist/*.ipa
+          echo "Released [$TAG]($(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json url -q .url))" >> "$GITHUB_STEP_SUMMARY"
