@@ -170,12 +170,15 @@ export const ICE_PAN = require('../../assets/kitchen/pan-ice.png');
  * shelf plank, a stainless bar, a run of cabinet fronts — each stretched across the room and
  * each needing its own line computed; now it is one plate and the fittings are simply in it.
  */
-export const ROOM_BG = require('../../assets/kitchen/room-bg.png');
+export const ROOM_BG = require('../../assets/kitchen/kitchen-background.png');
+
+/** Background dimensions are separate from ROOM so replacing the painting doesn't move equipment. */
+export const ROOM_BG_SIZE = { width: 1870, height: 841 };
 
 /**
- * Where that plate draws its surfaces, in its own 941x1672 pixels. Nothing in the room is
- * measured in fractions of the phone any more: a station stands on the line the painting puts
- * under it, projected through `fitRoom`. Re-cut the plate and these are what to re-measure.
+ * The original portrait room's 941x1672 coordinate system, retained for the existing equipment.
+ * Keep it separate from ROOM_BG_SIZE so panning or replacing the background leaves the other
+ * assets in their current positions.
  */
 export const ROOM = {
   width: 941,

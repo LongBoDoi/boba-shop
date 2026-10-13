@@ -2,7 +2,8 @@ import { memo } from 'react';
 import { Image, StyleSheet, View } from 'react-native';
 import Svg, { Ellipse } from 'react-native-svg';
 
-import { ART, COASTER, ROOM, ROOM_BG } from './kitchenArt';
+import { ART, COASTER, ROOM, ROOM_BG, ROOM_BG_SIZE } from './kitchenArt';
+import { PannableBackground } from './PannableBackground';
 
 /** Warm tones the hand-drawn bits borrow so they sit with the painted ones. */
 export const SHOP = {
@@ -48,10 +49,8 @@ export interface RoomFit {
 }
 
 /**
- * How the painting lands on this phone. It keeps its own shape and the room crops what will not
- * fit — a strip off each side on a narrow screen, the ceiling and the floor on a short one.
- * Everything standing in the room is placed through the same transform, so a pan is on the
- * counter the plate paints however the phone is shaped.
+ * Preserve the equipment's existing placement and scale in the original portrait coordinate
+ * system. The new background has its own dimensions and pans independently of this layout.
  */
 export function fitRoom(W: number, H: number): RoomFit {
   const scale = Math.max(W / ROOM.width, H / ROOM.height);
@@ -97,39 +96,35 @@ interface KitchenRoomProps {
 export const KitchenRoom = memo(function KitchenRoom({ width: W, height: H, tableLine, matX, matW }: KitchenRoomProps) {
   if (W <= 0 || H <= 0) return null;
 
-  const { px, py, scale } = fitRoom(W, H);
   const coasterH = matW / ART.coaster;
 
   return (
-    <View style={StyleSheet.absoluteFill} pointerEvents="none">
-      {/* The painting, placed by hand rather than by `cover`: cover centres it on itself, which
-          crops the work top off the bottom of a short screen. */}
-      <Image
+    <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
+      <PannableBackground
         source={ROOM_BG}
-        style={{
-          position: 'absolute',
-          left: px(0),
-          top: py(0),
-          width: ROOM.width * scale,
-          height: ROOM.height * scale,
-        }}
+        imageWidth={ROOM_BG_SIZE.width}
+        imageHeight={ROOM_BG_SIZE.height}
+        width={W}
+        height={H}
       />
 
-      {/* The coaster is a disc lying on the work top, so a cup standing at `tableLine` meets it
-          at its middle while the near rim carries on in front, its shadow tucked under that rim. */}
-      <Shadow cx={matX + matW / 2} cy={tableLine + coasterH * 0.38} rx={matW * 0.52} ry={coasterH * 0.26} />
-      <Image
-        source={COASTER}
-        style={{
-          position: 'absolute',
-          left: matX,
-          // its top face is an ellipse centred COASTER_FACE down the sprite — that is where the
-          // cup has to stand for it to look like it is in the middle of the disc
-          top: tableLine - coasterH * COASTER_FACE,
-          width: matW,
-          height: coasterH,
-        }}
-      />
+      <View style={StyleSheet.absoluteFill} pointerEvents="none">
+        {/* The coaster is a disc lying on the work top, so a cup standing at `tableLine` meets it
+            at its middle while the near rim carries on in front, its shadow tucked under that rim. */}
+        <Shadow cx={matX + matW / 2} cy={tableLine + coasterH * 0.38} rx={matW * 0.52} ry={coasterH * 0.26} />
+        <Image
+          source={COASTER}
+          style={{
+            position: 'absolute',
+            left: matX,
+            // its top face is an ellipse centred COASTER_FACE down the sprite — that is where the
+            // cup has to stand for it to look like it is in the middle of the disc
+            top: tableLine - coasterH * COASTER_FACE,
+            width: matW,
+            height: coasterH,
+          }}
+        />
+      </View>
     </View>
   );
 });

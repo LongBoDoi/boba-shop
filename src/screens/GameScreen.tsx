@@ -87,6 +87,8 @@ export function GameScreen({ state, dispatch }: GameScreenProps) {
   const onScroll = useCallback(
     (event: NativeSyntheticEvent<NativeScrollEvent>) => {
       const p = Math.round(event.nativeEvent.contentOffset.x / width);
+      // Let the pager finish snapping before handing swipes over to the prep background.
+      if (Math.abs(event.nativeEvent.contentOffset.x - p * width) > 1) return;
       if (p !== pageRef.current) {
         pageRef.current = p;
         setPage(p);
@@ -177,7 +179,7 @@ export function GameScreen({ state, dispatch }: GameScreenProps) {
           state.mode === 'relaxed'
             ? 'Order tự được nhận — xem ở Pha chế.'
             : 'Chạm vào khách ở Quầy để nhận order.',
-          'Vuốt sang Pha chế ➜, kéo ly xuống dưới bình trà.',
+          'Chạm Pha chế ➜, kéo ly xuống dưới bình trà.',
           'Nhấn giữ vòi để rót — phải tới vạch "đủ", đừng để tràn!',
         ]
       : describeUnlocks(state.day);
@@ -197,11 +199,12 @@ export function GameScreen({ state, dispatch }: GameScreenProps) {
 
         <PageTabs page={page} counterBadge={requestingCount} prepBadge={tickets.length} onGo={goToPage} />
 
+        {/* In prep, horizontal swipes belong to the background. Tabs still switch pages. */}
         <ScrollView
           ref={pagerRef}
           horizontal
           pagingEnabled
-          scrollEnabled={!dragging}
+          scrollEnabled={!dragging && page === 0}
           showsHorizontalScrollIndicator={false}
           scrollEventThrottle={16}
           onScroll={onScroll}
@@ -275,7 +278,7 @@ export function GameScreen({ state, dispatch }: GameScreenProps) {
   );
 }
 
-/** The two-page indicator under the HUD: tap a label or swipe to switch screens. */
+/** The two-page indicator under the HUD: tap a label to switch screens. */
 function PageTabs({ page, counterBadge, prepBadge, onGo }: { page: number; counterBadge: number; prepBadge: number; onGo: (p: number) => void }) {
   return (
     <View style={styles.tabs}>
