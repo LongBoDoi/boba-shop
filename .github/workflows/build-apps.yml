@@ -101,7 +101,10 @@ jobs:
 
   ios:
     needs: version
-    runs-on: macos-15
+    # macos-15 defaults to Xcode 16.4 (Swift 6.1). Expo SDK 57's precompiled
+    # ExpoModulesJSI xcframework resolves a SwiftPM package that requires Swift
+    # tools 6.2, so the archive needs an Xcode 26 image.
+    runs-on: macos-26
     timeout-minutes: 60
     env:
       CI: '1'
@@ -117,6 +120,15 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+
+      - name: Select the newest Xcode
+        run: |
+          latest="$(ls -d /Applications/Xcode_*.app 2>/dev/null | sort -V | tail -1)"
+          if [ -n "$latest" ]; then
+            sudo xcode-select -s "$latest/Contents/Developer"
+          fi
+          xcodebuild -version
+          swift --version
 
       - name: Generate the iOS project
         run: npx expo prebuild --platform ios --clean
