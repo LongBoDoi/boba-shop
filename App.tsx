@@ -12,17 +12,31 @@ import { useSharedValue, withDelay, withTiming, Easing } from 'react-native-rean
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { ScreenWipe } from './src/components/ScreenWipe';
-import { createInitialState, gameReducer, GameState } from './src/game/reducer';
+import { gameReducer, GameState } from './src/game/reducer';
 import { DayEndScreen } from './src/screens/DayEndScreen';
 import { GameScreen } from './src/screens/GameScreen';
 import { TitleScreen } from './src/screens/TitleScreen';
 import { colors } from './src/theme';
+import { useSavedGame, useSaveGame } from './src/useSavedGame';
 
 const WIPE_MS = 250;
 
 export default function App() {
-  const [state, dispatch] = useReducer(gameReducer, Date.now(), createInitialState);
   const [fontsLoaded, fontError] = useFonts({ Baloo2_500Medium, Baloo2_600SemiBold, Baloo2_700Bold, Baloo2_800ExtraBold });
+  const initial = useSavedGame();
+
+  // Hold the splash until the saved shop is read as well as the fonts: a restored day has to *be*
+  // the reducer's initial state, not something applied over a day that has already opened.
+  if ((!fontsLoaded && !fontError) || !initial) {
+    return <View style={{ flex: 1, backgroundColor: colors.wall }} />;
+  }
+
+  return <Shop initial={initial} />;
+}
+
+function Shop({ initial }: { initial: GameState }) {
+  const [state, dispatch] = useReducer(gameReducer, initial);
+  useSaveGame(state);
 
   // When the phase changes, keep showing the old screen (frozen) until the wipe covers it.
   const [previous, setPrevious] = useState(state);
@@ -42,10 +56,6 @@ export default function App() {
     }, WIPE_MS + 20);
     return () => clearTimeout(timer);
   }, [outgoing, wipe]);
-
-  if (!fontsLoaded && !fontError) {
-    return <View style={{ flex: 1, backgroundColor: colors.wall }} />;
-  }
 
   const screen = outgoing ?? state;
 

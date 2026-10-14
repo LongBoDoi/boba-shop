@@ -21,8 +21,8 @@ npx expo install <package>  # add a dependency at an SDK-compatible version
 ```
 
 Run `npm run typecheck`, `npm run lint`, and `npm test` before calling a change done.
-Lint treats warnings as failures. The regression scripts check serving behavior and the scoped
-UUID dependency override; see "Verifying changes" below and `docs/dependency-health.md`.
+Lint treats warnings as failures. The regression scripts check serving behavior, saving and
+restoring, and the scoped UUID dependency override; see "Verifying changes" below and `docs/dependency-health.md`.
 
 ### Deploying the web build (EAS Hosting)
 
@@ -93,6 +93,7 @@ src/game/               pure game logic, no React
   customers.ts          random customer looks (hair, skin, shirt, accessory) and names
   random.ts             seeded RNG; the seed lives in state so the reducer stays pure
   money.ts              formatMoney: 1 game unit = 10.000 ₫, shown as "10k"
+  save.ts               serialize/validate a GameState for storage; see "Saving the shop"
 src/screens/            TitleScreen, DayEndScreen, and the in-play screens:
   GameScreen.tsx        orchestrator: HUD, the two-page swipe pager + tab indicator, effects/opening/pause overlays
   CounterPage.tsx       page 1 — the customer stage (take orders here)
@@ -112,7 +113,49 @@ tools/                  cut-sheets.py: cuts the asset sheets into those sprites
                         cut-tea-front.ps1: the tea window's greenery, back out of its own plate
 src/motion.ts           shared animation timings/easings
 src/theme.ts            colours and font family names
+src/useSavedGame.ts     Async Storage read on launch, slow write while playing
 ```
+
+### Saving the shop
+
+The game is picked up and put down mid-shift, so **the whole `GameState` is saved**, not just which
+day was reached: reopening puts you back in the same minute of the same day, with the same customers
+waiting, the same half-built cup on the coaster and the same takings. `GameState` is already a plain
+serializable value, which is what makes this cheap.
+
+`src/game/save.ts` owns the format and `src/useSavedGame.ts` owns the store. Five decisions worth
+not re-litigating:
+
+- **The store is Async Storage.** The game ships on the web, where it is `localStorage` and needs no
+  configuration, and it is bundled into Expo Go, so a phone still needs no development build.
+  `expo-sqlite/kv-store` is the Expo-made drop-in alternative and was passed over: its web support
+  is alpha and wants a wasm Metro config plus `Cross-Origin-Embedder-Policy` /
+  `Cross-Origin-Opener-Policy` headers on the host, which is a lot of setup for a few kB of JSON.
+- **`config` is not saved**, because it is `getDayConfig(day)`. Re-deriving it means a save made
+  before the levels were retuned comes back on the current numbers, and `parseGame` fits the
+  restored counter to today's `config.slots`.
+- **The transient UI state is dropped** (`feedback`, `departures`, `discarded`). Those drive
+  animations measured in a second or two; restoring a walk-off that started last week would hold a
+  counter spot for nothing and replay a payment that already happened.
+- **A restored shift comes back paused**, whatever it was saved as, so reopening the game shows the
+  pause card instead of dropping you into three patience timers already running down. The day's
+  `OpeningSign` is keyed off `clock === 0` for the same reason: a resumed day has already opened, so
+  it is not announced twice. Quitting to the menu overwrites the save with a `title` state, which is
+  how a run is abandoned — there is no separate "clear save".
+- **Everything read back is validated, and a save that doesn't check out is thrown away** rather
+  than patched; a fresh shop is a better failure than a half-restored one. On the web the save sits
+  in `localStorage`, where it can be edited, and a save from an older build can name an ingredient
+  that no longer exists. Ingredient *names* are checked against the catalogue; whether the day still
+  *offers* them is not, so a retuned unlock schedule leaves one customer asking for a tea that isn't
+  on the shelf rather than wiping the save. `cup.ice` and `cup.sweetness` are re-derived from the
+  build's scoops and pumps instead of being trusted, since the reducer treats those as the same fact.
+
+The writer is on a **2 s timer**, not on every state change — a day ticks ten times a second — and
+flushes when `AppState` leaves `active`, on the web's `pagehide` (closing a tab doesn't reliably
+raise a visibility change), and on unmount. The most a crash can cost is the last couple of seconds.
+
+`tools/check-save.cjs` covers the round trip, the two non-playing phases, the saves that must be
+refused and the ones that are tidied up instead.
 
 ### The two pages (swipe navigation)
 `GameScreen` keeps the reducer state, the tick loop, haptics and the `measureInWindow` refs, and hosts a
@@ -134,7 +177,8 @@ the 1.3 s `DEPARTURE_MS` the leaving customer needs to walk off their spot.
 The mode lives in game state, not in a React context or storage: `SET_MODE` can be sent at any time,
 `START_DAY` carries it over to the next day, and switching *to* relaxed mid-day also takes the order of
 anyone still `requesting` (nobody is coming to take it by hand any more) and pulls the next arrival
-forward. It is not persisted across app launches — there is no storage dependency.
+forward. It rides along in the save, so the mode a shop was last run in is the one it reopens in
+(see "Saving the shop").
 
 `SettingsSheet` is the card that sets it, opened from the title screen's "⚙️ Cài đặt" button and from
 the pause menu, so it can be changed between days or in the middle of one. The day-1 instructions on
@@ -432,6 +476,10 @@ stands plainly inside the shelf; divided across the board it laps over the ends 
   day, `TICK` until a customer spawns, `TAKE_ORDER` that slot, `PICK` the order's ingredients and
   `SERVE`, then check coins/stats; also let a `requesting` customer time out (no order taken) and
   confirm `stats.missed` rises. Reaching `dayEnd` needs the counter to empty after closing time.
+- Saving: the save is one key, `boba-shop.save.v1`, and on the web it is plain `localStorage` —
+  `localStorage.getItem('boba-shop.save.v1')` in the console shows the shop as it stands, and
+  removing it is how a first launch is tested. Reload mid-shift and you should come back to the
+  same minute of the same day behind the pause card, with the opening sign *not* replayed.
 - UI: `npx expo export --platform web`, serve `dist/`, and look at it at phone sizes
   (390×844 and the small 375×667). The Prep page is reached by swiping left or tapping the "Pha chế"
   tab. To test a later day quickly, temporarily change `START_DAY, day: 1` in `App.tsx` (and the goal

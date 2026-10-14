@@ -14,7 +14,8 @@ export interface CustomerLook {
 const SKINS = ['#FFDCC2', '#F6C8A4', '#E9B48E', '#CC9268', '#A8704E'];
 const HAIRS = ['#2B1B17', '#4A2C20', '#6B4423', '#B9824A', '#9A9A9A', '#D2593B'];
 const SHIRTS = ['#7EC8E3', '#F7A9C4', '#B7E07A', '#FFCF6E', '#B79CF2', '#FF9A76', '#7FD6C2'];
-const HAIR_STYLES: HairStyle[] = ['short', 'bob', 'bun', 'spiky', 'long', 'cap', 'balding'];
+export const HAIR_STYLES: HairStyle[] = ['short', 'bob', 'bun', 'spiky', 'long', 'cap', 'balding'];
+export const ACCESSORIES: Accessory[] = ['none', 'glasses', 'bow'];
 
 export function generateLook(rng: Rng): CustomerLook {
   const hairStyle = rng.pick(HAIR_STYLES);

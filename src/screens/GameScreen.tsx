@@ -40,7 +40,9 @@ interface GameScreenProps {
 export function GameScreen({ state, dispatch }: GameScreenProps) {
   const { width, height: windowHeight } = useWindowDimensions();
   const { config, paused } = state;
-  const [opening, setOpening] = useState(true);
+  // The sign announces the day as it opens. A day resumed from a save has already been opened —
+  // its clock has run — so that one goes straight to the shift, behind the pause card.
+  const [opening, setOpening] = useState(() => state.clock === 0);
   const [settings, setSettings] = useState(false);
   const [page, setPage] = useState(0);
   const [measureToken, setMeasureToken] = useState(0);
