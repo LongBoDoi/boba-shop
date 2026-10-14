@@ -209,7 +209,7 @@ Dropping the cup still standing on the work top sends it home.
   `TeaTankMount` supplies a static metal shelf bracket with bolted end plates, a beveled rail,
   bent cradle arms and a contact shadow, behind the tank's lower collar and clear of its tap.
   each tank has its own Vietnamese name tag above the lid, keeping the chamber clear. The tank
-  frame is memoized and does not scale, dim, or change opacity when the cup is carried around it. Other equipment keeps its existing art and layout.
+  frame is memoized and does not scale, dim, or change opacity when the cup is carried around it. Toppings also share the panorama; the remaining equipment keeps its existing art and layout.
 - **Pour directly in the room.** Drag the cup under a visible tank and release to snap beneath
   its spout. The cup scales to the shelf gap and its base rests on the lowest shelf surface,
   with a small contact shadow; picking it up restores its carrying size. `findStation` tests that particular tap in screen coordinates, including the pan
@@ -229,54 +229,83 @@ Dropping the cup still standing on the work top sends it home.
   Milestone accessibility updates use `useAnimatedReaction`, with no JS polling.
   There is no minimum amount required to serve and no fill-based tip bonus. Overflow still marks
   a messy drink. The cup and its holder remain horizontally centered at rest.
-- **The toppings are in the bins the room is painted with.** They used to be loose pans along the
-  ledge, a row that ran off the room and was swiped back; then a painted stand of their own
-  (`TOPPING_STAND`) standing on the work top. Both are gone. The plate now paints the whole
-  station — the tray under the fridge, its six steel bins, its `Topping` sign and the shadow
-  around them — so there is no furniture left to place and a topping is simply a **heap of
-  itself standing in one of those bins** (`ROOM.bins`, measured off the plate like every other
-  line in the room). `fillBins` puts the day's toppings into them.
-  Three things it has to get right:
-  **A full bin is one sprite** (`BIN[id]`) — steel tray, what is in it and the scoop standing in
-  it. The six are **not** fitted to the bins the plate happens to paint under the fridge: they are
-  laid out to fill the **cubby** the plate paints under the fridge (`ROOM.tray`): three across
-  shoulder to shoulder at `BIN_GRID.pitch`, read off their own sheet, and sized to the run the
-  cubby gives them. How far the front row stands in front of the back one is not a number — the
-  two rows **divide the cubby's own depth**, the back row's trays starting at its ceiling and the
-  front row's ending at the lip of its floor, so they fill it however deep it is painted. A place
-  the week has not reached yet gets `BIN_EMPTY` instead (`layout.emptyBins`), laid down before the
-  rows so a bin the day *does* have is simply drawn over the one standing where it goes. That is
-  safe in both directions because a row only reaches the back one once the front is full, so a
-  full bin is never drawn over an empty one standing in front of it.
-  Each is hung by the **tray's own rim** (`BIN_HEAD`), not by the top of the sprite: above that
-  line is the scoop, which reaches well over the back of the bin.
-  Before the sprites arrived this was built out of parts, and the parts are worth not rebuilding:
-  a loose heap laid in the bin is a golf ball in a shoe box, grown to fill it it laps over the
-  rims, squashed to the bin's foreshortened depth it turns pearls into ovals, and tiled into a bed
-  and clipped to the opening it is only as good as the grain survives — which at 2x it does not.
-  Ask for the sprite.
-  **Which bins.** Up to three toppings stand in the **front** row, the nearer and the easier to
-  reach, and the rest fill from the back; a row that is not full sits as near its middle as three
-  bins allow, so a day with one topping uses the middle bin and a day with two the left and the
-  middle. The back row is pushed first, so where a front heap laps the bin behind it the front one
-  is drawn over — which is what a second row standing behind a first one looks like anyway.
-  **The touch target** is the whole bin, not the heap in it: the bins tile along the tray exactly,
-  so there is no dead steel between two of them and none of them reaches over its neighbour.
-  They wear **no name plaques** (the tray is named, and six Vietnamese topping names would not fit
-  under six bins this size) and cast **no pool of their own** (`shadow={false}` — the tray is
-  painted with its own shadow). What a bin holds is said on the hint line the moment it is picked
-  up instead, which is what `onGrab` on `useCarryGesture` is for.
-- **Everything else — carry it to the cup.** The topping bins, the ice pan, the syrup bottle, the milk
+- **Toppings stand in upright glass containers in the middle cabinet**, three across in two
+  rows, to the left of the syrup recess. `ROOM_BG_TOPPING_SHELF` measures their positions in
+  `kitchen-background.png`; `fitBackground` projects them at the painting's scale. Containers,
+  empty slots and each container's cream nameplate are children of the same background
+  ScrollView as the tea tanks, so they remain attached while panning. Each available topping
+  carries a compact, single-line Vietnamese name on its lid, clear of the ingredients.
+  Fixed slots follow the reference: pearls, popping pearls and pudding above; pandan, lychee
+  and grass jelly below. Unlock order stays unchanged; `TOPPING_BOX_EMPTY` fills unavailable
+  slots, while `TOPPING_BOX[id]` draws an available container. New sprites are extracted from
+  `tools/sheets/topping-shelf-boxes.png` by `tools/cut-topping-boxes.py`; the prompt and workflow
+  are in `tools/topping-station-prompt.md`. Legacy `BIN` assets are retained for older art.
+  The whole container is a touch target. Grabbing one names it on the hint line and lifts the
+  existing painted `SCOOPFUL[id]`. `useCarryGesture` subtracts the panorama's current offset
+  before starting the carried tool in screen coordinates; the background and pager freeze
+  until release. Drop it on the centered cup to add it. Duplicate and topping-limit guards
+  stay unchanged, and existing scoopfuls and cup pieces are reused.
+- **Ice is available from day one.** The painted ice machine beneath the tea rack is the touch
+  target, measured by `ROOM_BG_ICE_MACHINE`. It and its cream/pink “Đá” plaque live inside the
+  panorama, so panning keeps the hit area and scoop origin attached to the machine.
+  The machine itself is only the original background painting, with no drawer overlay or count.
+  Drag into the cup once for ít đá, twice for đá
+  thường; no scoop means không đá. The legacy ice-pan sprite is no longer rendered.
+  The compact plaque sizes to its icon and text with 5 panorama pixels of padding on each side,
+  without reducing the machine's touch target.
+  `PIECE.ice` uses the blue `piece-ice-v2.png` in ingredient icons;
+  `SCOOPFUL.ice` is a complete silver scoop with a pink grip and contained blue cubes.
+  `CupIce` uses the separate neutral `CUP_ICE` sprite (`piece-ice-clear.png`) inside the drink.
+  Twelve varied sizes/angles render from back to front; one scoop uses three cubes, two use
+  twelve. Chunky 27–36-unit cube bodies are larger than topping pieces. Four exposed cubes
+  sit across the surface with varied immersion, heights
+  and tilts; the rest scatter below the surface with room between their centers,
+  rather than putting every extra cube in the same narrow band at the surface. Fully submerged
+  pieces have no surface contact ring.
+  Existing cubes keep their positions when the second scoop is added. Dry ice rests
+  on the ingredient bed; liquid raises it to the surface through shared animated SVG geometry.
+  `createIceLayout(cupId)` varies the first scoop's floating tilts and samples scattered
+  second-scoop placements once per cup, with different
+  resting tilts, floating angles, and immersion depths. Samples too close after fitting the glass
+  are retried; adding the second scoop keeps the first scoop in place. The seed keeps the layout stable
+  through pours, game ticks and reloads, while fresh cups get different arrangements.
+  `cupIceRestPosition` fits the actual rounded cube outline to the curved floor; the first scoop
+  touches that floor, while later pieces stack with varied overlap and small contact shadows.
+  New cubes settle briefly, then tilt and spread as tea lifts them, without any looping motion.
+  Rounded front, top and side faces render with distinct frosted blue-grey shading and dark
+  outer edges, independent of the sprite's alpha. The clear painting contributes only subtle
+  surface texture. White face seams and broad glints keep ice readable at phone scale in both
+  tea and milk tea. Animated silhouettes remove the foreground plastic wash over exposed ice,
+  so the upper dry-pile cubes are as crisp as those on the floor. That mask follows each cube's
+  settling and rise, and is clipped above the ice's front waterline; submerged ice retains the glass wash.
+  Every cube is split by one shared `cupIceFillPath` clip and its complement. It uses the near
+  arc of the same tea oval, while the tea's rear arc stays behind the crowns; contact strokes
+  follow that near arc too. Projected depth
+  affects cube placement only, so it cannot create a separate liquid level on each face.
+  the submerged body is softened and tea/milk-tinted, with a small contact meniscus to anchor
+  it to the surface. Cup ripples animate without moving its entire oval independently of the ice
+  and glass. `cupIcePosition` seats each cube against the shared oval's front edge, varying its height
+  with immersion and a small depth offset,
+  without the former upper-height clamp that stopped later pours moving the ice. The live level
+  is read unconditionally so every pour remains subscribed. Cubes stay inside the tapered cup
+  by fitting their actual rotated outlines to the walls, and remain still on game-clock ticks.
+  Their separate `CUP_ICE_WELL` clip allows crowns into the
+  clear space below the lip, so a full cup does not trim them into a flat surface cap.
+  Sources and built-in imagegen prompts are in `tools/ice-art-prompts.md`; repackage them with
+  `python3 tools/cut-ice-art.py`, preserving the source transparency.
+- **Everything else — carry it to the cup.** The topping bins, the ice machine, the syrup bottle, the milk
   cartons and the foam tubs are dragged: `useCarry` keeps what's in hand, draws the tool following the
   finger above everything else, and on release either tips it into the cup (`SCOOP` / `ICE_SCOOP` /
   `SUGAR_PUMP`, or `POUR` of `MILK_SPLASH` for a carton) or puts it back. The cup doesn't move for these —
-  drop onto it wherever it stands. Ice and syrup show how many scoops or pumps went in on the machine
-  itself. Milk takes room in the cup, so a cup filled to the brim with tea has nowhere to put it.
+  drop onto it wherever it stands. Syrup shows how many pumps went in on the machine itself.
+  Milk takes room in the cup, so a cup filled to the brim with tea has nowhere to put it.
 
 **Tea slots remain fixed across days**, filling the second rack from left to right. The tank art
 is sized to the rack and available space below its spout, independently of the other equipment.
-The remaining equipment uses the existing `MAX_WIDTH` and `SwipeRow` layout: rows can be swiped
-when they overflow, while a vertical lift carries the tool. `carry.cancel` puts a tool back when
+The remaining equipment keeps its existing bench scale and positions: rows can be swiped when they
+overflow, while a vertical lift carries the tool. Each `Frame` applies the shared row offset to
+its own touch target; the nonanimated row wrapper passes empty-space touches through to the
+panorama and topping containers. `carry.cancel` puts a tool back when
 the gesture becomes a swipe; row offsets are clamped when a new day changes the available equipment.
 
 **All of this is the raw responder API (`GRABBY`), not `Pressable`**: a `Pressable` cancels its press when
@@ -292,9 +321,12 @@ The docked cup casts a soft elliptical contact shadow matched to its narrow foot
 `TeaLiquid` renders the kitchen liquid inside the tank's transparent chamber and the cup's traced
 well. The existing glass sprites, linework, cat decal, ice, toppings and foam remain intact.
 The cup's existing painted tea textures blend with opaque colour shading and depth gradients.
-The cup's glass sprite draws in front of the liquid, foam, ice and toppings so its reflections,
-rim and molded base remain visible. Over the filled portion only, the glass uses 22% opacity to
-retain rich tea colour; the empty portion, rim, walls and base keep their original glass opacity.
+The cup's painted glass is split by depth: the inner-floor detail draws behind the contents;
+the front wall reflections, rim and near base edge draw in front. This lets toppings naturally
+occlude the rear base rings instead of having a bright oval painted over the pile. Both parts
+reuse the original sprite. Glass opacity follows only actual tea fill (22% over the liquid);
+adding toppings never switches glass opacity or changes its masks. The liquid wash likewise
+follows only actual tea, with no artificial topping fill level.
 The shared inner mask is inset from the painted wall highlights;
 the surface follows its taper, and foam uses the same mask and live surface width.
 Tank tea instead uses fully opaque vector shading with stronger color and depth; enlarged raster
@@ -302,6 +334,17 @@ textures no longer soften its chamber. The original tank glass and hardware rema
 is a complete oval with the same perspective as the cup rim, narrowing with its tapered walls.
 A painted meniscus, crescent highlight and curved reflection sit at its surface. Cup milk color blends with tea to give a
 creamier tint. All liquid stays clipped inside the glass; the cup linework and decal draw last.
+
+`CupToppings` reuses the painted `PIECE` sprites in seventeen smaller, staggered positions per
+portion. Back pieces are smaller and softer, front pieces overlap them, and their feet follow
+the cup's curved inner floor. `cupToppingPosition` fits the entire rotated sprite inside the
+narrower inner-floor opening, with 2.5 sprite pixels of clearance from its walls and curved base.
+The pile is packed towards the center so the clipping mask remains a containment safeguard,
+not a way to crop oversized pieces. Contact shadows and a liquid-clipped colour wash make submerged
+pieces belong to the tea; milk adds a stronger creamy wash. Each additional ingredient adds its
+own portion behind the existing pile, preserving the first ingredient's positions. Deterministic
+variation keeps pieces stable on clock ticks. A short `withTiming` fall settles a new portion;
+ice, foam, the front glass reflections and the cat decal remain in front of the pile.
 
 During pouring, two expanding surface ripples, small rising bubbles and shifting light reflections
 respond to the stream. The tank's
@@ -325,7 +368,9 @@ The legacy `DRINK`, `DRINK_TOP` and jar assets remain in the repository.
 
 ### The kitchen's artwork
 Nearly everything in the prep room is a **painted sprite**. `tools/cut-sheets.py` cuts
-`tools/sheets/*.png` into `src/assets/kitchen/`, and
+`tools/sheets/*.png` into `src/assets/kitchen/`; `tools/cut-topping-boxes.py` cuts the new
+upright shelf containers. The generated sheet and prompt are kept in `tools/`.
+
 [kitchenArt.ts](src/components/art/kitchenArt.ts) is the only place that names those files. The
 sprites are generated — change the script (or the sheet), re-run it, never hand-edit a PNG.
 
@@ -379,10 +424,10 @@ keeps the painted ticks, highlights and the cat decal on top of it:
   the bare `SCOOP` with pieces laid into its bowl by hand, which was the same mistake the teas
   were — the design draws what a scoop of this looks like, so take its word for it. The six are
   drawn to a common **height**, because the scoop is identical in all of them and only what mounds
-  over the bowl differs; matched on width instead, a heaped one shrinks beside a flat one. Ice and
-  foam still take the bare `SCOOP`, ice with pieces heaped in its bowl and foam with a blob drawn
-  in it — the bowl is solid chrome, so anything behind it is invisible;
-- the **ice pan, cartons, syrup, foam tubs and every fitting** (wall, lamps, shelf, steel counter,
+  over the bowl differs; matched on width instead, a heaped one shrinks beside a flat one.
+  Ice uses its own complete `SCOOPFUL.ice` painting. Foam takes the bare `SCOOP` with a blob
+  drawn in its bowl;
+- the **cartons, syrup, foam tubs and every fitting** (wall, lamps, shelf, steel counter,
   cabinets, rail, coaster, plant, poster, cup stack, towel) are whole sprites
   that [KitchenRoom](src/components/art/KitchenRoom.tsx) and the station place by the layout's
   lines;
@@ -394,9 +439,8 @@ keeps the painted ticks, highlights and the cat decal on top of it:
   and a seam to get wrong. Those sprites are still cut (a station may yet want the stainless),
   but the room no longer draws any of them. Each piece of equipment now sits in a contact
   shadow of its own (`Frame`), because there is no well in a counter to sink it into.
-  The **open cubby under the fridge** is painted into it too — empty, with no bins in it, which is
-  why there is no stand sprite any more; `ROOM.tray` is that cubby, and the six bins are laid out
-  to fill it.
+  The active topping cabinet is measured in the panoramic background by
+  `ROOM_BG_TOPPING_SHELF`. The portrait plate and `ROOM.tray` remain legacy geometry.
 
 **The prep page is all kitchen.** There is no ticket rail or order slip above it: the room fills
 everything between the tabs and the action buttons, which is what gives the equipment the size it has

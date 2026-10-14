@@ -1,9 +1,10 @@
 import { memo } from 'react';
-import Svg, { Circle, G, Path, Rect } from 'react-native-svg';
+import Svg, { Circle, G, Image as SvgImage, Path, Rect } from 'react-native-svg';
 
 import { CategoryId, getIngredient, ICE_LEVELS, Tea, TOPPINGS } from '../../game/ingredients';
 import { colors } from '../../theme';
 import { shade } from './Character';
+import { PIECE } from './kitchenArt';
 
 interface IngredientIconProps {
   category: CategoryId;
@@ -71,10 +72,7 @@ function IceCubes({ cubes }: { cubes: number }) {
   return (
     <G>
       {positions.map(([x, y]) => (
-        <G key={`${x}-${y}`}>
-          <Rect x={x} y={y} width={15} height={15} rx={3.5} fill="#CDEBFF" stroke="#8CCBF2" strokeWidth={1.2} />
-          <Rect x={x + 3} y={y + 3} width={6} height={2.5} rx={1.2} fill="#FFFFFF" />
-        </G>
+        <SvgImage key={`${x}-${y}`} href={PIECE.ice} x={x} y={y} width={18} height={18} />
       ))}
     </G>
   );

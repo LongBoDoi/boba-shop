@@ -9,7 +9,7 @@ import Svg, {
 
 import { shade } from './art/Character';
 import { DRINK, DRINK_MILKY, DRINK_MILKY_TOP, DRINK_TOP, TEA_TANK } from './art/kitchenArt';
-import { CUP_FLOOR_FRONT, CUP_WELL, cupSurface } from './cupGeometry';
+import { CUP_FLOOR_EDGE, CUP_FLOOR_FRONT, CUP_WELL, cupLiquidPath, cupSurface } from './cupGeometry';
 import { pointerEventsStyles } from '../pointerEvents';
 
 const AnimatedEllipse = Animated.createAnimatedComponent(Ellipse);
@@ -64,13 +64,17 @@ export const TeaLiquid = memo(function TeaLiquid({ width, height, color, teaId, 
   const surface = useDerivedValue(() => {
     'worklet';
     const s = tank ? { y: 545, rx: 377, ry: 48, opacity: 1 } : cupSurface(level!.get());
-    // Small waves only; the entire oval retains the cup rim's perspective.
-    return { ...s, y: s.y + Math.sin(phase.get() * Math.PI * 2) * agitation.get() * (tank ? 2 : 0.5) };
+    // The cup's oval matches the ice and glass footprint exactly; ripples provide its motion.
+    return { ...s, y: s.y + (tank ? Math.sin(phase.get() * Math.PI * 2) * agitation.get() * 2 : 0) };
   }, [tank, level, phase, agitation]);
   const bodyProps = useAnimatedProps(() => {
     const s = surface.get();
     return { y: s.y, height: (tank ? 1190 : CUP_FLOOR_FRONT) - s.y, opacity: s.opacity };
   }, [surface, tank]);
+  const bodyShapeProps = useAnimatedProps(() => {
+    const s = surface.get();
+    return { d: cupLiquidPath(s.y, s.rx, s.ry), opacity: s.opacity };
+  }, [surface]);
   const surfaceProps = useAnimatedProps(() => {
     const s = surface.get();
     return { cy: s.y, rx: s.rx, ry: s.ry, opacity: s.opacity };
@@ -106,7 +110,10 @@ export const TeaLiquid = memo(function TeaLiquid({ width, height, color, teaId, 
     <Svg width={width} height={height} viewBox={`0 0 ${vbW} ${vbH}`} style={[StyleSheet.absoluteFill, pointerEventsStyles.none]}>
       <Defs>
         <ClipPath id={`liquid-well-${uid}`}><Path d={well} /></ClipPath>
-        <ClipPath id={`liquid-body-clip-${uid}`}><AnimatedRect x={0} width={vbW} animatedProps={bodyProps} /></ClipPath>
+        <ClipPath id={`liquid-body-clip-${uid}`}>
+          {tank ? <AnimatedRect x={0} width={vbW} animatedProps={bodyProps} />
+            : <AnimatedPath animatedProps={bodyShapeProps} />}
+        </ClipPath>
         <LinearGradient id={`liquid-body-${uid}`} x1="0%" y1="0%" x2="100%" y2="0%">
           <Stop offset="0" stopColor={shade(tint, -40)} />
           <Stop offset="0.18" stopColor={shade(tint, tank ? 10 : 24)} />
@@ -131,13 +138,16 @@ export const TeaLiquid = memo(function TeaLiquid({ width, height, color, teaId, 
         </RadialGradient>
       </Defs>
       <AnimatedGroup clipPath={`url(#liquid-well-${uid})`} animatedProps={visibilityProps}>
-        <AnimatedRect x={0} width={vbW} fill={`url(#liquid-body-${uid})`} animatedProps={bodyProps} />
+        {tank ? <AnimatedRect x={0} width={vbW} fill={`url(#liquid-body-${uid})`} animatedProps={bodyProps} />
+          : <AnimatedPath fill={`url(#liquid-body-${uid})`} animatedProps={bodyShapeProps} />}
         <G clipPath={`url(#liquid-body-clip-${uid})`}>
           {bodyArt && <SvgImage href={bodyArt} x={0} y={0}
             width={113} height={174} preserveAspectRatio="none" opacity={0.5} />}
           <Ellipse cx={vbW * 0.38} cy={tank ? 1080 : 150} rx={tank ? 230 : 22} ry={tank ? 90 : 12} fill={`url(#liquid-light-${uid})`} />
           <AnimatedRect x={0} width={vbW} fill={`url(#liquid-depth-${uid})`} animatedProps={bodyProps} />
           <AnimatedPath fill="#FFF8DF" animatedProps={reflectionProps} />
+          {!tank && <Path d={CUP_FLOOR_EDGE} fill="none"
+            stroke={shade(tint, -28)} strokeWidth={0.7} opacity={0.35} />}
         </G>
         <AnimatedEllipse cx={vbW / 2} fill={`url(#liquid-top-${uid})`}
           stroke={shade(tint, -24)} strokeWidth={tank ? 5 : 0.55} animatedProps={surfaceProps} />

@@ -107,6 +107,17 @@ export const BIN: Record<string, number> = {
  *  the same box as the full ones, so every bin on the tray is exactly the same size. */
 export const BIN_EMPTY = require('../../assets/kitchen/bin-empty.png');
 
+/** Upright glass topping boxes, cut from the new shelf-container sprite sheet. */
+export const TOPPING_BOX: Record<string, number> = {
+  pearls: require('../../assets/kitchen/topping-box-pearls.png'),
+  popping: require('../../assets/kitchen/topping-box-popping.png'),
+  pudding: require('../../assets/kitchen/topping-box-pudding.png'),
+  pandan: require('../../assets/kitchen/topping-box-pandan.png'),
+  lychee: require('../../assets/kitchen/topping-box-lychee.png'),
+  grass: require('../../assets/kitchen/topping-box-grass.png'),
+};
+export const TOPPING_BOX_EMPTY = require('../../assets/kitchen/topping-box-empty.png');
+
 export const SCOOPFUL: Record<string, number> = {
   pearls: require('../../assets/kitchen/scoop-pearls.png'),
   popping: require('../../assets/kitchen/scoop-popping.png'),
@@ -114,6 +125,7 @@ export const SCOOPFUL: Record<string, number> = {
   pandan: require('../../assets/kitchen/scoop-pandan.png'),
   lychee: require('../../assets/kitchen/scoop-lychee.png'),
   grass: require('../../assets/kitchen/scoop-grass.png'),
+  ice: require('../../assets/kitchen/scoop-ice.png'),
 };
 
 export const PIECE: Record<string, number> = {
@@ -123,8 +135,11 @@ export const PIECE: Record<string, number> = {
   pandan: require('../../assets/kitchen/piece-pandan.png'),
   lychee: require('../../assets/kitchen/piece-lychee.png'),
   grass: require('../../assets/kitchen/piece-grass.png'),
-  ice: require('../../assets/kitchen/piece-ice.png'),
+  ice: require('../../assets/kitchen/piece-ice-v2.png'),
 };
+
+/** Clear, softly melted ice used only inside the drink, separate from the scoop and icons. */
+export const CUP_ICE = require('../../assets/kitchen/piece-ice-clear.png');
 
 /** Each piece's own proportions, so a pearl stays round and a cube stays square. */
 export const PIECE_ART: Record<string, number> = {
@@ -134,7 +149,7 @@ export const PIECE_ART: Record<string, number> = {
   pandan: 88 / 96,
   lychee: 96 / 95,
   grass: 89 / 96,
-  ice: 31 / 35,
+  ice: 1,
 };
 
 /** And each scoopful's, since what is heaped over the bowl differs from topping to topping. */
@@ -145,6 +160,7 @@ export const SCOOP_ART: Record<string, number> = {
   pandan: 268 / 307,
   lychee: 264 / 307,
   grass: 245 / 306,
+  ice: 256 / 296,
 };
 
 /**
@@ -153,9 +169,6 @@ export const SCOOP_ART: Record<string, number> = {
  * bin's rim, not the top of the sprite.
  */
 export const BIN_HEAD = 0.1713;
-
-/** The ice pan, which is the last of the old pans the room still stands on its bench. */
-export const ICE_PAN = require('../../assets/kitchen/pan-ice.png');
 
 // ------------------------------------------------------------------ the room around it
 /**
@@ -176,6 +189,20 @@ export const ROOM_BG_TEA_SHELF = {
   x0: 168, x1: 624, capacity: 6,
   // Mounted on the front of the middle rack; the cup stands on the lowest shelf's top face.
   tankWidth: 64, mount: 314, bottom: 398,
+};
+
+/** The built-in ice machine under the tea rack, including its top and glass drawer. */
+export const ROOM_BG_ICE_MACHINE = {
+  x: 78, y: 416, width: 228, height: 89,
+  sign: { x: 36, y: 6, height: 24 },
+};
+
+/** Two rows of upright topping containers in the middle cabinet, left of the syrup recess. */
+export const ROOM_BG_TOPPING_SHELF = {
+  x0: 704, x1: 955, gap: 6, height: 82,
+  bases: [303, 395],
+  // Fixed slots follow the reference, independently of the order ingredients unlock.
+  slots: ['pearls', 'popping', 'pudding', 'pandan', 'lychee', 'grass'],
 };
 
 /** Keep the holder wide enough for the cup without letting it spill over the countertop. */

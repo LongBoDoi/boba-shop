@@ -25,18 +25,16 @@ import { colors, fonts } from '../theme';
 import { fitRoom, KitchenRoom, kitchenTableFor, Shadow, SHOP } from './art/KitchenRoom';
 import {
   ART,
-  BIN,
-  BIN_EMPTY,
-  BIN_HEAD,
   COASTER_WIDTH_RATIO,
   FOAM,
-  ICE_PAN,
+  ROOM_BG_ICE_MACHINE,
   ROOM_BG_SIZE,
   ROOM_BG_TEA_SHELF,
+  ROOM_BG_TOPPING_SHELF,
+  TOPPING_BOX,
+  TOPPING_BOX_EMPTY,
   TEA_TANK_ART,
   MILK,
-  PIECE,
-  PIECE_ART,
   ROOM,
   SCOOP,
   SCOOP_ART,
@@ -49,12 +47,14 @@ import { CupContactShadow, PourMeterState } from './PourFeedback';
 import { GRABBY, Spill, Stream, useHoldPour } from './pour';
 import { TankGraphic } from './TeaLiquid';
 import { TeaTankMount } from './art/TeaTankMount';
+import { IngredientIcon } from './art/IngredientIcon';
 import { fitBackground } from './art/PannableBackground';
 import { pointerEventsStyles } from '../pointerEvents';
 
 // --------------------------------------------------------------------------- layout
 
 type StationKind = 'tea' | 'milk' | 'topping' | 'ice' | 'sugar' | 'foam';
+type ShelfKind = Exclude<StationKind, 'ice'>;
 
 interface Station {
   key: string;
@@ -122,39 +122,11 @@ export interface KitchenLayout {
   homeY: number;
 }
 
-/** The ice pan is drawn wider than it is tall; everything else keeps its own art's shape. */
-const widened = (kind: StationKind) => kind === 'ice';
-
-/**
- * How the six topping bins stand in their cubby. `across` is how many to a row and `pitch` the
- * step from one to the next across, as a share of a bin's width — just under 1, read off
- * `tools/sheets/topping-bins.png`, which draws them shoulder to shoulder the way a topping bar's
- * are. How far the front row stands in front of the back one is **not** a number here: the two
- * rows simply divide the depth `ROOM.tray` gives them, so they fill the cubby the plate paints
- * however deep it is. `LEAN` is the most they may be pushed together if that depth is ever too
- * little for two trays to both stay in view.
- */
-const BIN_GRID = { across: 3, pitch: 0.995 };
-/** The least a row may stand in front of the one behind it, as a share of a tray's own depth. */
-const LEAN = 0.55;
-
-/** How wide a piece of equipment may get, as a fraction of the room's width. */
-const MAX_WIDTH: Record<StationKind, number> = {
-  tea: 0.26,
-  milk: 0.21,
-  // toppings are sized by the bin they stand in, not by the room
-  topping: 0.4,
-  ice: 0.3,
-  sugar: 0.17,
-  foam: 0.23,
-};
-
 /** How wide each piece of equipment is relative to its height. */
-const ASPECT: Record<StationKind, number> = {
+const ASPECT: Record<ShelfKind, number> = {
   tea: ART.jar,
   milk: ART.milk,
   topping: ART.pan,
-  ice: ART.pan,
   sugar: ART.syrup,
   foam: ART.foam,
 };
@@ -199,14 +171,13 @@ export function layoutKitchen(config: DayConfig, W: number, H: number): KitchenL
   const { px, py } = fitRoom(W, H);
 
   const has = (c: CategoryId) => config.categories.includes(c);
-  const rows: { id: string; kind: StationKind }[][] = [
-    config.options.tea.map((id) => ({ id, kind: 'tea' as StationKind })),
-    config.options.toppings.map((id) => ({ id, kind: 'topping' as StationKind })),
+  const rows: { id: string; kind: ShelfKind }[][] = [
+    config.options.tea.map((id) => ({ id, kind: 'tea' as const })),
+    config.options.toppings.map((id) => ({ id, kind: 'topping' as const })),
     [
-      ...(has('ice') ? [{ id: 'ice', kind: 'ice' as StationKind }] : []),
-      ...(has('sweetness') ? [{ id: 'sugar', kind: 'sugar' as StationKind }] : []),
-      ...(has('milk') ? ['whole', 'oat'].map((id) => ({ id, kind: 'milk' as StationKind })) : []),
-      ...(has('foam') ? ['cheese', 'brulee'].map((id) => ({ id, kind: 'foam' as StationKind })) : []),
+      ...(has('sweetness') ? [{ id: 'sugar', kind: 'sugar' as const }] : []),
+      ...(has('milk') ? ['whole', 'oat'].map((id) => ({ id, kind: 'milk' as const })) : []),
+      ...(has('foam') ? ['cheese', 'brulee'].map((id) => ({ id, kind: 'foam' as const })) : []),
     ],
   ].filter((row) => row.length > 0);
 
@@ -214,10 +185,22 @@ export function layoutKitchen(config: DayConfig, W: number, H: number): KitchenL
   const strips: RowStrip[] = [];
   const emptyBins: Box[] = [];
 
+  if (has('ice')) {
+    const { scale, top } = fitBackground(W, H, ROOM_BG_SIZE.width, ROOM_BG_SIZE.height);
+    const machine = ROOM_BG_ICE_MACHINE;
+    const x = machine.x * scale;
+    const y = top + machine.y * scale;
+    const w = machine.width * scale;
+    const h = machine.height * scale;
+    stations.push({ key: 'ice-ice', kind: 'ice', id: 'ice', name: 'Đá', color: colors.sky,
+      x, y, w, h, cx: x + w / 2, slot: w, labelW: w, row: -1,
+      base: y + h, spout: 0, dockY: y + h });
+  }
+
   rows.forEach((items, r) => {
     const kind = items[0].kind;
     if (kind === 'topping') {
-      fillBins(items, r, px, py, stations, emptyBins);
+      fillBins(items, r, W, H, stations, emptyBins);
       strips.push({ scroll: false, span: 0 });
       return;
     }
@@ -252,27 +235,28 @@ export function layoutKitchen(config: DayConfig, W: number, H: number): KitchenL
     // leaves it.
     const headroom = base - Math.round(py(level.ceiling));
     const left = Math.round(px(level.x0));
-    const w = Math.min(W * MAX_WIDTH[kind], headroom * ASPECT[kind]);
-    const h = Math.round(w / ASPECT[kind]);
+    // Keep the existing bench scale and leave the former tray's space clear. Moving ice into
+    // the panorama should not move or resize the other equipment when it unlocks.
+    const h = Math.round(Math.min(W * 0.3 / ART.pan, headroom));
+    const inset = Math.round(h * ART.pan);
 
     // One height for the whole row, and each box as wide as its own art — so a bottle stays a
     // bottle and a carton a carton, instead of every one of them taking the first one's shape.
     const widths = items.map((item) =>
       Math.round(h * ASPECT[item.kind]),
     );
-    const slots = items.map((item, i) => widened(item.kind)
-      ? widths[i] : Math.max(widths[i], Math.round(W * 0.2)));
-    const span = slots.reduce((sum, slot) => sum + slot, 0);
-    // Everything starts hard against the left of what it stands on: the counters then run off the
-    // right if they have to, and the shelf leaves the places the day has not reached yet bare.
-    let x = left;
+    const slots = widths.map((width) => Math.max(width, Math.round(W * 0.2)));
+    const span = inset + slots.reduce((sum, slot) => sum + slot, 0);
+    // Preserve the bench's leading space, then let the equipment continue off the right when
+    // it needs a swipeable row.
+    let x = left + inset;
 
     items.forEach((item, i) => {
       const slot = Math.round(slots[i]);
       const cx = Math.round(x + slots[i] / 2);
       x += slots[i];
       const option =
-        item.kind === 'ice' || item.kind === 'sugar' ? undefined : getIngredient(categoryOf(item.kind), item.id);
+        item.kind === 'sugar' ? undefined : getIngredient(categoryOf(item.kind), item.id);
       stations.push({
         key: `${item.kind}-${item.id}`,
         kind: item.kind,
@@ -314,83 +298,45 @@ export function layoutKitchen(config: DayConfig, W: number, H: number): KitchenL
 }
 
 
-/**
- * Stand the day's toppings on their tray under the fridge. There is no furniture to place and
- * nothing to assemble: a topping is one whole painted bin — tray, what is in it and the scoop
- * standing in it — and the six are laid out in the grid their own sheet draws them in
- * (`BIN_GRID`), sized to the run `ROOM.tray` gives them and stood on its front line.
- *
- * Nothing about a bin depends on the day — it is the same size with two toppings as with six, the
- * way a dispenser is the same size on day one as on day seven. What a short day changes is
- * *which* bins are used: up to three stand in the **front** row, which is the nearer and the
- * easier to reach, and the rest fill from the back. A row that does not fill its three sits as
- * near its middle as three bins allow.
- *
- * The back row is pushed first, so the front row is drawn over it where the two meet — which is
- * what a second row standing behind a first one looks like anyway.
- */
+/** Fixed containers stand on the two middle-cabinet shelves in panorama coordinates. */
 function fillBins(
   items: { id: string; kind: StationKind }[],
   row: number,
-  px: (x: number) => number,
-  py: (y: number) => number,
+  width: number,
+  height: number,
   stations: Station[],
   emptyBins: Box[],
 ): void {
-  const { across } = BIN_GRID;
-  // The tray holds six and there is nowhere to put a seventh, so a day that somehow brought more
-  // would show the first six.
-  const day = items.slice(0, across * 2);
-  const back = Math.max(0, day.length - across);
-  // the back row first, so the front row is drawn over it
-  const bands = [day.slice(0, back), day.slice(back)];
-
-  const run = px(ROOM.tray.x1) - px(ROOM.tray.x0);
-  const w = Math.round(run / (1 + (across - 1) * BIN_GRID.pitch));
-  const h = Math.round(w / ART.bin);
-  // the tray alone, without the scoop standing over the back of it
-  const deep = h * (1 - BIN_HEAD);
-  const foot = Math.round(py(ROOM.tray.base));
-  // The two rows divide the cubby's own depth: the back row's trays start at its ceiling and the
-  // front row's end at the lip of its floor, so the bins fill it rather than sitting in it.
-  const step = Math.max(Math.round(deep * LEAN), Math.round(foot - py(ROOM.tray.top) - deep));
-
-  bands.forEach((band, r) => {
-    // A row that does not fill its three sits as near the middle as three bins allow: one topping
-    // takes the middle bin, two the left and the middle.
-    const first = Math.floor((across - band.length) / 2);
-    const base = foot - (1 - r) * step;
-    const at = (c: number) => Math.round(px(ROOM.tray.x0) + c * w * BIN_GRID.pitch);
-    // The places this row has nothing for. They are collected row by row, so an empty bin in the
-    // back row is laid down before the front row's — and because a row only reaches the back one
-    // once the front is full, a bin is never drawn over an empty one standing in front of it.
-    for (let c = 0; c < across; c += 1) {
-      if (c < first || c >= first + band.length) emptyBins.push({ x: at(c), y: base - h, w, h });
+  const background = fitBackground(width, height, ROOM_BG_SIZE.width, ROOM_BG_SIZE.height);
+  const shelf = ROOM_BG_TOPPING_SHELF;
+  const w = (shelf.x1 - shelf.x0 - 2 * shelf.gap) / 3 * background.scale;
+  const h = shelf.height * background.scale;
+  shelf.slots.forEach((id, i) => {
+    const x = shelf.x0 * background.scale + (i % 3) * (w + shelf.gap * background.scale);
+    const base = background.top + shelf.bases[Math.floor(i / 3)] * background.scale;
+    const y = base - h;
+    if (!items.some((item) => item.id === id)) {
+      emptyBins.push({ x, y, w, h });
+      return;
     }
-    band.forEach((item, i) => {
-      const option = getIngredient('toppings', item.id);
-      const x = at(first + i);
-      const y = base - h;
-      stations.push({
-        key: `${item.kind}-${item.id}`,
-        kind: item.kind,
-        id: item.id,
-        name: option?.name ?? item.id,
-        color: option?.color ?? colors.sky,
-        row,
-        x,
-        y,
-        w,
-        h,
-        cx: x + Math.round(w / 2),
-        // The touch target is the sprite, scoop and all. The bins stand shoulder to shoulder, so
-        // there is no dead steel between two of them; there is no plaque to leave room for either.
-        slot: w,
-        labelW: w,
-        base,
-        spout: Math.round(h * 0.2),
-        dockY: base + h,
-      });
+    const option = getIngredient('toppings', id)!;
+    stations.push({
+      key: `topping-${id}`,
+      kind: 'topping',
+      id,
+      name: option.name,
+      color: option.color,
+      row,
+      x,
+      y,
+      w,
+      h,
+      cx: x + w / 2,
+      slot: w,
+      labelW: w,
+      base,
+      spout: Math.round(h * 0.2),
+      dockY: base + h,
     });
   });
 }
@@ -616,25 +562,26 @@ export function KitchenStation({
           <TeaDispenser key={station.key} station={station} {...shared}
             active={docked?.key === station.key} level={level} onPour={onPour} onPouring={startPouring} />
         ))}
-      </KitchenRoom>
-
-      {/* The bins the week has not reached yet. They go down before the rows, so a bin the day
-          does have is simply laid over the one standing where it goes. Wrapped rather than given
-          `pointerEvents` of their own, which is not a prop on an Image. */}
-      {emptyBins.length > 0 && (
         <View style={[StyleSheet.absoluteFill, pointerEventsStyles.none]}>
           {emptyBins.map((bin) => (
             <Image
               key={`${bin.x}-${bin.y}`}
-              source={BIN_EMPTY}
+              source={TOPPING_BOX_EMPTY}
               style={{ position: 'absolute', left: bin.x, top: bin.y, width: bin.w, height: bin.h }}
             />
           ))}
         </View>
-      )}
+        {stations.filter((station) => station.kind === 'topping').map((station) => (
+          <ToppingBin key={station.key} station={station} {...shared}
+            max={config.maxToppings} sceneOffset={panOffset} />
+        ))}
+        {stations.filter((station) => station.kind === 'ice').map((station) => (
+          <IceChest key={station.key} station={station} {...shared} sceneOffset={panOffset} />
+        ))}
+      </KitchenRoom>
 
       {strips.map((strip, r) => {
-        const row = stations.filter((station) => station.row === r && station.kind !== 'tea');
+        const row = stations.filter((station) => station.row === r && station.kind !== 'tea' && station.kind !== 'topping');
         if (!row.length) return null;
         const pan = strip.scroll ? { offset: swipe[r], min: W - strip.span, onHold: handleDragging } : undefined;
         const boxes = row.map((station) => {
@@ -642,21 +589,13 @@ export function KitchenStation({
           switch (station.kind) {
             case 'milk':
               return <MilkCarton key={station.key} {...props} />;
-            case 'topping':
-              return <ToppingBin key={station.key} {...props} max={config.maxToppings} />;
-            case 'ice':
-              return <IceChest key={station.key} {...props} />;
             case 'sugar':
               return <SyrupPump key={station.key} {...props} />;
             default:
               return <FoamTub key={station.key} {...props} />;
           }
         });
-        return strip.scroll ? (
-          <SwipeRow key={r} offset={swipe[r]}>
-            {boxes}
-          </SwipeRow>
-        ) : (
+        return (
           <View key={r} style={[StyleSheet.absoluteFill, pointerEventsStyles.boxNone]}>
             {boxes}
           </View>
@@ -674,7 +613,7 @@ export function KitchenStation({
         style={[styles.cup, { width: cupW, height: cupH }, cupStyle]}
       >
         <FreshCup key={cupId} width={cupW} height={cupH}>
-          <KitchenCup drink={inCup} width={cupW} height={cupH} level={level} pouring={Boolean(pouring?.running)} />
+          <KitchenCup drink={inCup} iceSeed={cupId} width={cupW} height={cupH} level={level} pouring={Boolean(pouring?.running)} />
           {pouring && <Spill level={level} cupW={cupW} cupH={cupH} color={pouring.color} />}
         </FreshCup>
       </Animated.View>
@@ -935,16 +874,6 @@ function useCarry({
   return { begin, cancel, move, drop, node };
 }
 
-/** A row holding more equipment than the room is wide: swipe along it to reach the rest. */
-function SwipeRow({ offset, children }: { offset: SharedValue<number>; children: ReactNode }) {
-  const style = useAnimatedStyle(() => ({ transform: [{ translateX: offset.get() }] }));
-  return (
-    <Animated.View style={[StyleSheet.absoluteFill, style, pointerEventsStyles.boxNone]}>
-      {children}
-    </Animated.View>
-  );
-}
-
 /** What a station puts in your hand: a scoopful, a carton, or the syrup bottle. */
 function Tool({ station, size }: { station: Station; size: number }) {
   const S = size;
@@ -953,6 +882,11 @@ function Tool({ station, size }: { station: Station; size: number }) {
   }
   if (station.kind === 'milk') {
     return <Image source={MILK[station.id] ?? MILK.whole} style={{ width: S * 0.7, height: (S * 0.7) / ART.milk }} />;
+  }
+  if (station.kind === 'ice') {
+    const height = S * 0.9;
+    return <Image source={SCOOPFUL.ice} fadeDuration={0}
+      style={{ width: height * SCOOP_ART.ice, height }} />;
   }
   // A scoop of topping is one painted sprite, heap and all. It used to be the bare `SCOOP` with
   // pieces laid into its bowl by hand, which is the same mistake the teas were: the design draws
@@ -967,22 +901,14 @@ function Tool({ station, size }: { station: Station; size: number }) {
     }
   }
 
-  // Ice and foam still take the empty scoop, with what they are drawn into its bowl.
+  // Foam takes the empty scoop with its cream drawn into the bowl.
   const SH = S / ART.scoop;
   const bowl = { x: S * SCOOP_BOWL.cx, y: SH * SCOOP_BOWL.cy, r: S * SCOOP_BOWL.r };
-  const piece = PIECE.ice;
-  // a small heap, wider than it is tall — the bowl is a shallow one
-  const spread = [
-    [-0.46, 0.06],
-    [0.46, 0.08],
-    [0, -0.3],
-  ];
-  const r = bowl.r * 0.62;
 
   return (
     <View style={{ width: S, height: SH }}>
       <Image source={SCOOP} style={{ position: 'absolute', left: 0, top: 0, width: S, height: SH }} />
-      {station.kind === 'foam' ? (
+      {station.kind === 'foam' && (
         <View
           style={{
             position: 'absolute',
@@ -996,20 +922,6 @@ function Tool({ station, size }: { station: Station; size: number }) {
             borderColor: SHOP.ink,
           }}
         />
-      ) : (
-        spread.map(([fx, fy], i) => (
-          <Image
-            key={i}
-            source={piece}
-            style={{
-              position: 'absolute',
-              left: bowl.x + fx * bowl.r - r,
-              top: bowl.y + fy * bowl.r - r / PIECE_ART.ice,
-              width: r * 2,
-              height: (r * 2) / PIECE_ART.ice,
-            }}
-          />
-        ))
       )}
     </View>
   );
@@ -1025,6 +937,8 @@ interface EquipProps {
   carry: Carry;
   /** Set when this row holds more than the room is wide, so it can be swiped along. */
   pan?: PanRow;
+  /** Panorama-mounted equipment carries its tool in screen coordinates. */
+  sceneOffset?: SharedValue<number>;
 }
 
 interface FrameProps {
@@ -1036,6 +950,7 @@ interface FrameProps {
   shadow?: boolean;
   accessibilityLabel: string;
   press: SharedValue<number>;
+  offset?: SharedValue<number>;
   handlers: GestureResponderHandlers;
   children: ReactNode;
 }
@@ -1045,8 +960,10 @@ interface FrameProps {
  * are raw responders rather than presses, so a finger that drifts (or a browser's long-press) can
  * never cut a drag short.
  */
-function Frame({ station, label, locked, shadow = true, accessibilityLabel, press, handlers, children }: FrameProps) {
-  const style = useAnimatedStyle(() => ({ transform: [{ scale: press.value }] }));
+function Frame({ station, label, locked, shadow = true, accessibilityLabel, press, offset, handlers, children }: FrameProps) {
+  // Translate each touch target instead of a full-screen animated row: empty row space must
+  // pass touches to the shelf containers and panorama behind it on web and native.
+  const style = useAnimatedStyle(() => ({ transform: [{ translateX: offset?.get() ?? 0 }, { scale: press.get() }] }));
   return (
     <Animated.View
       {...handlers}
@@ -1096,6 +1013,7 @@ function useCarryGesture(
   pan?: PanRow,
   /** Called the moment it is lifted, for anything that has to say what it is. */
   onGrab?: () => void,
+  sceneOffset?: SharedValue<number>,
 ): GestureResponderHandlers {
   const from = useRef({ x: 0, y: 0 });
   const mode = useRef<'carry' | 'swipe'>('carry');
@@ -1111,7 +1029,7 @@ function useCarryGesture(
     onResponderGrant: (event) => {
       from.current = { x: event.nativeEvent.pageX, y: event.nativeEvent.pageY };
       mode.current = 'carry';
-      at.current = pan ? pan.offset.get() : 0;
+      at.current = sceneOffset ? -sceneOffset.get() : pan ? pan.offset.get() : 0;
       press.set(withTiming(0.94, { duration: 80 }));
       carry.begin(station, at.current);
       onGrab?.();
@@ -1189,6 +1107,7 @@ function MilkCarton({ station, cup, carry, pan }: EquipProps) {
       accessibilityLabel={`Hộp ${station.name} — kéo vào ly`}
       press={press}
       handlers={handlers}
+      offset={pan?.offset}
     >
       <Image source={MILK[station.id] ?? MILK.whole} style={{ width: W, height: H }} />
     </Frame>
@@ -1197,19 +1116,15 @@ function MilkCarton({ station, cup, carry, pan }: EquipProps) {
 
 // --------------------------------------------------------------------------- the topping bar
 
-/**
- * One topping, heaped in the bin the room paints for it. It wears no plaque and casts no pool of
- * its own: the tray it stands in is painted with its own sign and its own shadow, and six
- * Vietnamese topping names would not fit under six bins this size anyway. What a bin is holding
- * is said out loud instead, on the line along the bottom, the moment it is picked up.
- */
-function ToppingBin({ station, cup, max, carry, pan, onNudge }: EquipProps & { max: number }) {
+/** Each lid carries its nameplate, leaving the glass and ingredients unobstructed. */
+function ToppingBin({ station, cup, max, carry, pan, sceneOffset, onNudge }: EquipProps & { max: number }) {
   const { w: W, h: H } = station;
+  const nameSize = Math.min(8, Math.max(6, W * 0.12));
   const option = getIngredient('toppings', station.id) as Topping;
   const inCup = cup.toppings.includes(station.id);
   const full = !inCup && cup.toppings.length >= max;
   const press = useSharedValue(1);
-  const handlers = useCarryGesture(station, carry, press, pan, () => onNudge(option.name));
+  const handlers = useCarryGesture(station, carry, press, pan, () => onNudge(option.name), sceneOffset);
 
   return (
     <Frame
@@ -1219,45 +1134,52 @@ function ToppingBin({ station, cup, max, carry, pan, onNudge }: EquipProps & { m
       accessibilityLabel={`Hộp ${option.name} — kéo vào ly`}
       press={press}
       handlers={handlers}
+      offset={pan?.offset}
     >
-      <Image source={BIN[station.id] ?? BIN.pearls} style={{ width: W, height: H }} />
+      <Image source={TOPPING_BOX[station.id] ?? TOPPING_BOX.pearls} fadeDuration={0} style={{ width: W, height: H }} />
+      <View style={[styles.toppingName, pointerEventsStyles.none]}>
+        <Text numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8}
+          style={{ textAlign: 'center', fontFamily: fonts.bold,
+            fontSize: nameSize, lineHeight: nameSize * 1.4, color: '#663722' }}>
+          {option.name}
+        </Text>
+      </View>
     </Frame>
   );
 }
 
-// --------------------------------------------------------------------------- the ice pan
+// --------------------------------------------------------------------------- the built-in ice machine
 
-function IceChest({ station, build, carry, pan }: EquipProps) {
-  const { w: W, h: H } = station;
+function IceChest({ station, build, carry, sceneOffset, onNudge }: EquipProps) {
+  const scale = station.w / ROOM_BG_ICE_MACHINE.width;
+  const sign = ROOM_BG_ICE_MACHINE.sign;
+  const iceLabel = build.iceScoops === 0 ? 'Không đá' : build.iceScoops === 1 ? 'Ít đá' : 'Đá thường';
   const press = useSharedValue(1);
-  const handlers = useCarryGesture(station, carry, press, pan);
+  const handlers = useCarryGesture(station, carry, press, undefined,
+    () => onNudge('Kéo muỗng đá vào ly · 1 muỗng: ít đá · 2 muỗng: đá thường'), sceneOffset);
+  const style = useAnimatedStyle(() => ({ transform: [{ scale: press.get() }] }));
 
   return (
-    <Frame
-      station={station}
-      label={build.iceScoops > 0 ? (build.iceScoops === 1 ? 'Ít đá' : 'Đá thường') : 'Thùng đá'}
-      accessibilityLabel="Thùng đá — kéo vào ly"
-      press={press}
-      handlers={handlers}
+    <Animated.View
+      {...handlers}
+      accessible
+      accessibilityRole="button"
+      accessibilityLabel="Máy đá — kéo muỗng đá vào ly"
+      accessibilityValue={{ text: iceLabel }}
+      style={[{ position: 'absolute', left: station.x, top: station.y,
+        width: station.w, height: Math.max(44, station.h) }, style]}
     >
-      <Image source={ICE_PAN} style={{ width: W, height: H }} />
-      {/* how many scoops already went in the cup */}
-      <View style={[styles.tool, { left: W * 0.12, top: H * 0.1, flexDirection: 'row', gap: W * 0.05 }]}>
-        {[0, 1].map((i) => (
-          <View
-            key={i}
-            style={{
-              width: W * 0.09,
-              height: W * 0.09,
-              borderRadius: W * 0.05,
-              borderWidth: 1.2,
-              borderColor: SHOP.steelEdge,
-              backgroundColor: i < build.iceScoops ? colors.sky : '#FFFFFF',
-            }}
-          />
-        ))}
+      <View style={[pointerEventsStyles.none, {
+        position: 'absolute', left: sign.x * scale, top: sign.y * scale,
+        height: sign.height * scale, paddingHorizontal: 5 * scale,
+        borderRadius: sign.height * scale / 2, borderWidth: 1.5 * scale,
+        backgroundColor: '#FFF4DE', borderColor: '#F46999',
+        flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 3 * scale,
+      }]}>
+        <IngredientIcon category="ice" id="less" size={20 * scale} />
+        <Text style={{ fontFamily: fonts.bold, fontSize: 17 * scale, color: '#571C39' }}>Đá</Text>
       </View>
-    </Frame>
+    </Animated.View>
   );
 }
 
@@ -1276,6 +1198,7 @@ function SyrupPump({ station, build, carry, pan }: EquipProps) {
       accessibilityLabel="Bình đường — kéo vào ly"
       press={press}
       handlers={handlers}
+      offset={pan?.offset}
     >
       <Image source={SYRUP} style={{ width: W, height: H }} />
       {/* how sweet the cup is already */}
@@ -1306,6 +1229,7 @@ function FoamTub({ station, cup, carry, pan }: EquipProps) {
       accessibilityLabel={`Hũ ${option?.name ?? 'kem'} — kéo vào ly`}
       press={press}
       handlers={handlers}
+      offset={pan?.offset}
     >
       <Image source={FOAM[station.id] ?? FOAM.cheese} style={{ width: W, height: H }} />
     </Frame>
@@ -1321,6 +1245,20 @@ const styles = StyleSheet.create({
   },
   locked: {
     opacity: 0.55,
+  },
+  toppingName: {
+    position: 'absolute',
+    top: 0,
+    left: 1,
+    right: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FFF5DB',
+    borderColor: '#80573D',
+    borderWidth: 1,
+    borderRadius: 4,
+    paddingHorizontal: 2,
+    paddingVertical: 0,
   },
   label: {
     marginTop: 1,

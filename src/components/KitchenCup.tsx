@@ -5,19 +5,19 @@ import Animated, {
   useAnimatedProps,
   useDerivedValue,
 } from 'react-native-reanimated';
-import Svg, { ClipPath, Defs, Ellipse, G, Image as SvgImage, Path } from 'react-native-svg';
+import Svg, { ClipPath, Defs, Ellipse, G, Image as SvgImage, LinearGradient, Mask, Path, Stop } from 'react-native-svg';
 
 import { Drink, getIngredient, ICE_LEVELS, Tea } from '../game/ingredients';
 import { TeaLiquid } from './TeaLiquid';
-import { CUP_SURFACE_BOTTOM, CUP_SURFACE_RUN, CUP_WELL, cupSurface } from './cupGeometry';
+import { CupToppings } from './CupToppings';
+import { CupIce } from './CupIce';
+import { CUP_FLOOR_FRONT, CUP_FRONT_GLINTS, CUP_ICE_WELL, CUP_REAR_FLOOR_GLASS, CUP_SURFACE_BOTTOM, CUP_SURFACE_RUN, CUP_WELL, cupFillPath, cupSurface } from './cupGeometry';
 import { shade } from './art/Character';
 import {
   CUP_BASE,
   CUP_DECAL,
   CUP_EDGE,
   CUP_SPRITE,
-  PIECE,
-  PIECE_ART,
 } from './art/kitchenArt';
 import { pointerEventsStyles } from '../pointerEvents';
 
@@ -60,28 +60,9 @@ export const WELL_TOP = (CUP_SURFACE_BOTTOM - CUP_SURFACE_RUN) / ART.h;
 export const CUP_LIP = 28 / ART.h;
 export const WELL_BOTTOM = CUP_SURFACE_BOTTOM / ART.h;
 export const WELL_RUN = WELL_BOTTOM - WELL_TOP;
-/** Where the ice floats and where the toppings pile up, in sprite units. */
-const ICE_SPOTS = [
-  { x: 29, y: 112, r: 15 },
-  { x: 67, y: 104, r: 13 },
-  { x: 48, y: 131, r: 13 },
-  { x: 80, y: 128, r: 12 },
-];
-const PILE = [
-  { x: 29, y: 155 },
-  { x: 45, y: 157 },
-  { x: 61, y: 157 },
-  { x: 78, y: 155 },
-  { x: 37, y: 144 },
-  { x: 54, y: 146 },
-  { x: 70, y: 144 },
-  { x: 45, y: 134 },
-  { x: 61, y: 134 },
-];
-const PIECE_R = 9;
-
 interface KitchenCupProps {
   drink: Drink;
+  iceSeed?: number;
   width: number;
   height: number;
   /** Driven by the station while a tap is held open, so the level rises with the hold. */
@@ -89,7 +70,7 @@ interface KitchenCupProps {
   pouring?: boolean;
 }
 
-export const KitchenCup = memo(function KitchenCup({ drink, width, height, level, pouring = false }: KitchenCupProps) {
+export const KitchenCup = memo(function KitchenCup({ drink, iceSeed = 1, width, height, level, pouring = false }: KitchenCupProps) {
   const uid = useId().replace(/:/g, '');
   const tea = drink.tea ? (getIngredient('tea', drink.tea) as Tea) : undefined;
   const milk = drink.milk && drink.milk !== 'none' ? getIngredient('milk', drink.milk) : undefined;
@@ -97,14 +78,8 @@ export const KitchenCup = memo(function KitchenCup({ drink, width, height, level
   const ice = ICE_LEVELS.find((option) => option.id === drink.ice);
   const hasTea = Boolean(tea);
 
-  // Preserve the original glass above the fill and around the rim/base. Only the
-  // glass in front of the tea needs softer reflections to avoid bleaching its colour.
-  const filledGlass = useDerivedValue(() => {
-    const raw = level.get();
-    if (!hasTea || raw <= 0) return '';
-    const { y, rx, ry } = cupSurface(raw);
-    return `M${ART.w / 2 - rx} ${y} A${rx} ${ry} 0 0 1 ${ART.w / 2 + rx} ${y} L90 153 A33.5 7.8725 0 0 1 23 153 Z`;
-  }, [level, hasTea]);
+  const filledGlass = useDerivedValue(() => cupFillPath(hasTea ? level.get() : 0), [level, hasTea]);
+  // Toppings do not change the cup's glass. Only actual liquid changes its front reflections.
   const softGlassProps = useAnimatedProps(() => ({ d: filledGlass.get() || 'M0 0Z' }), [filledGlass]);
   const clearGlassProps = useAnimatedProps(() => ({
     d: `M0 0H${ART.w}V${ART.h}H0Z ${filledGlass.get()}`,
@@ -132,45 +107,44 @@ export const KitchenCup = memo(function KitchenCup({ drink, width, height, level
           <ClipPath id={`wellp-${uid}`}>
             <Path d={WELL} />
           </ClipPath>
+          <ClipPath id={`ice-well-${uid}`}>
+            <Path d={CUP_ICE_WELL} />
+          </ClipPath>
           <ClipPath id={`glass-filled-${uid}`}>
             <AnimatedPath animatedProps={softGlassProps} />
           </ClipPath>
           <ClipPath id={`glass-clear-${uid}`}>
             <AnimatedPath clipRule="evenodd" fillRule="evenodd" animatedProps={clearGlassProps} />
           </ClipPath>
+          <ClipPath id={`glass-rear-floor-${uid}`}>
+            <Path d={CUP_REAR_FLOOR_GLASS} />
+          </ClipPath>
+          <ClipPath id={`glass-front-wall-${uid}`}>
+            <Path d={`M0 0H${ART.w}V${ART.h}H0Z ${CUP_REAR_FLOOR_GLASS}`} clipRule="evenodd" fillRule="evenodd" />
+          </ClipPath>
+          <LinearGradient id={`glass-shine-fade-${uid}`} x1={0} y1={132} x2={0} y2={CUP_FLOOR_FRONT} gradientUnits="userSpaceOnUse">
+            <Stop offset="0" stopColor="#FFFFFF" stopOpacity={0} />
+            <Stop offset="0.25" stopColor="#FFFFFF" stopOpacity={0.32} />
+            <Stop offset="0.72" stopColor="#FFFFFF" stopOpacity={0.32} />
+            <Stop offset="1" stopColor="#FFFFFF" stopOpacity={0} />
+          </LinearGradient>
+          <Mask id={`glass-front-glints-${uid}`} x={0} y={0} width={ART.w} height={ART.h} maskUnits="userSpaceOnUse">
+            <Path d={CUP_FRONT_GLINTS} fill={`url(#glass-shine-fade-${uid})`} />
+          </Mask>
         </Defs>
+        <G clipPath={`url(#glass-rear-floor-${uid})`}>
+          <GlassPainting uid={uid} />
+        </G>
         <G clipPath={`url(#wellp-${uid})`}>
-          {ice &&
-            ICE_SPOTS.slice(0, ice.cubes).map((spot, i) => (
-              <SvgImage
-                key={i}
-                href={PIECE.ice}
-                x={spot.x - spot.r}
-                y={spot.y - spot.r / PIECE_ART.ice}
-                width={spot.r * 2}
-                height={(spot.r * 2) / PIECE_ART.ice}
-                opacity={0.92}
-                preserveAspectRatio="xMidYMid meet"
-              />
-            ))}
-
-          {drink.toppings.length > 0 &&
-            PILE.map((spot, i) => {
-              const id = drink.toppings[i % drink.toppings.length];
-              const aspect = PIECE_ART[id] ?? 1;
-              return (
-                <SvgImage
-                  key={i}
-                  href={PIECE[id]}
-                  x={spot.x - PIECE_R}
-                  y={spot.y - PIECE_R / aspect}
-                  width={PIECE_R * 2}
-                  height={(PIECE_R * 2) / aspect}
-                  preserveAspectRatio="xMidYMid meet"
-                />
-              );
-            })}
-
+          <CupToppings ids={drink.toppings} liquidShape={filledGlass}
+            teaColor={tea?.color} milkColor={milk?.color} />
+        </G>
+        <G clipPath={`url(#ice-well-${uid})`}>
+          {ice && <CupIce cubes={ice.cubes} seed={iceSeed} level={level} hasTea={hasTea}
+            glassMaskId={`glass-ice-${uid}`} toppingLayers={drink.toppings.length}
+            teaColor={tea?.color} milkColor={milk?.color} />}
+        </G>
+        <G clipPath={`url(#wellp-${uid})`}>
           {foam && (
             <>
               <AnimatedEllipse cx={56.5} ry={4.4} fill={foam.color} stroke={shade(foam.color, -16)}
@@ -179,17 +153,31 @@ export const KitchenCup = memo(function KitchenCup({ drink, width, height, level
             </>
           )}
         </G>
-        {/* Both glass layers stay in front of all ingredients; the tea retains its rich colour. */}
+        {/* The frame stays in front; painted plastic clears the exposed ice silhouettes. */}
+        <G clipPath={`url(#glass-front-wall-${uid})`}
+          mask={ice && ice.cubes > 0 ? `url(#glass-ice-${uid})` : undefined}>
+          <GlassPainting uid={uid} />
+        </G>
         <SvgImage href={CUP_SPRITE} x={0} y={0} width={ART.w} height={ART.h}
-          clipPath={`url(#glass-clear-${uid})`} />
-        <SvgImage href={CUP_SPRITE} x={0} y={0} width={ART.w} height={ART.h}
-          clipPath={`url(#glass-filled-${uid})`} opacity={0.22} />
+          mask={`url(#glass-front-glints-${uid})`} />
       </Svg>
 
       <Image source={CUP_EDGE} style={[styles.layer, { width, height }]} />
       {/* The cat is printed on the front of the glass, so it goes over the drink. */}
       <Image source={CUP_DECAL} style={[styles.layer, { width, height }]} />
     </View>
+  );
+});
+
+/** The same painted glass and liquid-opacity rule are used on both sides of the contents. */
+const GlassPainting = memo(function GlassPainting({ uid }: { uid: string }) {
+  return (
+    <>
+      <SvgImage href={CUP_SPRITE} x={0} y={0} width={ART.w} height={ART.h}
+        clipPath={`url(#glass-clear-${uid})`} />
+      <SvgImage href={CUP_SPRITE} x={0} y={0} width={ART.w} height={ART.h}
+        clipPath={`url(#glass-filled-${uid})`} opacity={0.22} />
+    </>
   );
 });
 

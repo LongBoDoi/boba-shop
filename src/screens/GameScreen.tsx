@@ -185,6 +185,7 @@ export function GameScreen({ state, dispatch }: GameScreenProps) {
             : 'Chạm vào khách ở Quầy để nhận order.',
           'Chạm Pha chế ➜, kéo ly xuống dưới bình trà.',
           'Giữ vòi để rót — thanh nổi hiển thị lượng trà trong ly.',
+          'Kéo đá từ máy dưới kệ trà vào ly: 1 muỗng ít đá, 2 muỗng đá thường.',
         ]
       : describeUnlocks(state.day);
 

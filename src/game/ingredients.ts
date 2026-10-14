@@ -66,8 +66,8 @@ export const TOPPINGS: Topping[] = [
 
 export const ICE_LEVELS: IceLevel[] = [
   { id: 'none', name: 'Không đá', color: '#E8F6FF', cubes: 0, price: 0, isNone: true },
-  { id: 'less', name: 'Ít đá', color: '#D2EEFF', cubes: 2, price: 0 },
-  { id: 'regular', name: 'Đá thường', color: '#B5E2FF', cubes: 4, price: 0 },
+  { id: 'less', name: 'Ít đá', color: '#D2EEFF', cubes: 3, price: 0 },
+  { id: 'regular', name: 'Đá thường', color: '#B5E2FF', cubes: 12, price: 0 },
 ];
 
 export const MILKS: Ingredient[] = [
@@ -150,7 +150,7 @@ export const MAX_POUR = 2.2;
 /** Tipping a carton of milk into the cup adds this much — leave it room, or it goes over. */
 export const MILK_SPLASH = 0.18;
 
-/** One scoop of ice is two cubes: one scoop = ít đá, two = đá thường. */
+/** One scoop = ít đá; a second scoop fills out the visible ice cluster for đá thường. */
 export const MAX_ICE_SCOOPS = 2;
 export function iceLevelForScoops(scoops: number): string | null {
   if (scoops <= 0) return null;

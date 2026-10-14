@@ -3,7 +3,7 @@ import { BUILD_ORDER, CATEGORIES, CategoryId, TEAS, TOPPINGS } from './ingredien
 const CATEGORY_UNLOCK_DAY: Record<CategoryId, number> = {
   tea: 1,
   toppings: 1,
-  ice: 2,
+  ice: 1,
   milk: 3,
   sweetness: 4,
   foam: 5,
