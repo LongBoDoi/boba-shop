@@ -337,9 +337,12 @@ Dropping the cup still standing on the work top sends it home.
   Rounded front, top and side faces render with distinct frosted blue-grey shading and dark
   outer edges, independent of the sprite's alpha. The clear painting contributes only subtle
   surface texture. White face seams and broad glints keep ice readable at phone scale in both
-  tea and milk tea. Animated silhouettes remove the foreground plastic wash over exposed ice,
-  so the upper dry-pile cubes are as crisp as those on the floor. That mask follows each cube's
-  settling and rise, and is clipped above the ice's front waterline; submerged ice retains the glass wash.
+  tea and milk tea. The ice above the waterline is drawn **over** the cup's painted front wall
+  rather than punched out of it, so the upper dry-pile cubes are as crisp as those on the floor
+  while submerged ice keeps the glass wash. `KitchenCup` draws `CupIce` twice for this, once per
+  side of the waterline (`layer="submerged"` then the wall then `layer="exposed"`), sharing one
+  `createIceLayout`. It used to be a mask built out of `<Use>`d silhouettes, which is the one
+  thing in this game that a browser drew and a phone could not — see "Drawing on a phone" below.
   Every cube is split by one shared `cupIceFillPath` clip and its complement. It uses the near
   arc of the same tea oval, while the tea's rear arc stays behind the crowns; contact strokes
   follow that near arc too. Projected depth
@@ -567,6 +570,21 @@ stands plainly inside the shelf; divided across the board it laps over the ends 
     the "adjust state during render" pattern as in `App.tsx` and `useChangeCount` in `Cup.tsx`);
   - no `Math.random()` during render (use the deterministic `noise()` in `Effects.tsx`);
   - don't read refs during render.
+- **Drawing on a phone, not in a browser.** `react-native-svg` is not an SVG renderer with a
+  React wrapper — it is three renderers, and the web one is the forgiving one. Two gaps have
+  already cost a crash and a dead animation, and both are easy to walk back into:
+  - **An animated `transform` has to be the array form** — `[{ translateX }, { translateY },
+    { rotate: '12deg' }]` — never the SVG string `translate(…) rotate(…)`. The string is turned
+    into the `matrix` prop a phone reads by JavaScript, *inside* the element, and an animated prop
+    goes straight to the view without passing through it — so a string written by a worklet is
+    dropped in silence and the thing never moves. Static transforms are fine either way: they do
+    go through the element. A **clip** cannot take even the array form, because a clip is a path:
+    give it a path already drawn where it belongs, as `cupIceOutlinePath` does.
+  - **`<Use>` is not safe.** Asked for the path of a template it cannot find at that moment, it
+    hands back nothing — which Android calls a method on and iOS passes to `CFAutorelease`. Draw
+    the shape where it is needed, even when that means repeating it.
+  Neither shows up in a browser, in `tsc`, or in the lint, and there is no emulator here: the only
+  honest check on anything new is a build on a real phone.
 - Reanimated 4 + `react-native-worklets`; the Babel plugin is configured automatically by
   `babel-preset-expo` (no babel config file).
 - Custom fonts: set `fontFamily: fonts.*` and don't also set `fontWeight`.
@@ -590,6 +608,14 @@ stands plainly inside the shelf; divided across the board it laps over the ends 
   locally by default. To see it, stamp a number behind the latest release (`node tools/stamp-build.cjs 4`)
   and export with `--clear`; revert `app.json` afterwards. The Android download-and-install leg
   cannot be exercised without a device — there is no emulator here.
+- Ice, and anything else drawn in SVG: there is no emulator here, so a browser is the only thing
+  that can be driven — and a browser is precisely what will not catch the two gaps under "Drawing
+  on a phone" in Conventions. Read that list before changing `CupIce`, `CupToppings` or
+  `KitchenCup`, and say plainly in the report that the phone itself was not tried.
+  The quickest way to put a cup in a particular state is the save: write one key to
+  `localStorage` from a *blank* page on the same origin (the running game flushes its own save on
+  `pagehide` and will write the title screen straight back over anything set while it is up), then
+  load the game and dismiss the pause card.
 - UI: `npx expo export --platform web`, serve `dist/`, and look at it at phone sizes
   (390×844 and the small 375×667). The Prep page is reached by swiping left or tapping the "Pha chế"
   tab. To test a later day quickly, temporarily change `START_DAY, day: 1` in `App.tsx` (and the goal

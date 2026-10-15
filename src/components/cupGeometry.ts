@@ -106,6 +106,32 @@ export function cupIcePosition(raw: number, x: number, r: number, angle: number,
   return { cx, cy, angle: tilt, waterY, floating: raw > 0 && cy < dryY - 0.1, rise };
 }
 
+/**
+ * The cube's own silhouette where it stands, as a path of its own.
+ *
+ * The art is drawn in the cube's local space and carried into the cup by a transform, but a clip
+ * cannot be carried that way on a phone: `transform` is turned into a `matrix` by JavaScript, which
+ * an animated prop never passes through. So anything that has to follow a cube every frame — the
+ * meniscus that anchors it to the surface — is given the outline already standing where the cube
+ * stands. The rounded corners are taken as their control points, which is a hair wide of the
+ * painted shape and nothing to a hairline clipped by it.
+ */
+export function cupIceOutlinePath(cx: number, cy: number, angle: number, r: number) {
+  'worklet';
+  const radians = angle * Math.PI / 180;
+  const cos = Math.cos(radians);
+  const sin = Math.sin(radians);
+  const scale = r / 24;
+  let d = '';
+  for (let i = 0; i < ICE_OUTLINE.length; i++) {
+    const point = ICE_OUTLINE[i];
+    const x = cx + (point[0] * cos - point[1] * sin) * scale;
+    const y = cy + (point[0] * sin + point[1] * cos) * scale;
+    d += `${i === 0 ? 'M' : 'L'}${x.toFixed(2)} ${y.toFixed(2)}`;
+  }
+  return `${d}Z`;
+}
+
 /** Draw the body itself with the curved floor; rectangular layers cannot flatten its lower edge. */
 export function cupLiquidPath(y: number, rx: number, ry: number) {
   'worklet';

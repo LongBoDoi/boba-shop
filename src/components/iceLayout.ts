@@ -2,7 +2,7 @@ import { createRng } from '../game/random';
 import { cupIcePosition, cupIceRestPosition } from './cupGeometry';
 
 /** Stable, asymmetric placements: adding a scoop never reshuffles the existing ice. */
-interface IcePlacement {
+export interface IcePlacement {
   x: number;
   r: number;
   angle: number;

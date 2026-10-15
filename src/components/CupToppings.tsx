@@ -62,13 +62,16 @@ function ToppingPortion({ id, portion, liquidShape, teaColor, milkColor }: Omit<
     settled.set(withTiming(1, timing(DURATION.base)));
     return () => cancelAnimation(settled);
   }, [settled]);
+  // An animated `transform` has to be written as the array form: the SVG string is turned into the
+  // `matrix` a phone reads by JavaScript, inside the element, which an animated prop never passes
+  // through — written as a string the fall happens in a browser and nowhere else. See `CupIce`.
   const settleProps = useAnimatedProps(() => ({
-    transform: `translate(0,${-14 * (1 - settled.get())})`,
+    transform: [{ translateY: -14 * (1 - settled.get()) }],
   }), [settled]);
   const wetProps = useAnimatedProps(() => ({
     d: liquidShape.get() || 'M0 0Z',
     // Counter the falling group's transform: the tea boundary stays fixed in the cup.
-    transform: `translate(0,${14 * (1 - settled.get())})`,
+    transform: [{ translateY: 14 * (1 - settled.get()) }],
   }), [liquidShape, settled]);
   const option = getIngredient('toppings', id) as Topping | undefined;
   const cube = option?.shape === 'cube';

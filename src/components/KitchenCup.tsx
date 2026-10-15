@@ -1,4 +1,4 @@
-import { memo, useId } from 'react';
+import { memo, useId, useMemo } from 'react';
 import { Image, StyleSheet, View } from 'react-native';
 import Animated, {
   SharedValue,
@@ -11,6 +11,7 @@ import { Drink, getIngredient, ICE_LEVELS, Tea } from '../game/ingredients';
 import { TeaLiquid } from './TeaLiquid';
 import { CupToppings } from './CupToppings';
 import { CupIce } from './CupIce';
+import { createIceLayout } from './iceLayout';
 import { CUP_FLOOR_FRONT, CUP_FRONT_GLINTS, CUP_ICE_WELL, CUP_REAR_FLOOR_GLASS, CUP_SURFACE_BOTTOM, CUP_SURFACE_RUN, CUP_WELL, cupFillPath, cupSurface } from './cupGeometry';
 import { shade } from './art/Character';
 import {
@@ -76,6 +77,8 @@ export const KitchenCup = memo(function KitchenCup({ drink, iceSeed = 1, width, 
   const milk = drink.milk && drink.milk !== 'none' ? getIngredient('milk', drink.milk) : undefined;
   const foam = drink.foam && drink.foam !== 'none' ? getIngredient('foam', drink.foam) : undefined;
   const ice = ICE_LEVELS.find((option) => option.id === drink.ice);
+  // One arrangement, shared by the two sides of the waterline, so they are the same ice.
+  const iceLayout = useMemo(() => createIceLayout(iceSeed), [iceSeed]);
   const hasTea = Boolean(tea);
 
   const filledGlass = useDerivedValue(() => cupFillPath(hasTea ? level.get() : 0), [level, hasTea]);
@@ -140,8 +143,8 @@ export const KitchenCup = memo(function KitchenCup({ drink, iceSeed = 1, width, 
             teaColor={tea?.color} milkColor={milk?.color} />
         </G>
         <G clipPath={`url(#ice-well-${uid})`}>
-          {ice && <CupIce cubes={ice.cubes} seed={iceSeed} level={level} hasTea={hasTea}
-            glassMaskId={`glass-ice-${uid}`} toppingLayers={drink.toppings.length}
+          {ice && <CupIce cubes={ice.cubes} layout={iceLayout} layer="submerged" level={level}
+            hasTea={hasTea} toppingLayers={drink.toppings.length}
             teaColor={tea?.color} milkColor={milk?.color} />}
         </G>
         <G clipPath={`url(#wellp-${uid})`}>
@@ -153,10 +156,15 @@ export const KitchenCup = memo(function KitchenCup({ drink, iceSeed = 1, width, 
             </>
           )}
         </G>
-        {/* The frame stays in front; painted plastic clears the exposed ice silhouettes. */}
-        <G clipPath={`url(#glass-front-wall-${uid})`}
-          mask={ice && ice.cubes > 0 ? `url(#glass-ice-${uid})` : undefined}>
+        <G clipPath={`url(#glass-front-wall-${uid})`}>
           <GlassPainting uid={uid} />
+        </G>
+        {/* The crowns standing out of the tea are drawn over the painted plastic rather than
+            punched out of it: a mask built from the ice could not be read on a phone. */}
+        <G clipPath={`url(#ice-well-${uid})`}>
+          {ice && <CupIce cubes={ice.cubes} layout={iceLayout} layer="exposed" level={level}
+            hasTea={hasTea} toppingLayers={drink.toppings.length}
+            teaColor={tea?.color} milkColor={milk?.color} />}
         </G>
         <SvgImage href={CUP_SPRITE} x={0} y={0} width={ART.w} height={ART.h}
           mask={`url(#glass-front-glints-${uid})`} />
