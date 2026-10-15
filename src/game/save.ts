@@ -55,8 +55,6 @@ interface SavedGame {
 
 /** The ids a cup holds one of, as opposed to the list of toppings. */
 const SINGLE: Exclude<CategoryId, 'toppings'>[] = ['sweetness', 'ice', 'tea', 'milk', 'foam'];
-const INT32_MIN = -2_147_483_648;
-const INT32_MAX = 2_147_483_647;
 
 export function serializeGame(state: GameState): string {
   const save: SavedGame = {
@@ -82,9 +80,11 @@ export function serializeGame(state: GameState): string {
 /**
  * Read a save back, or `null` if there isn't one or it doesn't check out.
  *
- * A restored day always comes back **paused**, whatever it was saved as: reopening the game should
- * put the pause card in front of you, not drop you into a shift with three patience timers already
- * running down.
+ * A restored shift comes back **paused**, whatever it was saved as: reopening the game should put
+ * the pause card in front of you, not drop you into a shift with three patience timers already
+ * running down. A day whose clock has never moved is the exception — it is still behind its opening
+ * sign, nobody is waiting yet, and that sign is the gate. Pausing it as well would stack two cards
+ * and leave the day stopped after the sign was dismissed.
  */
 export function parseGame(json: string | null | undefined): GameState | null {
   if (!json) return null;
@@ -105,7 +105,11 @@ export function parseGame(json: string | null | undefined): GameState | null {
   const cupId = int(save.cupId, 1);
   const nextId = int(save.nextId, 1);
   const nextSpawnAt = num(save.nextSpawnAt, 0);
-  const seed = int(save.seed, INT32_MIN, INT32_MAX);
+  // Any integer: a shop that has been played carries the RNG's own 32-bit state, but a brand new
+  // one is seeded off the clock and `START_DAY` hands that straight on, so a save written before
+  // the first tick holds a number the size of `Date.now()`. Bounding this to an int32 threw those
+  // away — the whole opening of a run, up to and including the day's sign.
+  const seed = int(save.seed, Number.MIN_SAFE_INTEGER);
   if (!phase || !mode || day === null || clock === null || coins === null) return null;
   if (cupId === null || nextId === null || nextSpawnAt === null || seed === null) return null;
 
@@ -123,8 +127,9 @@ export function parseGame(json: string | null | undefined): GameState | null {
 
   return {
     phase,
-    // Come back to the pause card rather than to a running clock.
-    paused: phase === 'playing',
+    // Come back to the pause card rather than to a running clock — unless the day has not started
+    // ticking, in which case its opening sign is the gate and there is nothing to pause.
+    paused: phase === 'playing' && clock > 0,
     mode,
     day,
     config,

@@ -24,6 +24,11 @@ const KEY = 'boba-shop.save.v1';
  */
 const WRITE_EVERY_MS = 2_000;
 
+/** Storage failures are survivable, so they are reported rather than thrown — but never hidden. */
+function warn(what: string, error: unknown) {
+  console.warn(`[save] the shop ${what}:`, error);
+}
+
 /**
  * Read the saved shop once, on the first render. `null` means the read is still going — the caller
  * should hold the splash until it lands, because the restored state has to *be* the reducer's
@@ -40,7 +45,12 @@ export function useSavedGame(): GameState | null {
     };
     AsyncStorage.getItem(KEY)
       .then(restore)
-      .catch(() => restore(null));
+      .catch((error: unknown) => {
+        // Opening a fresh shop is the right fallback, but say so: a store that cannot be read is
+        // indistinguishable from a first launch, and swallowing it hid a real bug once already.
+        warn('could not be read', error);
+        restore(null);
+      });
     return () => {
       cancelled = true;
     };
@@ -64,9 +74,12 @@ export function useSaveGame(state: GameState) {
       const json = serializeGame(latest.current);
       if (json === written.current) return;
       written.current = json;
-      // Nothing useful to do about a full or blocked store: the game is still playable, it just
-      // won't come back. Letting it reject would take the whole app down instead.
-      AsyncStorage.setItem(KEY, json).catch(() => {});
+      // The game is still playable if the store is full or blocked, so this must not take the app
+      // down — but it must not be invisible either, or the shop quietly stops coming back.
+      AsyncStorage.setItem(KEY, json).catch((error: unknown) => {
+        written.current = null;
+        warn('could not be written', error);
+      });
     };
 
     const timer = setInterval(flush, WRITE_EVERY_MS);
