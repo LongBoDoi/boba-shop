@@ -36,7 +36,8 @@
     },
     "owner": "manhlong",
     "plugins": [
-      "expo-font"
+      "expo-font",
+      "expo-asset"
     ]
   }
 }

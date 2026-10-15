@@ -98,7 +98,8 @@ src/game/               pure game logic, no React
   save.ts               serialize/validate a GameState for storage; see "Saving the shop"
 src/updates/            releases.ts: read/compare the repo's GitHub releases (pure, no network)
                         useUpdate.ts: check, download and hand over; see "Updating itself"
-src/screens/            TitleScreen, DayEndScreen, and the in-play screens:
+src/screens/            LoadingScreen (the wait while the artwork comes in), TitleScreen,
+                        DayEndScreen, and the in-play screens:
   GameScreen.tsx        orchestrator: HUD, the two-page swipe pager + tab indicator, effects/opening/pause overlays
   CounterPage.tsx       page 1 — the customer stage (take orders here)
   PrepPage.tsx          page 2 — the KitchenStation (the room you work in) edge to edge, plus
@@ -118,6 +119,7 @@ tools/                  cut-sheets.py: cuts the asset sheets into those sprites
 src/motion.ts           shared animation timings/easings
 src/theme.ts            colours and font family names
 src/useSavedGame.ts     Async Storage read on launch, slow write while playing
+src/useArtwork.ts       pulls the painted sprites in before the shop opens; see "Opening the shop"
 tools/stamp-build.cjs   writes the CI run number into app.json so a build knows its own release
 ```
 
@@ -171,6 +173,36 @@ raise a visibility change), and on unmount. The most a crash can cost is the las
 
 `tools/check-save.cjs` covers the round trip, the two non-playing phases, the saves that must be
 refused and the ones that are tidied up instead.
+
+### Opening the shop
+
+The painted kitchen is about five megabytes of sprites, and nothing used to ask for them until
+something drew them: the first swipe to the prep page landed on a room that filled itself in, and
+the first scoop of each topping stuttered while its sprite decoded. A shift is two minutes long and
+every one of those stutters landed inside one, so the wait is taken up front instead.
+
+`src/useArtwork.ts` pulls in `PRELOAD` from `kitchenArt.ts` — two steps per sprite, because they
+are different jobs: `downloadAsync` puts the file where it can be read (on a phone it is already
+there; over the dev server or on the web it has to come down) and `Image.prefetch` is what decodes
+it. `App.tsx` holds `LoadingScreen` up until the fonts, the saved shop and the artwork are all in,
+and the bar is weighted the way the wait actually falls — the artwork is nearly all of it.
+
+Three things not to undo:
+
+- **`PRELOAD` is not every sprite in `kitchenArt.ts`**, because that file still exports the room's
+  old planks and counters and the teas' old jars, and nothing draws them (see "The kitchen's
+  artwork"). Fetching that lot would about double the wait for sprites that never appear. When
+  something in there starts being drawn, add it: a sprite left out still loads, just late, in the
+  middle of play, which is the stutter this exists to remove.
+- **It gives up after ten seconds** and opens the shop anyway, with a warning naming how many
+  arrived. A slow connection must never be able to lock a player out of their own game; the
+  stragglers carry on loading behind the menu, which is exactly what used to happen to all of them.
+- **The loading screen uses no Baloo 2.** The fonts are part of what it is waiting for, so anything
+  set in the display face would be drawn in the system one and jump when the real one arrived.
+
+The cost falls on the web, where the art is a real download — a cold first visit now waits several
+seconds on the loading screen instead of opening the menu at once and filling the kitchen in later.
+A repeat visit is cached, and on a phone the sprites are already in the app, so it only decodes.
 
 ### Updating itself
 
@@ -616,6 +648,8 @@ stands plainly inside the shelf; divided across the board it laps over the ends 
   `localStorage` from a *blank* page on the same origin (the running game flushes its own save on
   `pagehide` and will write the title screen straight back over anything set while it is up), then
   load the game and dismiss the pause card.
+- The loading screen: it is over in a flash on a warm cache, so throttle the network to see it
+  (`Network.emulateNetworkConditions` over CDP, or the browser's own throttle).
 - UI: `npx expo export --platform web`, serve `dist/`, and look at it at phone sizes
   (390×844 and the small 375×667). The Prep page is reached by swiping left or tapping the "Pha chế"
   tab. To test a later day quickly, temporarily change `START_DAY, day: 1` in `App.tsx` (and the goal

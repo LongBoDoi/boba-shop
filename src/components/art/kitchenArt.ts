@@ -379,3 +379,47 @@ export const PAN_BODY = 40 / 239;
 /** The bowl of the carried scoop — what you picked up is heaped here. */
 export const SCOOP_BOWL = { cx: 0.34, cy: 0.57, r: 0.17 };
 
+
+/**
+ * Everything the game draws, for the loading screen to fetch before the shop opens.
+ *
+ * A painted room that arrives sprite by sprite is worse than a moment's wait: the first swipe to
+ * the prep page used to land on an empty kitchen that filled itself in, and the first scoop of a
+ * topping stuttered while its sprite decoded. So they are all pulled in up front — see
+ * `src/useArtwork.ts`.
+ *
+ * This is deliberately *not* every sprite in this file. The room used to be assembled out of
+ * planks, counters and cabinet fronts, and the teas used to be whole jars; those are still cut and
+ * still exported, but nothing draws them any more (see "The kitchen's artwork" in CLAUDE.md), and
+ * pulling that lot down would double the wait for a shop that never shows them. **When something
+ * here starts being drawn, add it; a sprite that is missing from this list still loads — it just
+ * loads late, in the middle of play, which is the stutter this exists to remove.**
+ */
+export const PRELOAD: number[] = [
+  // the room itself, and what stands in it
+  ROOM_BG,
+  COASTER,
+  TEA_TANK,
+  TOPPING_BOX_EMPTY,
+  ...Object.values(TOPPING_BOX),
+  SYRUP,
+  SCOOP,
+  ...Object.values(MILK),
+  ...Object.values(FOAM),
+  // what you carry, and what lands in the cup
+  ...Object.values(SCOOPFUL),
+  ...Object.values(PIECE),
+  CUP_ICE,
+  // the cup, and the painted tea inside it
+  CUP_SPRITE,
+  CUP_BASE,
+  CUP_EDGE,
+  CUP_DECAL,
+  ...Object.values(DRINK),
+  ...Object.values(DRINK_MILKY),
+  ...Object.values(DRINK_TOP),
+  ...Object.values(DRINK_MILKY_TOP),
+  // the buttons under the room
+  ICON_CUP,
+  ICON_TRASH,
+];

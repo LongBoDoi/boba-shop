@@ -15,8 +15,10 @@ import { ScreenWipe } from './src/components/ScreenWipe';
 import { gameReducer, GameState } from './src/game/reducer';
 import { DayEndScreen } from './src/screens/DayEndScreen';
 import { GameScreen } from './src/screens/GameScreen';
+import { LoadingScreen } from './src/screens/LoadingScreen';
 import { TitleScreen } from './src/screens/TitleScreen';
 import { colors } from './src/theme';
+import { useArtwork } from './src/useArtwork';
 import { useSavedGame, useSaveGame } from './src/useSavedGame';
 
 const WIPE_MS = 250;
@@ -24,11 +26,17 @@ const WIPE_MS = 250;
 export default function App() {
   const [fontsLoaded, fontError] = useFonts({ Baloo2_500Medium, Baloo2_600SemiBold, Baloo2_700Bold, Baloo2_800ExtraBold });
   const initial = useSavedGame();
+  const artwork = useArtwork();
 
-  // Hold the splash until the saved shop is read as well as the fonts: a restored day has to *be*
-  // the reducer's initial state, not something applied over a day that has already opened.
-  if ((!fontsLoaded && !fontError) || !initial) {
-    return <View style={{ flex: 1, backgroundColor: colors.wall }} />;
+  // Three things have to be in hand before the first screen can be drawn, and the saved shop is
+  // the one that cannot be applied later: a restored day has to *be* the reducer's initial state,
+  // not something laid over a day that has already opened. The artwork could be left to arrive as
+  // it is drawn, and that is exactly what made the kitchen fill itself in plank by plank.
+  const lettering = fontsLoaded || fontError;
+  if (!lettering || !initial || artwork < 1) {
+    // The bar is weighted the way the wait actually falls: the artwork is nearly all of it.
+    const progress = (lettering ? 0.1 : 0) + (initial ? 0.05 : 0) + artwork * 0.85;
+    return <LoadingScreen progress={progress} />;
   }
 
   return <Shop initial={initial} />;
