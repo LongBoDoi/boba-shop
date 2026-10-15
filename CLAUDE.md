@@ -140,8 +140,18 @@ not re-litigating:
 - **A restored shift comes back paused**, whatever it was saved as, so reopening the game shows the
   pause card instead of dropping you into three patience timers already running down. The day's
   `OpeningSign` is keyed off `clock === 0` for the same reason: a resumed day has already opened, so
-  it is not announced twice. Quitting to the menu overwrites the save with a `title` state, which is
-  how a run is abandoned — there is no separate "clear save".
+  it is not announced twice. The two rules meet at a day whose clock has *never* moved — saved while
+  its sign was still up — and there the sign wins and the day is **not** paused: pausing it as well
+  stacked two cards, and dismissing the sign left the day stopped behind the second one. Quitting to
+  the menu overwrites the save with a `title` state, which is how a run is abandoned — there is no
+  separate "clear save".
+- **The seed is validated as any integer, not an int32.** A new shop is seeded off the clock
+  (`createInitialState(Date.now())`) and `START_DAY` hands that seed straight on; only the first
+  `TICK` reduces it to the RNG's own 32-bit state, and the tick loop is held by the opening sign.
+  Bounding it to an int32 discarded every save from launch until that sign was dismissed.
+- **Storage failures are reported, never swallowed.** A store that cannot be read is
+  indistinguishable from a first launch and a rejected write is invisible, so both warn — the silence
+  is what hid the seed bug on a native build, where the shop simply never came back.
 - **Everything read back is validated, and a save that doesn't check out is thrown away** rather
   than patched; a fresh shop is a better failure than a half-restored one. On the web the save sits
   in `localStorage`, where it can be edited, and a save from an older build can name an ingredient
