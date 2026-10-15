@@ -18,7 +18,10 @@
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "permissions": [
+        "android.permission.REQUEST_INSTALL_PACKAGES"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png",
@@ -28,7 +31,8 @@
     "extra": {
       "eas": {
         "projectId": "a7ab235c-52a1-459c-a82e-cca1e4c3cf36"
-      }
+      },
+      "build": 0
     },
     "owner": "manhlong",
     "plugins": [

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Platform, StyleSheet, Text, TextStyle, useWindowDimensions, View } from 'react-native';
+import { Platform, ScrollView, StyleSheet, Text, TextStyle, useWindowDimensions, View } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withDelay, withTiming } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Svg, { Path, Rect } from 'react-native-svg';
@@ -8,9 +8,11 @@ import { Character } from '../components/art/Character';
 import { Button } from '../components/Button';
 import { Cup } from '../components/Cup';
 import { SettingsSheet } from '../components/SettingsSheet';
+import { UpdateNotice } from '../components/UpdateNotice';
 import { CustomerLook } from '../game/customers';
 import { Drink } from '../game/ingredients';
 import { GameMode } from '../game/reducer';
+import { useUpdate } from '../updates/useUpdate';
 import { DURATION, timing } from '../motion';
 import { colors, fonts } from '../theme';
 import { pointerEventsStyles } from '../pointerEvents';
@@ -46,6 +48,9 @@ export function TitleScreen({ onStart, mode, onChangeMode }: TitleScreenProps) {
   const { width, height } = useWindowDimensions();
   const cupWidth = Math.min(130, width * 0.32);
   const [settings, setSettings] = useState(false);
+  // The menu is the only place an update is offered: installing replaces the app, and on iOS it
+  // opens a browser — either one mid-shift would throw away the day.
+  const update = useUpdate();
 
   return (
     <View style={styles.screen}>
@@ -57,31 +62,40 @@ export function TitleScreen({ onStart, mode, onChangeMode }: TitleScreenProps) {
       <Pearls width={width} height={height} />
       <Awning width={width} />
 
-      <SafeAreaView style={styles.content}>
-        <View style={styles.hero}>
-          <Logo />
-          <View style={styles.scene}>
-            <View style={styles.fan}>
-              <Character look={LEFT_FAN} mood="delighted" width={74} />
-            </View>
-            <Cup drink={SHOWCASE_DRINK} width={cupWidth} backgroundColor={colors.wall} straw />
-            <View style={styles.fan}>
-              <Character look={RIGHT_FAN} mood="happy" width={74} />
+      <SafeAreaView style={styles.safe}>
+        {/*
+          The menu is laid out to fill the screen, but it has no slack: on a short phone the logo
+          was already sliding under the awning before anything was put above the card. So it
+          scrolls when it has to — `flexGrow` keeps the spread-out layout wherever there is room,
+          and a notice that only sometimes appears can never crop the shop's own name.
+        */}
+        <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+          <View style={styles.hero}>
+            <Logo />
+            <View style={styles.scene}>
+              <View style={styles.fan}>
+                <Character look={LEFT_FAN} mood="delighted" width={74} />
+              </View>
+              <Cup drink={SHOWCASE_DRINK} width={cupWidth} backgroundColor={colors.wall} straw />
+              <View style={styles.fan}>
+                <Character look={RIGHT_FAN} mood="happy" width={74} />
+              </View>
             </View>
           </View>
-        </View>
 
-        <SlideUp>
-          <View style={styles.card}>
-            {stepsFor(mode).map((step) => (
-              <Text key={step} style={styles.step}>
-                {step}
-              </Text>
-            ))}
-            <Button label="Mở cửa tiệm" onPress={onStart} style={styles.start} />
-            <Button label="⚙️ Cài đặt" variant="secondary" onPress={() => setSettings(true)} />
-          </View>
-        </SlideUp>
+          <SlideUp>
+            <UpdateNotice state={update.state} onInstall={update.install} />
+            <View style={styles.card}>
+              {stepsFor(mode).map((step) => (
+                <Text key={step} style={styles.step}>
+                  {step}
+                </Text>
+              ))}
+              <Button label="Mở cửa tiệm" onPress={onStart} style={styles.start} />
+              <Button label="⚙️ Cài đặt" variant="secondary" onPress={() => setSettings(true)} />
+            </View>
+          </SlideUp>
+        </ScrollView>
       </SafeAreaView>
 
       {settings && (
@@ -173,8 +187,11 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 0,
   },
-  content: {
+  safe: {
     flex: 1,
+  },
+  content: {
+    flexGrow: 1,
     justifyContent: 'space-between',
     padding: 20,
   },

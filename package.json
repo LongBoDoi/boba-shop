@@ -7,8 +7,11 @@
     "@expo/metro-runtime": "~57.0.16",
     "@react-native-async-storage/async-storage": "2.2.0",
     "expo": "~57.0.28",
+    "expo-constants": "~57.0.22",
+    "expo-file-system": "~57.0.7",
     "expo-font": "~57.0.4",
     "expo-haptics": "~57.0.3",
+    "expo-intent-launcher": "~57.0.1",
     "expo-status-bar": "~57.0.1",
     "react": "19.2.3",
     "react-dom": "19.2.3",
@@ -32,7 +35,7 @@
     "web": "expo start --web",
     "lint": "expo lint --max-warnings=0",
     "typecheck": "tsc --noEmit",
-    "test": "node tools/check-serving.cjs && node tools/check-save.cjs && node tools/check-dependencies.cjs"
+    "test": "node tools/check-serving.cjs && node tools/check-save.cjs && node tools/check-updates.cjs && node tools/check-dependencies.cjs"
   },
   "private": true,
   "overrides": {

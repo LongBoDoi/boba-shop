@@ -25,6 +25,7 @@ jobs:
     outputs:
       version: ${{ steps.read.outputs.version }}
       tag: ${{ steps.read.outputs.tag }}
+      build: ${{ steps.read.outputs.build }}
     steps:
       - name: Check out source
         uses: actions/checkout@v7
@@ -35,6 +36,8 @@ jobs:
           version="$(node -p "require('./app.json').expo.version")"
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "tag=v$version+${{ github.run_number }}" >> "$GITHUB_OUTPUT"
+          # The same number the apps are stamped with, so a build can recognise its own release.
+          echo "build=${{ github.run_number }}" >> "$GITHUB_OUTPUT"
 
   android:
     needs: version
@@ -54,6 +57,9 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+
+      - name: Stamp the build number
+        run: node tools/stamp-build.cjs "${{ needs.version.outputs.build }}"
 
       - name: Build the APK on EAS
         env:
@@ -129,6 +135,9 @@ jobs:
           fi
           xcodebuild -version
           swift --version
+
+      - name: Stamp the build number
+        run: node tools/stamp-build.cjs "${{ needs.version.outputs.build }}"
 
       - name: Generate the iOS project
         run: npx expo prebuild --platform ios --clean

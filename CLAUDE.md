@@ -22,7 +22,7 @@ npx expo install <package>  # add a dependency at an SDK-compatible version
 
 Run `npm run typecheck`, `npm run lint`, and `npm test` before calling a change done.
 Lint treats warnings as failures. The regression scripts check serving behavior, saving and
-restoring, and the scoped UUID dependency override; see "Verifying changes" below and `docs/dependency-health.md`.
+restoring, reading releases, and the scoped UUID dependency override; see "Verifying changes" below and `docs/dependency-health.md`.
 
 ### Deploying the web build (EAS Hosting)
 
@@ -43,8 +43,10 @@ some networks reset), prefix the command: `NODE_OPTIONS="--dns-result-order=ipv4
 ### Playing on a phone, and the app routes that were ruled out
 
 The phone story is the web page: open https://boba-shop.expo.app in the browser, or add it to the
-home screen. There is no app build, and the routes to one were each tried and dropped — worth not
-re-litigating:
+home screen. There are also real app builds now — `.github/workflows/build-apps.yml` publishes an
+`.apk` and an unsigned `.ipa` to a GitHub release, and an installed build offers its own updates
+(see "Updating itself"). The routes to a *store* build were each tried and dropped, and are worth
+not re-litigating:
 
 - **Expo Go** (publish with `eas update`, hand out one link) is dead on the current client. Expo Go
   57.0.9 cannot launch EAS Updates at all: every runtime string (`exposdk:57.0.0`, `exposdk:57.0.9`,
@@ -94,6 +96,8 @@ src/game/               pure game logic, no React
   random.ts             seeded RNG; the seed lives in state so the reducer stays pure
   money.ts              formatMoney: 1 game unit = 10.000 ₫, shown as "10k"
   save.ts               serialize/validate a GameState for storage; see "Saving the shop"
+src/updates/            releases.ts: read/compare the repo's GitHub releases (pure, no network)
+                        useUpdate.ts: check, download and hand over; see "Updating itself"
 src/screens/            TitleScreen, DayEndScreen, and the in-play screens:
   GameScreen.tsx        orchestrator: HUD, the two-page swipe pager + tab indicator, effects/opening/pause overlays
   CounterPage.tsx       page 1 — the customer stage (take orders here)
@@ -114,6 +118,7 @@ tools/                  cut-sheets.py: cuts the asset sheets into those sprites
 src/motion.ts           shared animation timings/easings
 src/theme.ts            colours and font family names
 src/useSavedGame.ts     Async Storage read on launch, slow write while playing
+tools/stamp-build.cjs   writes the CI run number into app.json so a build knows its own release
 ```
 
 ### Saving the shop
@@ -166,6 +171,53 @@ raise a visibility change), and on unmount. The most a crash can cost is the las
 
 `tools/check-save.cjs` covers the round trip, the two non-playing phases, the saves that must be
 refused and the ones that are tidied up instead.
+
+### Updating itself
+
+The shop is handed out as files rather than through a store, so nothing tells a player a new build
+exists — the game asks. On the **title screen only**, it reads
+`api.github.com/repos/<repo>/releases/latest` (public, no token, drafts and pre-releases already
+excluded) and offers what it finds. `src/updates/releases.ts` is the part with no React, network or
+platform in it, so `tools/check-updates.cjs` can drive it against a real release payload;
+`src/updates/useUpdate.ts` is the rest.
+
+**What it can actually do differs per platform, and only one of the three can install anything.**
+
+- **Android** can. The `.apk` is downloaded to the cache, and `file.contentUri` is handed to the
+  system package installer through `expo-intent-launcher`. It installs over the running app
+  because both are signed with the same EAS keystore, and the player's save survives. This is why
+  `app.json` declares `REQUEST_INSTALL_PACKAGES`.
+- **iOS cannot, and no library changes that.** There is no API for installing an `.ipa` from inside
+  an app, and the published one is unsigned anyway — it has to be re-signed on a computer with
+  Sideloadly or AltStore. The game says a new build exists and opens the release page. Do not go
+  looking for a way around this; `itms-services://` needs a signed distribution build and a hosted
+  manifest, which is the paid Apple account all over again.
+- **The web build is never behind** — it is redeployed on every push — so it is never offered an
+  update and never makes the request.
+
+**A build has to know which build it is**, and `app.json`'s `version` cannot tell it: it is the
+marketing version, it barely changes, and releases are tagged `v<version>+<run number>`. So the
+workflow runs `tools/stamp-build.cjs <run number>` before building, writing `extra.build` (read
+back through `expo-constants`) along with `android.versionCode` and `ios.buildNumber` — Android
+refuses an APK whose `versionCode` went backwards, so leaving every build at the default 1 would
+make updating by file unreliable. The edit is never committed: **the checked-in value stays 0**,
+and 0 is exactly what marks a dev server or a local export as "not a release" and turns the check
+off. EAS uploads the working directory as it is (`eas.json` does not set `cli.requireCommit`), so
+the stamp reaches the cloud build without a commit. Metro caches the embedded config, so a local
+experiment with a stamped `app.json` needs `npx expo export --clear` or it will quietly bundle the
+old number.
+
+The check is **once per launch, remembered for 30 minutes**, so returning to the menu between days
+does not re-ask. Failing to reach GitHub is not news and is never shown — only a failed *install*
+is, because the player asked for that one. The notice is on the title screen and nowhere else: on
+Android installing replaces the app and on iOS it opens a browser, and either one mid-shift would
+throw away the day.
+
+The menu **scrolls** (`flexGrow` keeps the spread-out layout wherever there is room). It has no
+vertical slack — on a 375x667 phone the logo was already sliding under the awning before anything
+was put above the card — so a notice that only sometimes appears must not be able to crop the
+shop's own name. On that size the start button ends up a little below the fold while a notice is
+showing; dismissing it with "Để sau" puts everything back.
 
 ### The two pages (swipe navigation)
 `GameScreen` keeps the reducer state, the tick loop, haptics and the `measureInWindow` refs, and hosts a
@@ -534,6 +586,10 @@ stands plainly inside the shelf; divided across the board it laps over the ends 
   `localStorage.getItem('boba-shop.save.v1')` in the console shows the shop as it stands, and
   removing it is how a first launch is tested. Reload mid-shift and you should come back to the
   same minute of the same day behind the pause card, with the opening sign *not* replayed.
+- Updates: the check is off on the web and off for any build nothing stamped, so it does nothing
+  locally by default. To see it, stamp a number behind the latest release (`node tools/stamp-build.cjs 4`)
+  and export with `--clear`; revert `app.json` afterwards. The Android download-and-install leg
+  cannot be exercised without a device — there is no emulator here.
 - UI: `npx expo export --platform web`, serve `dist/`, and look at it at phone sizes
   (390×844 and the small 375×667). The Prep page is reached by swiping left or tapping the "Pha chế"
   tab. To test a later day quickly, temporarily change `START_DAY, day: 1` in `App.tsx` (and the goal
