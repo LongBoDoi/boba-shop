@@ -12,7 +12,7 @@ import { TeaLiquid } from './TeaLiquid';
 import { CupToppings } from './CupToppings';
 import { CupIce } from './CupIce';
 import { createIceLayout } from './iceLayout';
-import { CUP_FLOOR_FRONT, CUP_FRONT_GLINTS, CUP_ICE_WELL, CUP_REAR_FLOOR_GLASS, CUP_SURFACE_BOTTOM, CUP_SURFACE_RUN, CUP_WELL, cupFillPath, cupSurface } from './cupGeometry';
+import { CUP_ART, CUP_FLOOR_FRONT, CUP_FRONT_GLINTS, CUP_ICE_WELL, CUP_REAR_FLOOR_GLASS, CUP_SURFACE_BOTTOM, CUP_SURFACE_RUN, CUP_WELL, cupFillPath, cupSurface } from './cupGeometry';
 import { shade } from './art/Character';
 import {
   CUP_BASE,
@@ -31,7 +31,7 @@ export { pourLevel } from './cupGeometry';
  */
 
 /** The sprite is drawn in this box; all the geometry below is in the same units. */
-const ART = { w: 113, h: 174 };
+const ART = CUP_ART;
 const AnimatedEllipse = Animated.createAnimatedComponent(Ellipse);
 const AnimatedPath = Animated.createAnimatedComponent(Path);
 /**
@@ -113,12 +113,15 @@ export const KitchenCup = memo(function KitchenCup({ drink, iceSeed = 1, width, 
           <ClipPath id={`ice-well-${uid}`}>
             <Path d={CUP_ICE_WELL} />
           </ClipPath>
-          <ClipPath id={`glass-filled-${uid}`}>
-            <AnimatedPath animatedProps={softGlassProps} />
-          </ClipPath>
-          <ClipPath id={`glass-clear-${uid}`}>
-            <AnimatedPath clipRule="evenodd" fillRule="evenodd" animatedProps={clearGlassProps} />
-          </ClipPath>
+          {/* Where the painted glass reads through the tea and where it reads clear both follow the
+              live surface, so they are masks: a clip path never moves again after its first draw on
+              a phone. The cup's fixed boundaries below stay clips. */}
+          <Mask id={`glass-filled-${uid}`} maskUnits="userSpaceOnUse" x={0} y={0} width={ART.w} height={ART.h}>
+            <AnimatedPath fill="#FFFFFF" animatedProps={softGlassProps} />
+          </Mask>
+          <Mask id={`glass-clear-${uid}`} maskUnits="userSpaceOnUse" x={0} y={0} width={ART.w} height={ART.h}>
+            <AnimatedPath fill="#FFFFFF" fillRule="evenodd" animatedProps={clearGlassProps} />
+          </Mask>
           <ClipPath id={`glass-rear-floor-${uid}`}>
             <Path d={CUP_REAR_FLOOR_GLASS} />
           </ClipPath>
@@ -182,9 +185,9 @@ const GlassPainting = memo(function GlassPainting({ uid }: { uid: string }) {
   return (
     <>
       <SvgImage href={CUP_SPRITE} x={0} y={0} width={ART.w} height={ART.h}
-        clipPath={`url(#glass-clear-${uid})`} />
+        mask={`url(#glass-clear-${uid})`} />
       <SvgImage href={CUP_SPRITE} x={0} y={0} width={ART.w} height={ART.h}
-        clipPath={`url(#glass-filled-${uid})`} opacity={0.22} />
+        mask={`url(#glass-filled-${uid})`} opacity={0.22} />
     </>
   );
 });

@@ -121,6 +121,7 @@ src/motion.ts           shared animation timings/easings
 src/theme.ts            colours and font family names
 src/useSavedGame.ts     Async Storage read on launch, slow write while playing
 src/useArtwork.ts       pulls the painted sprites in before the shop opens; see "Opening the shop"
+tools/check-drawing.cjs reads the SVG for the three things a phone draws differently
 tools/stamp-build.cjs   writes the CI run number into app.json as versionCode/buildNumber
 ```
 
@@ -389,7 +390,9 @@ Dropping the cup still standing on the work top sends it home.
   side of the waterline (`layer="submerged"` then the wall then `layer="exposed"`), sharing one
   `createIceLayout`. It used to be a mask built out of `<Use>`d silhouettes, which is the one
   thing in this game that a browser drew and a phone could not — see "Drawing on a phone" below.
-  Every cube is split by one shared `cupIceFillPath` clip and its complement. It uses the near
+  Every cube is split by one shared `cupIceFillPath` **mask** and its even-odd complement; it is a
+  mask and not a clip because it moves with the tea, and a clip would have stopped at the level the
+  ice was added at. It uses the near
   arc of the same tea oval, while the tea's rear arc stays behind the crowns; contact strokes
   follow that near arc too. Projected depth
   affects cube placement only, so it cannot create a separate liquid level on each face.
@@ -617,8 +620,10 @@ stands plainly inside the shelf; divided across the board it laps over the ends 
   - no `Math.random()` during render (use the deterministic `noise()` in `Effects.tsx`);
   - don't read refs during render.
 - **Drawing on a phone, not in a browser.** `react-native-svg` is not an SVG renderer with a
-  React wrapper — it is three renderers, and the web one is the forgiving one. Two gaps have
-  already cost a crash and a dead animation, and both are easy to walk back into:
+  React wrapper — it is three renderers, and the web one is the forgiving one. Three gaps have
+  already cost a crash, a dead animation and a drink that stopped following its tea, and every one
+  of them is easy to walk back into. `tools/check-drawing.cjs` (in `npm test`) reads the source for
+  all three, because nothing else will:
   - **An animated `transform` has to be the array form** — `[{ translateX }, { translateY },
     { rotate: '12deg' }]` — never the SVG string `translate(…) rotate(…)`. The string is turned
     into the `matrix` prop a phone reads by JavaScript, *inside* the element, and an animated prop
@@ -626,11 +631,23 @@ stands plainly inside the shelf; divided across the board it laps over the ends 
     dropped in silence and the thing never moves. Static transforms are fine either way: they do
     go through the element. A **clip** cannot take even the array form, because a clip is a path:
     give it a path already drawn where it belongs, as `cupIceOutlinePath` does.
+  - **A `<ClipPath>` is drawn once and then frozen, so anything that moves is a `<Mask>`.**
+    Android builds a clip path's geometry the first time it is used and caches it, and nothing
+    inside one can clear that cache: the renderer skips invalidation for any element that has not
+    been drawn, and a `<Path>` inside a `<ClipPath>` is never drawn. An animated `d` in there
+    therefore arrives in the browser and on iOS and is simply dropped on Android, where the clip
+    keeps the shape it had on the frame it first appeared. A **mask's** contents *are* drawn, every
+    frame, so an animated `d` inside one lands everywhere — which is why the tea's edge, the glass's
+    wet and clear halves, the waterline the ice is split at and the wash on the toppings are all
+    masks. Fixed boundaries (`CUP_WELL`, `CUP_ICE_WELL`, the cube's own silhouette) stay clips,
+    which are cheaper. Mask contents are filled `#FFFFFF`, and `fillRule="evenodd"` on the path
+    itself is read by all three renderers — a clip instead took its rule from whatever referenced
+    it, and the platforms disagreed about the default.
   - **`<Use>` is not safe.** Asked for the path of a template it cannot find at that moment, it
     hands back nothing — which Android calls a method on and iOS passes to `CFAutorelease`. Draw
     the shape where it is needed, even when that means repeating it.
-  Neither shows up in a browser, in `tsc`, or in the lint, and there is no emulator here: the only
-  honest check on anything new is a build on a real phone.
+  None of them shows up in a browser, in `tsc`, or in the lint, and there is no emulator here: the
+  only honest check on anything new is a build on a real phone.
 - Reanimated 4 + `react-native-worklets`; the Babel plugin is configured automatically by
   `babel-preset-expo` (no babel config file).
 - Custom fonts: set `fontFamily: fonts.*` and don't also set `fontWeight`.
@@ -656,9 +673,13 @@ stands plainly inside the shelf; divided across the board it laps over the ends 
   (`grep -rn PREVIEW src/`). Downloading and restarting into a real update can only be tried on a
   phone with a build that has `expo-updates` in it.
 - Ice, and anything else drawn in SVG: there is no emulator here, so a browser is the only thing
-  that can be driven — and a browser is precisely what will not catch the two gaps under "Drawing
-  on a phone" in Conventions. Read that list before changing `CupIce`, `CupToppings` or
-  `KitchenCup`, and say plainly in the report that the phone itself was not tried.
+  that can be driven — and a browser is precisely what will not catch the three gaps under "Drawing
+  on a phone" in Conventions. `tools/check-drawing.cjs` reads the source for them; read that list
+  too before changing `CupIce`, `CupToppings`, `TeaLiquid` or `KitchenCup`, and say plainly in the
+  report that the phone itself was not tried. What a browser *can* prove is that a change meant to
+  fix a phone left the web alone: export before and after, drive both to the same cup from the same
+  save, and diff the screenshots — the cup should come out identical, and only the HUD clock and
+  the looping window clouds should move.
   The quickest way to put a cup in a particular state is the save: write one key to
   `localStorage` from a *blank* page on the same origin (the running game flushes its own save on
   `pagehide` and will write the title screen straight back over anything set while it is up), then

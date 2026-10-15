@@ -1,11 +1,11 @@
 import { memo, useEffect, useId } from 'react';
 import Animated, { cancelAnimation, DerivedValue, useAnimatedProps, useSharedValue, withTiming } from 'react-native-reanimated';
-import { ClipPath, Defs, Ellipse, G, Image as SvgImage, Path } from 'react-native-svg';
+import { Defs, Ellipse, G, Image as SvgImage, Mask, Path } from 'react-native-svg';
 
 import { getIngredient, Topping } from '../game/ingredients';
 import { DURATION, timing } from '../motion';
 import { PIECE, PIECE_ART } from './art/kitchenArt';
-import { cupToppingPosition } from './cupGeometry';
+import { CUP_ART, cupToppingPosition } from './cupGeometry';
 
 const AnimatedGroup = Animated.createAnimatedComponent(G);
 const AnimatedPath = Animated.createAnimatedComponent(Path);
@@ -82,9 +82,11 @@ function ToppingPortion({ id, portion, liquidShape, teaColor, milkColor }: Omit<
   return (
     <AnimatedGroup animatedProps={settleProps}>
       <Defs>
-        <ClipPath id={`topping-wet-${uid}`}>
-          <AnimatedPath animatedProps={wetProps} />
-        </ClipPath>
+        {/* The tea boundary the wash follows moves, so it is a mask: an animated clip path is
+            baked on its first draw on a phone and the pile then never looks wet. */}
+        <Mask id={`topping-wet-${uid}`} maskUnits="userSpaceOnUse" x={0} y={0} width={CUP_ART.w} height={CUP_ART.h}>
+          <AnimatedPath fill="#FFFFFF" animatedProps={wetProps} />
+        </Mask>
       </Defs>
       {BED.map((spot, i) => {
         const jitter = ((seed + i * 7) % 5 - 2) * 0.55;
@@ -109,7 +111,7 @@ function ToppingPortion({ id, portion, liquidShape, teaColor, milkColor }: Omit<
                 opacity={opacity} preserveAspectRatio="xMidYMid meet" />
             </G>
             {tint && (
-              <G clipPath={`url(#topping-wet-${uid})`}>
+              <G mask={`url(#topping-wet-${uid})`}>
                 <Path d={silhouette} transform={`translate(${cx},${cy}) rotate(${angle})`}
                   fill={tint} opacity={(milkColor ? 0.3 : 0.16) * (1.25 - spot.depth * 0.55)} />
               </G>

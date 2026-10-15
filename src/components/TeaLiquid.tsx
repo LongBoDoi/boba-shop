@@ -4,12 +4,12 @@ import Animated, {
   cancelAnimation, Easing, DerivedValue, SharedValue, useAnimatedProps, useDerivedValue, useSharedValue, withRepeat, withTiming,
 } from 'react-native-reanimated';
 import Svg, {
-  Circle, ClipPath, Defs, Ellipse, G, Image as SvgImage, LinearGradient, Path, RadialGradient, Rect, Stop,
+  Circle, ClipPath, Defs, Ellipse, G, Image as SvgImage, LinearGradient, Mask, Path, RadialGradient, Rect, Stop,
 } from 'react-native-svg';
 
 import { shade } from './art/Character';
 import { DRINK, DRINK_MILKY, DRINK_MILKY_TOP, DRINK_TOP, TEA_TANK } from './art/kitchenArt';
-import { CUP_FLOOR_EDGE, CUP_FLOOR_FRONT, CUP_WELL, cupLiquidPath, cupSurface } from './cupGeometry';
+import { CUP_ART, CUP_FLOOR_EDGE, CUP_FLOOR_FRONT, CUP_WELL, cupLiquidPath, cupSurface } from './cupGeometry';
 import { pointerEventsStyles } from '../pointerEvents';
 
 const AnimatedEllipse = Animated.createAnimatedComponent(Ellipse);
@@ -49,8 +49,8 @@ interface LiquidProps {
 export const TeaLiquid = memo(function TeaLiquid({ width, height, color, teaId, pouring, level, milkColor }: LiquidProps) {
   const uid = useId().replace(/[^a-zA-Z0-9]/g, '');
   const tank = !level;
-  const vbW = tank ? 971 : 113;
-  const vbH = tank ? 1619 : 174;
+  const vbW = tank ? 971 : CUP_ART.w;
+  const vbH = tank ? 1619 : CUP_ART.h;
   const well = tank
     ? 'M108 370 Q485 350 863 370 L863 1115 Q861 1190 485 1190 Q108 1190 108 1115 Z'
     : CUP_WELL;
@@ -110,10 +110,12 @@ export const TeaLiquid = memo(function TeaLiquid({ width, height, color, teaId, 
     <Svg width={width} height={height} viewBox={`0 0 ${vbW} ${vbH}`} style={[StyleSheet.absoluteFill, pointerEventsStyles.none]}>
       <Defs>
         <ClipPath id={`liquid-well-${uid}`}><Path d={well} /></ClipPath>
-        <ClipPath id={`liquid-body-clip-${uid}`}>
-          {tank ? <AnimatedRect x={0} width={vbW} animatedProps={bodyProps} />
-            : <AnimatedPath animatedProps={bodyShapeProps} />}
-        </ClipPath>
+        {/* The body's own edge moves with every drop poured, so it is a mask rather than a clip:
+            a clip path is baked on its first draw on Android and never changes again. */}
+        <Mask id={`liquid-body-${uid}-mask`} maskUnits="userSpaceOnUse" x={0} y={0} width={vbW} height={vbH}>
+          {tank ? <AnimatedRect x={0} width={vbW} fill="#FFFFFF" animatedProps={bodyProps} />
+            : <AnimatedPath fill="#FFFFFF" animatedProps={bodyShapeProps} />}
+        </Mask>
         <LinearGradient id={`liquid-body-${uid}`} x1="0%" y1="0%" x2="100%" y2="0%">
           <Stop offset="0" stopColor={shade(tint, -40)} />
           <Stop offset="0.18" stopColor={shade(tint, tank ? 10 : 24)} />
@@ -140,9 +142,9 @@ export const TeaLiquid = memo(function TeaLiquid({ width, height, color, teaId, 
       <AnimatedGroup clipPath={`url(#liquid-well-${uid})`} animatedProps={visibilityProps}>
         {tank ? <AnimatedRect x={0} width={vbW} fill={`url(#liquid-body-${uid})`} animatedProps={bodyProps} />
           : <AnimatedPath fill={`url(#liquid-body-${uid})`} animatedProps={bodyShapeProps} />}
-        <G clipPath={`url(#liquid-body-clip-${uid})`}>
+        <G mask={`url(#liquid-body-${uid}-mask)`}>
           {bodyArt && <SvgImage href={bodyArt} x={0} y={0}
-            width={113} height={174} preserveAspectRatio="none" opacity={0.5} />}
+            width={CUP_ART.w} height={CUP_ART.h} preserveAspectRatio="none" opacity={0.5} />}
           <Ellipse cx={vbW * 0.38} cy={tank ? 1080 : 150} rx={tank ? 230 : 22} ry={tank ? 90 : 12} fill={`url(#liquid-light-${uid})`} />
           <AnimatedRect x={0} width={vbW} fill={`url(#liquid-depth-${uid})`} animatedProps={bodyProps} />
           <AnimatedPath fill="#FFF8DF" animatedProps={reflectionProps} />

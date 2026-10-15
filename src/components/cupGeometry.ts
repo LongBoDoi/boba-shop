@@ -1,3 +1,9 @@
+/**
+ * The cup sprite's own box. Everything in the glass is drawn in these units, and a mask that has to
+ * cover the whole drink is measured in them — see "Drawing on a phone" in CLAUDE.md for why the
+ * live boundaries in here are masks and not clips.
+ */
+export const CUP_ART = { w: 113, h: 174 };
 /** The fill and ingredients meet the inside of the bottom rim, just above its painted outline. */
 export const CUP_SURFACE_BOTTOM = 155;
 export const CUP_SURFACE_RUN = CUP_SURFACE_BOTTOM - 48;

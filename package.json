@@ -34,7 +34,7 @@
     "web": "expo start --web",
     "lint": "expo lint --max-warnings=0",
     "typecheck": "tsc --noEmit",
-    "test": "node tools/check-serving.cjs && node tools/check-save.cjs && node tools/check-updates.cjs && node tools/check-dependencies.cjs"
+    "test": "node tools/check-serving.cjs && node tools/check-save.cjs && node tools/check-drawing.cjs && node tools/check-updates.cjs && node tools/check-dependencies.cjs"
   },
   "private": true,
   "overrides": {

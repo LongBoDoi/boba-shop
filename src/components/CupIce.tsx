@@ -1,9 +1,9 @@
 import { memo, useEffect, useId, useMemo } from 'react';
 import Animated, { cancelAnimation, SharedValue, useAnimatedProps, useDerivedValue, useSharedValue, withTiming } from 'react-native-reanimated';
-import { ClipPath, Defs, Ellipse, G, Image as SvgImage, LinearGradient, Path, Stop } from 'react-native-svg';
+import { ClipPath, Defs, Ellipse, G, Image as SvgImage, LinearGradient, Mask, Path, Stop } from 'react-native-svg';
 
 import { CUP_ICE } from './art/kitchenArt';
-import { cupIceFillPath, cupIceOutlinePath, cupIcePosition, cupIceRestPosition, cupSurface } from './cupGeometry';
+import { CUP_ART, cupIceFillPath, cupIceOutlinePath, cupIcePosition, cupIceRestPosition, cupSurface } from './cupGeometry';
 import { IcePlacement } from './iceLayout';
 import { DURATION, timing } from '../motion';
 
@@ -55,6 +55,12 @@ interface CupIceProps {
  *   so a string written by a worklet is dropped in silence. The array form (`[{ translateX }, …]`)
  *   is read natively, so that is what the cubes are placed with. A clip cannot take even that,
  *   because a clip is a path: `cupIceOutlinePath` draws the cube already standing where it stands.
+ * - **A clip path is drawn once and then frozen.** Android builds a `ClipPath`'s geometry the first
+ *   time it is used and caches it, and nothing inside one can clear that cache — a `Path` in a
+ *   `ClipPath` is never itself drawn, and the renderer skips the invalidation for anything that has
+ *   not been drawn. So the waterline here is a `Mask`: a mask's contents *are* drawn, every frame,
+ *   which is what makes an animated `d` inside one arrive. Fixed shapes stay clips, which are
+ *   cheaper.
  */
 export const CupIce = memo(function CupIce({ cubes, layout, layer, ...props }: CupIceProps) {
   const uid = useId().replace(/[^a-zA-Z0-9]/g, '');
@@ -78,10 +84,11 @@ export const CupIce = memo(function CupIce({ cubes, layout, layer, ...props }: C
   return (
     <G>
       <Defs>
-        <ClipPath id={`ice-water-${uid}`}>
-          <AnimatedPath animatedProps={waterProps} fillRule="evenodd" clipRule="evenodd" />
-        </ClipPath>
-        {/* One cube's shape, in the 48-unit box every cube is drawn in before it is scaled. */}
+        <Mask id={`ice-water-${uid}`} maskUnits="userSpaceOnUse" x={0} y={0} width={CUP_ART.w} height={CUP_ART.h}>
+          <AnimatedPath fill="#FFFFFF" fillRule="evenodd" animatedProps={waterProps} />
+        </Mask>
+        {/* One cube's shape, in the 48-unit box every cube is drawn in before it is scaled.
+            This one never moves — it is in the cube's own space — so it stays a clip. */}
         <ClipPath id={`ice-body-${uid}`}>
           <Path d={CUBE_SHAPE} />
         </ClipPath>
@@ -104,7 +111,7 @@ export const CupIce = memo(function CupIce({ cubes, layout, layer, ...props }: C
         <IceShadow key={i} cube={cube} level={props.level} hasTea={props.hasTea}
           toppingLayers={props.toppingLayers} />
       ))}
-      <G clipPath={`url(#ice-water-${uid})`}>
+      <G mask={`url(#ice-water-${uid})`}>
         {standing.map(({ cube, i }) => (
           <IceCube key={i} uid={uid} cube={cube} submerged={submerged} {...props} />
         ))}
@@ -221,11 +228,11 @@ function IceMeniscus({ cube, uid, level, hasTea, toppingLayers, teaColor }: {
   return (
     <G>
       <Defs>
-        <ClipPath id={`ice-edge-${uid}`}>
-          <AnimatedPath animatedProps={outline} />
-        </ClipPath>
+        <Mask id={`ice-edge-${uid}`} maskUnits="userSpaceOnUse" x={0} y={0} width={CUP_ART.w} height={CUP_ART.h}>
+          <AnimatedPath fill="#FFFFFF" animatedProps={outline} />
+        </Mask>
       </Defs>
-      <G clipPath={`url(#ice-edge-${uid})`}>
+      <G mask={`url(#ice-edge-${uid})`}>
         <AnimatedPath animatedProps={waterline} fill="none" stroke={teaColor ?? '#769FAC'} strokeWidth={0.8} />
       </G>
     </G>
