@@ -27,4 +27,19 @@ npx expo export --platform web
 NODE_OPTIONS="--dns-result-order=ipv4first" npx eas-cli@latest deploy --prod
 ```
 
-The EAS project ID and single-page web export are configured in `app.json`. This workflow deploys the web game; native store builds and OTA updates use separate EAS commands.
+The EAS project ID and single-page web export are configured in `app.json`.
+
+## The installed apps
+
+Pushing to `main` also publishes an over-the-air update, which the installed `.apk`/`.ipa` offer
+the player on their next launch. The "Deploy web" workflow does both, so the page and the apps are
+never running different games. To publish one by hand:
+
+```sh
+npx eas-cli@latest update --channel production --environment production --message "what changed"
+```
+
+An update is JavaScript and assets only. **Anything native — a new dependency, a new SDK, a config
+plugin — needs `expo.version` bumped and a fresh "Build apps" run**, because the update runtime
+version is that version; `npm test` fails if the native dependencies move without it. See
+"Updating itself" in `CLAUDE.md`.

@@ -55,7 +55,8 @@ not re-litigating:
   update`, while the published update itself was provably intact (manifest `200`, all 84 assets
   downloadable with the `assetRequestHeaders` tokens). The fault is inside the client — it filters
   updates with `sdkVersions.contains(manifest.getExpoGoSDKVersion())` — and the fix (expo/expo#46944)
-  had not shipped as of October 2026.
+  had not shipped as of October 2026. **A standalone build is not affected by any of this**, and
+  EAS Update is exactly how the installed apps keep themselves current; see "Updating itself".
 - **A standalone build** is fine on Android (EAS generates the keystore; nothing to sign up for) but
   iOS needs a paid Apple Developer account for any private route, ad-hoc or TestFlight.
 - **The stores' private channels** — Play internal testing (100 testers by email, $25 once) and
@@ -96,8 +97,8 @@ src/game/               pure game logic, no React
   random.ts             seeded RNG; the seed lives in state so the reducer stays pure
   money.ts              formatMoney: 1 game unit = 10.000 ₫, shown as "10k"
   save.ts               serialize/validate a GameState for storage; see "Saving the shop"
-src/updates/            releases.ts: read/compare the repo's GitHub releases (pure, no network)
-                        useUpdate.ts: check, download and hand over; see "Updating itself"
+src/updates/            useUpdate.ts: ask EAS Update once a launch, download and restart into it;
+                        see "Updating itself"
 src/screens/            LoadingScreen (the wait while the artwork comes in), TitleScreen,
                         DayEndScreen, and the in-play screens:
   GameScreen.tsx        orchestrator: HUD, the two-page swipe pager + tab indicator, effects/opening/pause overlays
@@ -120,7 +121,7 @@ src/motion.ts           shared animation timings/easings
 src/theme.ts            colours and font family names
 src/useSavedGame.ts     Async Storage read on launch, slow write while playing
 src/useArtwork.ts       pulls the painted sprites in before the shop opens; see "Opening the shop"
-tools/stamp-build.cjs   writes the CI run number into app.json so a build knows its own release
+tools/stamp-build.cjs   writes the CI run number into app.json as versionCode/buildNumber
 ```
 
 ### Saving the shop
@@ -207,49 +208,62 @@ A repeat visit is cached, and on a phone the sprites are already in the app, so 
 ### Updating itself
 
 The shop is handed out as files rather than through a store, so nothing tells a player a new build
-exists — the game asks. On the **title screen only**, it reads
-`api.github.com/repos/<repo>/releases/latest` (public, no token, drafts and pre-releases already
-excluded) and offers what it finds. `src/updates/releases.ts` is the part with no React, network or
-platform in it, so `tools/check-updates.cjs` can drive it against a real release payload;
-`src/updates/useUpdate.ts` is the rest.
+exists — the game asks, on **every launch**, and the player decides. `src/updates/useUpdate.ts`
+does the asking and `src/components/UpdateDialog.tsx` is the card it puts up.
 
-**What it can actually do differs per platform, and only one of the three can install anything.**
+**It is EAS Update, not a new file.** A published update is the JavaScript and the artwork, a few
+hundred kilobytes, swapped in place; the app restarts itself and that is the whole install. Both
+platforms, no reinstall, no permission. This replaced reading the repository's GitHub releases and
+handing the `.apk` to Android's package installer — a 95 MB download, `REQUEST_INSTALL_PACKAGES`,
+and nothing at all for iOS, which cannot install an `.ipa` from inside an app. (The EAS Update
+route that is ruled out under "Playing on a phone" is **Expo Go**, whose client cannot launch
+updates at all. A standalone build is a different thing and this is the supported path for it.)
 
-- **Android** can. The `.apk` is downloaded to the cache, and `file.contentUri` is handed to the
-  system package installer through `expo-intent-launcher`. It installs over the running app
-  because both are signed with the same EAS keystore, and the player's save survives. This is why
-  `app.json` declares `REQUEST_INSTALL_PACKAGES`.
-- **iOS cannot, and no library changes that.** There is no API for installing an `.ipa` from inside
-  an app, and the published one is unsigned anyway — it has to be re-signed on a computer with
-  Sideloadly or AltStore. The game says a new build exists and opens the release page. Do not go
-  looking for a way around this; `itms-services://` needs a signed distribution build and a hosted
-  manifest, which is the paid Apple account all over again.
-- **The web build is never behind** — it is redeployed on every push — so it is never offered an
-  update and never makes the request.
+Five parts, and the first is the one that bites:
 
-**A build has to know which build it is**, and `app.json`'s `version` cannot tell it: it is the
-marketing version, it barely changes, and releases are tagged `v<version>+<run number>`. So the
-workflow runs `tools/stamp-build.cjs <run number>` before building, writing `extra.build` (read
-back through `expo-constants`) along with `android.versionCode` and `ios.buildNumber` — Android
-refuses an APK whose `versionCode` went backwards, so leaving every build at the default 1 would
-make updating by file unreliable. The edit is never committed: **the checked-in value stays 0**,
-and 0 is exactly what marks a dev server or a local export as "not a release" and turns the check
-off. EAS uploads the working directory as it is (`eas.json` does not set `cli.requireCommit`), so
-the stamp reaches the cloud build without a commit. Metro caches the embedded config, so a local
-experiment with a stamped `app.json` needs `npx expo export --clear` or it will quietly bundle the
-old number.
+- **The runtime version is the app version** (`runtimeVersion: { policy: "appVersion" }`), and an
+  update carries **no native code**. So adding or removing a native dependency without bumping
+  `expo.version` publishes an update to apps whose native side cannot run it, and the player gets a
+  crash. Nothing in the toolchain notices — it typechecks, it lints, it runs in a browser — so
+  `tools/check-updates.cjs` holds the native dependency list and the version it was recorded at,
+  and fails when they drift apart. When it fails: bump `expo.version`, re-record `BUILT` in that
+  file, and run **Build apps** before pushing. It matches on *names*, which is the case that
+  always crashes; **upgrading** a native package is usually survivable but wants the same
+  treatment, and nothing will tell you.
+- **The player is asked, never updated behind.** `checkAutomatically` is `NEVER` in `app.json`, so
+  the library downloads nothing on its own; the game checks once per launch and the dialog decides.
+  The default (`ON_LOAD`) would fetch an update quietly and swap it in on the next launch, which is
+  precisely the "it changed under me" this is meant to avoid.
+- **The dialog is over every screen**, not a card on the menu, because the question comes up once a
+  launch wherever the player happens to be. It is held back while a shift is actually running
+  (`phase === 'playing' && !paused`) so an unasked-for question cannot drain three patience timers
+  while it is read — at launch the day is always either not started or paused, so in practice it
+  shows immediately. "Để sau" puts it away until the game is opened again.
+- **The save is flushed and awaited before the restart.** `useSaveGame` returns its flush for this
+  one caller: `reloadAsync()` replaces the process, and a write still in flight when it goes is a
+  lost shift.
+- **The channel is set in `app.json`**, as `updates.requestHeaders['expo-channel-name']`, not in
+  `eas.json`. The `.apk` is built by EAS Build but the `.ipa` is archived by the workflow itself,
+  which would get no channel from a build profile; set here, every build asks for the same one
+  whoever built it. It is applied at prebuild, so this only works because the project is CNG.
 
-The check is **once per launch, remembered for 30 minutes**, so returning to the menu between days
-does not re-ask. Failing to reach GitHub is not news and is never shown — only a failed *install*
-is, because the player asked for that one. The notice is on the title screen and nowhere else: on
-Android installing replaces the app and on iOS it opens a browser, and either one mid-shift would
-throw away the day.
+**Publishing is part of "Deploy web"**: the same push that redeploys the page publishes the update,
+so the page and the apps are never running different games. It is skipped when a commit touches
+nothing the app is made of — otherwise a docs-only push would put a dialog in front of a player for
+nothing.
+
+`tools/stamp-build.cjs` still runs before each build, but only for `android.versionCode` and
+`ios.buildNumber` — a newer `.apk` has to install over an older one. It deliberately leaves
+`version` alone, because that is the runtime version: a build that stamped it would stop matching
+the updates published for it.
+
+**What still needs a new file**, and there is no way around it: anything native. New native
+dependency, new Expo SDK, a config plugin that changes the manifest. That is what the version bump
+and a fresh **Build apps** run are for.
 
 The menu **scrolls** (`flexGrow` keeps the spread-out layout wherever there is room). It has no
 vertical slack — on a 375x667 phone the logo was already sliding under the awning before anything
-was put above the card — so a notice that only sometimes appears must not be able to crop the
-shop's own name. On that size the start button ends up a little below the fold while a notice is
-showing; dismissing it with "Để sau" puts everything back.
+was put above the card — so nothing that only sometimes appears may crop the shop's own name.
 
 ### The two pages (swipe navigation)
 `GameScreen` keeps the reducer state, the tick loop, haptics and the `measureInWindow` refs, and hosts a
@@ -636,10 +650,11 @@ stands plainly inside the shelf; divided across the board it laps over the ends 
   `localStorage.getItem('boba-shop.save.v1')` in the console shows the shop as it stands, and
   removing it is how a first launch is tested. Reload mid-shift and you should come back to the
   same minute of the same day behind the pause card, with the opening sign *not* replayed.
-- Updates: the check is off on the web and off for any build nothing stamped, so it does nothing
-  locally by default. To see it, stamp a number behind the latest release (`node tools/stamp-build.cjs 4`)
-  and export with `--clear`; revert `app.json` afterwards. The Android download-and-install leg
-  cannot be exercised without a device — there is no emulator here.
+- Updates: `expo-updates` is a stub on the web that always answers "no update", and the API
+  rejects outright in Expo Go and dev builds, so none of it runs locally. To see the dialog, fake
+  the hook's return in `src/updates/useUpdate.ts` and export — and revert it before committing
+  (`grep -rn PREVIEW src/`). Downloading and restarting into a real update can only be tried on a
+  phone with a build that has `expo-updates` in it.
 - Ice, and anything else drawn in SVG: there is no emulator here, so a browser is the only thing
   that can be driven — and a browser is precisely what will not catch the two gaps under "Drawing
   on a phone" in Conventions. Read that list before changing `CupIce`, `CupToppings` or

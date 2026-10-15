@@ -3,9 +3,19 @@
     "name": "Tiệm Trà Sữa",
     "slug": "boba-shop",
     "version": "1.0.0",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
+    "updates": {
+      "url": "https://u.expo.dev/a7ab235c-52a1-459c-a82e-cca1e4c3cf36",
+      "checkAutomatically": "NEVER",
+      "requestHeaders": {
+        "expo-channel-name": "production"
+      }
+    },
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.manhlong.bobashop"
@@ -18,10 +28,7 @@
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
-      "predictiveBackGestureEnabled": false,
-      "permissions": [
-        "android.permission.REQUEST_INSTALL_PACKAGES"
-      ]
+      "predictiveBackGestureEnabled": false
     },
     "web": {
       "favicon": "./assets/favicon.png",
@@ -31,8 +38,7 @@
     "extra": {
       "eas": {
         "projectId": "a7ab235c-52a1-459c-a82e-cca1e4c3cf36"
-      },
-      "build": 0
+      }
     },
     "owner": "manhlong",
     "plugins": [

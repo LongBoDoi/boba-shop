@@ -1,5 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { AppState, Platform } from 'react-native';
 
 import { createInitialState, GameState } from './game/reducer';
@@ -59,8 +59,13 @@ export function useSavedGame(): GameState | null {
   return initial;
 }
 
-/** Write the shop down as it changes, slowly, and at once whenever the game is put away. */
-export function useSaveGame(state: GameState) {
+/**
+ * Write the shop down as it changes, slowly, and at once whenever the game is put away.
+ *
+ * Returns that flush, because one caller has to be able to *wait* for it: applying an update
+ * restarts the app, and a write that is still in flight when the process goes is a lost shift.
+ */
+export function useSaveGame(state: GameState): () => Promise<void> {
   const latest = useRef(state);
   const written = useRef<string | null>(null);
 
@@ -69,34 +74,42 @@ export function useSaveGame(state: GameState) {
     latest.current = state;
   });
 
-  useEffect(() => {
-    const flush = () => {
-      const json = serializeGame(latest.current);
-      if (json === written.current) return;
-      written.current = json;
+  const flush = useCallback(async () => {
+    const json = serializeGame(latest.current);
+    if (json === written.current) return;
+    written.current = json;
+    try {
+      await AsyncStorage.setItem(KEY, json);
+    } catch (error: unknown) {
       // The game is still playable if the store is full or blocked, so this must not take the app
       // down — but it must not be invisible either, or the shop quietly stops coming back.
-      AsyncStorage.setItem(KEY, json).catch((error: unknown) => {
-        written.current = null;
-        warn('could not be written', error);
-      });
+      written.current = null;
+      warn('could not be written', error);
+    }
+  }, []);
+
+  useEffect(() => {
+    const save = () => {
+      void flush();
     };
 
-    const timer = setInterval(flush, WRITE_EVERY_MS);
+    const timer = setInterval(save, WRITE_EVERY_MS);
     const subscription = AppState.addEventListener('change', (status) => {
-      if (status !== 'active') flush();
+      if (status !== 'active') save();
     });
     // Closing a tab doesn't reliably raise a visibility change, which is all AppState has on the
     // web. `pagehide` does, and on the web the store underneath is synchronous, so a write here
     // lands.
     const page = Platform.OS === 'web' && typeof window !== 'undefined' ? window : null;
-    page?.addEventListener('pagehide', flush);
+    page?.addEventListener('pagehide', save);
 
     return () => {
       clearInterval(timer);
       subscription.remove();
-      page?.removeEventListener('pagehide', flush);
-      flush();
+      page?.removeEventListener('pagehide', save);
+      save();
     };
-  }, []);
+  }, [flush]);
+
+  return flush;
 }

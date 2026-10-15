@@ -8,11 +8,9 @@ import { Character } from '../components/art/Character';
 import { Button } from '../components/Button';
 import { Cup } from '../components/Cup';
 import { SettingsSheet } from '../components/SettingsSheet';
-import { UpdateNotice } from '../components/UpdateNotice';
 import { CustomerLook } from '../game/customers';
 import { Drink } from '../game/ingredients';
 import { GameMode } from '../game/reducer';
-import { useUpdate } from '../updates/useUpdate';
 import { DURATION, timing } from '../motion';
 import { colors, fonts } from '../theme';
 import { pointerEventsStyles } from '../pointerEvents';
@@ -48,9 +46,6 @@ export function TitleScreen({ onStart, mode, onChangeMode }: TitleScreenProps) {
   const { width, height } = useWindowDimensions();
   const cupWidth = Math.min(130, width * 0.32);
   const [settings, setSettings] = useState(false);
-  // The menu is the only place an update is offered: installing replaces the app, and on iOS it
-  // opens a browser — either one mid-shift would throw away the day.
-  const update = useUpdate();
 
   return (
     <View style={styles.screen}>
@@ -84,7 +79,6 @@ export function TitleScreen({ onStart, mode, onChangeMode }: TitleScreenProps) {
           </View>
 
           <SlideUp>
-            <UpdateNotice state={update.state} onInstall={update.install} />
             <View style={styles.card}>
               {stepsFor(mode).map((step) => (
                 <Text key={step} style={styles.step}>

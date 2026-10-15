@@ -12,12 +12,14 @@ import { useSharedValue, withDelay, withTiming, Easing } from 'react-native-rean
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { ScreenWipe } from './src/components/ScreenWipe';
+import { UpdateDialog } from './src/components/UpdateDialog';
 import { gameReducer, GameState } from './src/game/reducer';
 import { DayEndScreen } from './src/screens/DayEndScreen';
 import { GameScreen } from './src/screens/GameScreen';
 import { LoadingScreen } from './src/screens/LoadingScreen';
 import { TitleScreen } from './src/screens/TitleScreen';
 import { colors } from './src/theme';
+import { useUpdate } from './src/updates/useUpdate';
 import { useArtwork } from './src/useArtwork';
 import { useSavedGame, useSaveGame } from './src/useSavedGame';
 
@@ -44,7 +46,8 @@ export default function App() {
 
 function Shop({ initial }: { initial: GameState }) {
   const [state, dispatch] = useReducer(gameReducer, initial);
-  useSaveGame(state);
+  const save = useSaveGame(state);
+  const update = useUpdate(save);
 
   // When the phase changes, keep showing the old screen (frozen) until the wipe covers it.
   const [previous, setPrevious] = useState(state);
@@ -88,6 +91,12 @@ function Shop({ initial }: { initial: GameState }) {
           />
         )}
         <ScreenWipe progress={wipe} />
+        {/* Over every screen, not only the menu — but held back while a shift is actually
+            running, so a question nobody asked for cannot drain three patience timers while it
+            is read. The check lands at launch, where the day is either not started or paused. */}
+        {update.status !== 'none' && !(update.status === 'offered' && screen.phase === 'playing' && !screen.paused) && (
+          <UpdateDialog update={update} />
+        )}
       </View>
     </SafeAreaProvider>
   );

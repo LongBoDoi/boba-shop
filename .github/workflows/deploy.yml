@@ -1,5 +1,8 @@
 name: Deploy web
 
+# Also publishes the over-the-air update the installed apps ask for on launch. The two go
+# together on purpose: the page and the apps should never be running different games.
+
 on:
   push:
     branches: [main]
@@ -22,6 +25,10 @@ jobs:
     steps:
       - name: Check out source
         uses: actions/checkout@v7
+        with:
+          # The update step compares this push against the one before it; a shallow clone
+          # cannot see that far back.
+          fetch-depth: 0
 
       - name: Set up Node.js
         uses: actions/setup-node@v7
@@ -54,6 +61,40 @@ jobs:
             exit 1
           fi
           npx --yes eas-cli@latest deploy --prod --non-interactive
+
+      - name: Decide whether the apps need the update
+        id: app
+        env:
+          BEFORE: ${{ github.event.before }}
+        run: |
+          # Every push that changes the game publishes an update, and every installed app offers
+          # it on its next launch. A commit that only touches docs must not put a dialog in
+          # front of a player for nothing.
+          if [ -z "$BEFORE" ] || ! git cat-file -e "$BEFORE^{commit}" 2>/dev/null; then
+            echo "No usable previous commit; publishing to be safe."
+            echo 'changed=yes' >> "$GITHUB_OUTPUT"
+          elif git diff --name-only "$BEFORE" '${{ github.sha }}' \
+            | grep -qE '^(App\.tsx|app\.json|src/|assets/|public/|package-lock\.json)'; then
+            echo 'changed=yes' >> "$GITHUB_OUTPUT"
+          else
+            echo 'Only files outside the app changed; skipping the update.'
+            echo 'changed=no' >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Publish the update
+        if: steps.app.outputs.changed == 'yes'
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+          NODE_OPTIONS: --dns-result-order=ipv4first
+        run: |
+          # The channel every build asks for; app.json sets it as a request header so the
+          # workflow-built .ipa is on it too, not only the EAS-built .apk.
+          npx --yes eas-cli@latest update \
+            --channel production \
+            --environment production \
+            --message "$(git log -1 --pretty=%s)" \
+            --non-interactive
+          echo 'Published an update on the **production** channel.' >> "$GITHUB_STEP_SUMMARY"
 
       - name: Show production URL
         run: echo '[Open the game](https://boba-shop.expo.app)' >> "$GITHUB_STEP_SUMMARY"

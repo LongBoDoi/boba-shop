@@ -3,18 +3,14 @@
  *
  *   node tools/stamp-build.cjs <number>
  *
- * `app.json`'s `version` is the marketing one and barely changes; releases are tagged
- * `v<version>+<run number>`, so the version alone cannot tell `v1.0.0+4` from `v1.0.0+5`. The
- * build workflow runs this with `github.run_number` before building, and the game reads it back
- * through `expo-constants` to compare itself against the latest release. See "Updating itself" in
- * CLAUDE.md.
+ * `versionCode` and `buildNumber` are the platforms' own idea of a build, and both have to count
+ * up: Android refuses to install an APK whose versionCode went backwards, so leaving every build
+ * at the default 1 would make installing a newer file over an older one unreliable. The build
+ * workflow runs this with `github.run_number` before building.
  *
- * This is a build-time edit and is never committed: the checked-in value stays 0, which is what
- * marks a dev server or a local export as "not a release" and turns the update check off.
- *
- * `versionCode` and `buildNumber` are stamped from the same number because they are the platforms'
- * own idea of a build: Android refuses to install an APK whose versionCode went backwards, so
- * leaving every build at the default 1 would make upgrading by file unreliable.
+ * This is a build-time edit and is never committed. It deliberately leaves `version` alone —
+ * that is the update runtime version (see "Updating itself" in CLAUDE.md), and a build that
+ * stamped it would stop matching the updates published for it.
  */
 const fs = require('node:fs');
 const path = require('node:path');
@@ -32,12 +28,12 @@ if (!config.expo) {
   process.exit(1);
 }
 
-config.expo.extra = { ...config.expo.extra, build };
 config.expo.android = { ...config.expo.android, versionCode: build };
 config.expo.ios = { ...config.expo.ios, buildNumber: String(build) };
 
 fs.writeFileSync(file, `${JSON.stringify(config, null, 2)}\n`);
 console.log(
   `stamp-build: ${config.expo.version} build ${build} ` +
-    `(versionCode ${build}, buildNumber ${config.expo.ios.buildNumber})`,
+    `(versionCode ${build}, buildNumber ${config.expo.ios.buildNumber}, ` +
+    `runtime version ${config.expo.version} — unchanged)`,
 );
