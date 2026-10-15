@@ -2,10 +2,11 @@ import { useEffect, useId, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import Animated, { SharedValue, useAnimatedReaction, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { scheduleOnRN } from 'react-native-worklets';
-import Svg, { Defs, Ellipse, LinearGradient, RadialGradient, Rect, Stop } from 'react-native-svg';
+import Svg, { Defs, Ellipse, RadialGradient, Stop } from 'react-native-svg';
 
 import { fonts } from '../theme';
 import { pointerEventsStyles } from '../pointerEvents';
+import { pourLevel } from './cupGeometry';
 
 type CupPosition = { cupX: SharedValue<number>; cupY: SharedValue<number>; cupScale: SharedValue<number>; cupW: number; cupH: number };
 
@@ -41,97 +42,93 @@ export interface PourMeterState {
   running: boolean;
 }
 
-const MILESTONES = [
-  { value: 0, label: 'Cạn' },
-  { value: 0.25, label: 'Ít' },
-  { value: 0.5, label: 'Nửa ly' },
-  { value: 0.75, label: 'Gần đầy' },
-  { value: 1, label: 'Đầy' },
+/** Quarter marks down the track, so the bar can be read at a glance and not only by its label. */
+const MARKS = [0.25, 0.5, 0.75];
+/**
+ * What the cup is called at the level it holds, as the top of each band.
+ *
+ * These are not the quarters the marks are drawn at. A label names what is in the glass, and taken
+ * as `floor(level * 4)` two of them lied about it: a cup a quarter full was called "Cạn" — dry —
+ * and "Đầy" landed on exactly 1 and nowhere else, so a pour ran from "Gần đầy" straight to
+ * "Tràn ly!" without ever passing through full. "Đầy" now covers the brim the cup is actually
+ * drawn at (`CUP_SURFACE_TOP`), which is what the player is looking at while they hold the tap.
+ */
+const LABELS = [
+  { upTo: 0.02, label: 'Cạn' },
+  { upTo: 0.35, label: 'Ít' },
+  { upTo: 0.6, label: 'Nửa ly' },
+  { upTo: 0.88, label: 'Gần đầy' },
+  { upTo: 1, label: 'Đầy' },
 ];
+const OVERFLOW = 'Tràn ly!';
 
-/** Screen overlay stays visible for the whole docking session, including before the first pour. */
-export function PourMeter({ level, running, color, screenHeight }: PourMeterState & { screenHeight: number }) {
-  const uid = useId().replace(/[^a-zA-Z0-9]/g, '');
-  const [milestone, setMilestone] = useState(0);
+/** Which band the live level falls in; `LABELS.length` is the one past the brim. */
+function pourBand(raw: number) {
+  'worklet';
+  if (raw > 1) return LABELS.length;
+  const fill = pourLevel(raw);
+  for (let i = 0; i < LABELS.length; i++) {
+    if (fill <= LABELS[i].upTo) return i;
+  }
+  return LABELS.length - 1;
+}
+
+/** A small floating bar beneath the order bubble, away from fingers holding the taps. */
+export function PourMeter({ level, color }: PourMeterState) {
+  const [band, setBand] = useState(0);
   const show = useSharedValue(0);
-  const trackHeight = Math.round(Math.max(180, Math.min(300, screenHeight * 0.32)));
   useEffect(() => {
     show.set(withTiming(1, { duration: 180 }));
   }, [show]);
-  // No polling or per-frame React renders. Only milestone crossings update accessibility text.
+  // No polling or per-frame React renders. Only crossing into another band redraws the label.
   useAnimatedReaction(
-    () => level.get() > 1 ? 5 : Math.floor(Math.max(0, Math.min(1, level.get())) * 4),
-    (current, previous) => { if (current !== previous) scheduleOnRN(setMilestone, current); },
+    () => pourBand(level.get()),
+    (current, previous) => { if (current !== previous) scheduleOnRN(setBand, current); },
     [level],
   );
   const appear = useAnimatedStyle(() => ({
-    opacity: show.get(), transform: [{ translateY: -(trackHeight + 91) / 2 }, { translateX: (1 - show.get()) * 10 }],
-  }), [show, trackHeight]);
-  const bar = useAnimatedStyle(() => {
-    const fill = Math.max(0, Math.min(1, level.get()));
-    return { transform: [{ translateY: (trackHeight - 4) * (1 - fill) / 2 }, { scaleY: fill }] };
-  }, [level, trackHeight]);
-  const overflow = useAnimatedStyle(() => ({ opacity: level.get() > 1 ? 1 : 0 }), [level]);
-  const valueText = milestone > 4 ? 'Tràn ly' : MILESTONES[milestone].label;
+    opacity: show.get(), transform: [{ translateY: (1 - show.get()) * -4 }],
+  }), [show]);
+  // Share the cup's fill mapping; size against the track's inner bounds on every platform.
+  const bar = useAnimatedStyle(() => ({ width: `${pourLevel(level.get()) * 100}%` as `${number}%` }), [level]);
+  // The bright front of the liquid belongs to a bar still on its way. Held on to the end it sits
+  // between the fill and the track's rounded cap, where it reads as a gap the bar never closed —
+  // so it is gone by the time the bar reaches it.
+  const edge = useAnimatedStyle(() => ({
+    opacity: Math.max(0, Math.min(1, (1 - pourLevel(level.get())) * 16)),
+  }), [level]);
+  const track = useAnimatedStyle(() => ({ borderColor: level.get() > 1 ? '#D34C6A' : '#BC8E61' }), [level]);
+  const valueText = band >= LABELS.length ? OVERFLOW : LABELS[band].label;
   return (
     <Animated.View accessibilityRole="progressbar" accessibilityLabel="Lượng trà trong ly"
       accessibilityValue={{ text: valueText }} aria-valuetext={valueText} style={[styles.meter, appear, pointerEventsStyles.none]}>
-      <Text style={styles.title}>Lượng trà</Text>
-      <Text style={styles.subtitle}>{running ? 'Đang rót' : 'Sẵn sàng'}</Text>
-      <View style={{ height: trackHeight, marginTop: 12, marginBottom: 10 }}>
-        <View style={[styles.track, { height: trackHeight }]}>
-          <Animated.View style={[StyleSheet.absoluteFill, bar]}>
-            <Svg width="100%" height="100%" viewBox="0 0 36 100" preserveAspectRatio="none">
-              <Defs><LinearGradient id={`meter-fill-${uid}`} x1="0%" y1="0%" x2="100%" y2="0%">
-                <Stop offset="0" stopColor={color} />
-                <Stop offset="0.4" stopColor={color} />
-                <Stop offset="0.4" stopColor="#FFF0CB" stopOpacity="0.7" />
-                <Stop offset="0.52" stopColor={color} />
-                <Stop offset="1" stopColor={color} />
-              </LinearGradient></Defs>
-              <Rect width={36} height={100} fill={`url(#meter-fill-${uid})`} />
-            </Svg>
-            <View style={styles.fillEdge} />
+      <Animated.View style={[styles.track, track]}>
+        <View style={styles.trackContent}>
+          <Animated.View style={[styles.fill, { backgroundColor: color }, bar]}>
+            <View style={styles.fillShine} />
+            <Animated.View style={[styles.fillEdge, edge]} />
           </Animated.View>
+          {MARKS.map((mark) => (
+            <View key={mark} style={[styles.tick, { left: `${mark * 100}%` }]} />
+          ))}
+          <Text style={[styles.value, band >= LABELS.length && styles.overflowText]}>{valueText}</Text>
         </View>
-        {MILESTONES.map((mark) => <MeterMilestone key={mark.value} level={level}
-          value={mark.value} label={mark.label} trackHeight={trackHeight} />)}
-      </View>
-      <Animated.View style={[styles.overflow, overflow]}><Text style={styles.overflowText}>Tràn ly!</Text></Animated.View>
+      </Animated.View>
     </Animated.View>
-  );
-}
-
-function MeterMilestone({ level, value, label, trackHeight }: {
-  level: SharedValue<number>; value: number; label: string; trackHeight: number;
-}) {
-  const reached = useAnimatedStyle(() => ({
-    backgroundColor: level.get() >= value ? '#F06094' : '#C5A688',
-  }), [level, value]);
-  const text = useAnimatedStyle(() => ({ color: level.get() >= value ? '#853A51' : '#9C7E62' }), [level, value]);
-  return (
-    <View style={[styles.milestone, { top: (1 - value) * trackHeight - 9 }]}>
-      <View style={styles.tick} />
-      <Animated.View style={[styles.dot, reached]} />
-      <Animated.Text style={[styles.milestoneText, text]}>{label}</Animated.Text>
-    </View>
   );
 }
 
 const styles = StyleSheet.create({
   shadow: { position: 'absolute' },
-  meter: { position: 'absolute', right: 12, top: '50%', width: 120, paddingHorizontal: 10,
-    paddingTop: 10, paddingBottom: 8, borderRadius: 20, backgroundColor: '#FFF6E8F5',
-    borderWidth: 2, borderColor: '#C78D5C' },
-  title: { fontFamily: fonts.bold, fontSize: 16, lineHeight: 21, color: '#79442A' },
-  subtitle: { fontFamily: fonts.semi, fontSize: 11, lineHeight: 14, color: '#AF6C55' },
-  track: { position: 'absolute', left: 0, width: 34, borderRadius: 15,
-    borderWidth: 2, borderColor: '#BC8E61', backgroundColor: '#EBD6B7', overflow: 'hidden' },
-  fillEdge: { position: 'absolute', left: 0, right: 0, top: 0, height: 3, backgroundColor: '#FFF1CF' },
-  milestone: { position: 'absolute', left: 25, right: -4, height: 18, flexDirection: 'row', alignItems: 'center' },
-  tick: { width: 12, height: 2, backgroundColor: '#9D6A47' },
-  dot: { width: 6, height: 6, borderRadius: 3, marginHorizontal: 4 },
-  milestoneText: { fontFamily: fonts.bold, fontSize: 12, lineHeight: 18 },
-  overflow: { height: 16, alignItems: 'center' },
-  overflowText: { fontFamily: fonts.bold, fontSize: 12, lineHeight: 16, color: '#D34C6A' },
+  meter: { width: 220, maxWidth: '100%' },
+  value: { fontFamily: fonts.bold, fontSize: 10, lineHeight: 14, color: '#79442A',
+    backgroundColor: '#FFF6E8E6', borderRadius: 5, paddingHorizontal: 5 },
+  track: { height: 20, borderRadius: 10, borderWidth: 2,
+    borderColor: '#BC8E61', backgroundColor: '#EBD6B7', overflow: 'hidden' },
+  trackContent: { flex: 1, alignItems: 'center', justifyContent: 'center' },
+  fill: { position: 'absolute', left: 0, top: 0, bottom: 0 },
+  fillShine: { position: 'absolute', left: 0, right: 0, top: 2, height: 3, backgroundColor: '#FFF0CB', opacity: 0.55 },
+  fillEdge: { position: 'absolute', right: 0, bottom: 0, top: 0, width: 2, backgroundColor: '#FFF1CF' },
+  tick: { position: 'absolute', top: 0, bottom: 0, width: 2, marginLeft: -1, backgroundColor: '#9D6A47', opacity: 0.55 },
+  overflowText: { color: '#D34C6A' },
 });

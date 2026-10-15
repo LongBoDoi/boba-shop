@@ -3,7 +3,7 @@ import { Image, StyleSheet, View } from 'react-native';
 import Svg, { Ellipse } from 'react-native-svg';
 import { SharedValue } from 'react-native-reanimated';
 
-import { ART, COASTER, ROOM, ROOM_BG, ROOM_BG_SIZE, ROOM_BG_TABLE } from './kitchenArt';
+import { CUP_HOLDER, ROOM_BG, ROOM_BG_CUP_HOLDER, ROOM_BG_SIZE, ROOM_BG_TABLE } from './kitchenArt';
 import { fitBackground, PannableBackground } from './PannableBackground';
 import { pointerEventsStyles } from '../../pointerEvents';
 
@@ -29,46 +29,29 @@ export const SHOP = {
   inkSoft: '#8A8290',
 };
 
-/**
- * Where on the coaster sprite the cup's base belongs. Its top face is an ellipse centred about
- * 0.39 down, but a cup standing dead centre reads as pushed to the back of the disc, so it sits a
- * little forward of that.
- */
-const COASTER_FACE = 0.52;
-
-/**
- * The run of the plate the player actually works on — the dispenser shelf down to the bench. A
- * phone shorter than the painting has to lose something off one end or the other, and it is the
- * ceiling and the floor that can go, so the room is centred on this band rather than on itself.
- */
-const KEEP = (ROOM.shelf.top + ROOM.bench.base) / 2;
-
-export interface RoomFit {
-  /** Plate pixels to room pixels. */
-  scale: number;
-  px: (x: number) => number;
-  py: (y: number) => number;
-}
-
-/**
- * Preserve the equipment's existing placement and scale in the original portrait coordinate
- * system. The new background has its own dimensions and pans independently of this layout.
- */
-export function fitRoom(W: number, H: number): RoomFit {
-  const scale = Math.max(W / ROOM.width, H / ROOM.height);
-  const drawH = ROOM.height * scale;
-  const dx = (W - ROOM.width * scale) / 2;
-  // centred on the working band, then held inside the painting so no edge of it shows
-  const dy = Math.max(H - drawH, Math.min(0, H / 2 - KEEP * scale));
-  return { scale, px: (x: number) => dx + x * scale, py: (y: number) => dy + y * scale };
-}
-
 /** The countertop moves horizontally with the painting, but its height is constant while panning. */
 export function kitchenTableFor(width: number, height: number) {
   const { scale, top } = fitBackground(width, height, ROOM_BG_SIZE.width, ROOM_BG_SIZE.height);
   return {
     top: top + ROOM_BG_TABLE.top * scale,
     base: top + ROOM_BG_TABLE.base * scale,
+  };
+}
+
+/**
+ * The holder keeps the size and the height on the counter the painting gave it, so the room it
+ * was lifted out of still fits around it. Only its left edge is the screen's rather than the
+ * painting's: the wall pans and the cup standing on the holder does not, and the painting had it
+ * near the middle anyway.
+ */
+export function kitchenHolderFor(width: number, height: number) {
+  const { scale, top } = fitBackground(width, height, ROOM_BG_SIZE.width, ROOM_BG_SIZE.height);
+  const holderWidth = ROOM_BG_CUP_HOLDER.width * scale;
+  return {
+    left: (width - holderWidth) / 2,
+    top: top + ROOM_BG_CUP_HOLDER.y * scale,
+    width: holderWidth,
+    height: ROOM_BG_CUP_HOLDER.height * scale,
   };
 }
 
@@ -94,24 +77,16 @@ interface KitchenRoomProps {
   children?: ReactNode;
   width: number;
   height: number;
-  /** Where the cup stands on the work top, so its coaster goes under it. */
-  tableLine: number;
-  matX: number;
-  matW: number;
   panOffset: SharedValue<number>;
   scrollEnabled: boolean;
   onPanBegin: () => void;
 }
 
-/**
- * The shop, in one painting: the tiled wall and its lamps, the dispenser shelf, the fridge, the
- * work top, the bench and the pink units at the foot of it. All of it is scenery — the equipment
- * the player touches is drawn on top, standing on the surfaces the plate already has.
- */
-export const KitchenRoom = memo(function KitchenRoom({ width: W, height: H, tableLine, matX, matW, children, panOffset, scrollEnabled, onPanBegin }: KitchenRoomProps) {
+/** The equipment wall pans behind a fixed preparation mat and draggable cup. */
+export const KitchenRoom = memo(function KitchenRoom({ width: W, height: H, children, panOffset, scrollEnabled, onPanBegin }: KitchenRoomProps) {
   if (W <= 0 || H <= 0) return null;
 
-  const coasterH = matW / ART.coaster;
+  const holder = kitchenHolderFor(W, H);
 
   return (
     <View style={[StyleSheet.absoluteFill, pointerEventsStyles.boxNone]}>
@@ -128,22 +103,11 @@ export const KitchenRoom = memo(function KitchenRoom({ width: W, height: H, tabl
         {children}
       </PannableBackground>
 
+      {/* The holder carries its own painted contact shadow, as it did in the room it came from. */}
       <View style={[StyleSheet.absoluteFill, pointerEventsStyles.none]}>
-        {/* The coaster is a disc lying on the work top, so a cup standing at `tableLine` meets it
-            at its middle while the near rim carries on in front, its shadow tucked under that rim. */}
-        <Shadow cx={matX + matW / 2} cy={tableLine + coasterH * 0.38} rx={matW * 0.52} ry={coasterH * 0.26} />
-        <Image
-          source={COASTER}
-          style={{
-            position: 'absolute',
-            left: matX,
-            // its top face is an ellipse centred COASTER_FACE down the sprite — that is where the
-            // cup has to stand for it to look like it is in the middle of the disc
-            top: tableLine - coasterH * COASTER_FACE,
-            width: matW,
-            height: coasterH,
-          }}
-        />
+        <Image testID="cup-holder" source={CUP_HOLDER} fadeDuration={0}
+          style={{ position: 'absolute', left: holder.left, top: holder.top,
+            width: holder.width, height: holder.height }} />
       </View>
     </View>
   );

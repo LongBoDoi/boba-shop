@@ -17,7 +17,6 @@ import { Button } from '../components/Button';
 import { EffectsGeometry, EffectsLayer, Point } from '../components/Effects';
 import { Hud } from '../components/Hud';
 import { OpeningSign } from '../components/OpeningSign';
-import { PourMeter, PourMeterState } from '../components/PourFeedback';
 import { SettingsSheet } from '../components/SettingsSheet';
 import { Ticket } from '../components/TicketRail';
 import { describeUnlocks } from '../game/levels';
@@ -48,7 +47,6 @@ export function GameScreen({ state, dispatch }: GameScreenProps) {
   const [measureToken, setMeasureToken] = useState(0);
   // The pager must let go while the cup is being dragged around the kitchen.
   const [dragging, setDragging] = useState(false);
-  const [pourMeter, setPourMeter] = useState<PourMeterState | null>(null);
 
   useEffect(() => {
     if (paused || opening) return;
@@ -184,16 +182,17 @@ export function GameScreen({ state, dispatch }: GameScreenProps) {
             ? 'Order tự được nhận — xem ở Pha chế.'
             : 'Chạm vào khách ở Quầy để nhận order.',
           'Chạm Pha chế ➜, kéo ly xuống dưới bình trà.',
-          'Giữ vòi để rót — thanh nổi hiển thị lượng trà trong ly.',
-          'Kéo đá từ máy dưới kệ trà vào ly: 1 muỗng ít đá, 2 muỗng đá thường.',
+          'Giữ vòi để rót — xem lượng trà ở thanh phía trên bếp.',
+          'Kéo đá từ khay dưới kệ trà vào ly: 1 muỗng ít đá, 2 muỗng đá thường.',
         ]
       : describeUnlocks(state.day);
 
   return (
-    <SafeAreaView style={styles.screen} edges={['top', 'left', 'right']}>
+    <SafeAreaView style={[styles.screen, page === 1 && styles.warmScreen]} edges={['top', 'left', 'right']}>
       <View ref={rootRef} style={styles.root} onLayout={measureRoot}>
         <Hud
           day={state.day}
+          warm={page === 1}
           clock={state.clock}
           durationMs={config.durationMs}
           coins={state.coins}
@@ -244,7 +243,6 @@ export function GameScreen({ state, dispatch }: GameScreenProps) {
             onIce={iceScoop}
             onSugar={sugarPump}
             onDragging={setDragging}
-            onMeterChange={setPourMeter}
             onClear={() => dispatch({ type: 'CLEAR_CUP' })}
             onServe={() => dispatch({ type: 'SERVE' })}
             machineRef={machineRef}
@@ -253,7 +251,6 @@ export function GameScreen({ state, dispatch }: GameScreenProps) {
         </ScrollView>
 
         <EffectsLayer departures={state.departures} discarded={state.discarded} geometry={geometry} cupWidth={prep.cupWidth} />
-        {page === 1 && pourMeter && <PourMeter {...pourMeter} screenHeight={windowHeight} />}
 
         {opening && (
           <OpeningSign
@@ -288,7 +285,7 @@ export function GameScreen({ state, dispatch }: GameScreenProps) {
 /** The two-page indicator under the HUD: tap a label to switch screens. */
 function PageTabs({ page, counterBadge, prepBadge, onGo }: { page: number; counterBadge: number; prepBadge: number; onGo: (p: number) => void }) {
   return (
-    <View style={styles.tabs}>
+    <View style={[styles.tabs, page === 1 && styles.warmTabs]}>
       <Tab label="Quầy" active={page === 0} badge={counterBadge} onPress={() => onGo(0)} />
       <Tab label="Pha chế" active={page === 1} badge={prepBadge} onPress={() => onGo(1)} />
     </View>
@@ -332,6 +329,8 @@ function PauseMenu({ onResume, onSettings, onQuit }: { onResume: () => void; onS
 }
 
 const styles = StyleSheet.create({
+  warmScreen: { backgroundColor: '#E9D0A7' },
+  warmTabs: { backgroundColor: '#A18151' },
   screen: {
     flex: 1,
     backgroundColor: colors.primary,

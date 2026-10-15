@@ -171,42 +171,34 @@ export const SCOOP_ART: Record<string, number> = {
 export const BIN_HEAD = 0.1713;
 
 // ------------------------------------------------------------------ the room around it
+/** Warm watercolor room; interactive equipment is anchored in this plate's coordinates. */
+export const ROOM_BG = require('../../assets/kitchen/kitchen-warm-clear.png');
 /**
- * The prep room itself, painted whole. It used to be built out of fittings — a tiled wall, a
- * shelf plank, a stainless bar, a run of cabinet fronts — each stretched across the room and
- * each needing its own line computed; now it is one plate and the fittings are simply in it.
+ * The painted holder, lifted off the original room so the wall can pan behind it. It is cut to
+ * twice the box below and nothing else, so it is drawn straight into that box — see
+ * `tools/cut-cup-holder.py` for why a sprite this small is not shipped at the size imagegen
+ * returned it.
  */
-export const ROOM_BG = require('../../assets/kitchen/kitchen-background.png');
-
-/** Background dimensions are separate from ROOM so replacing the painting doesn't move equipment. */
-export const ROOM_BG_SIZE = { width: 1870, height: 841 };
-
-/** The front countertop's flat surface, measured in the panorama's own pixels. */
-export const ROOM_BG_TABLE = { top: 505, base: 584 };
-
-/** The middle rack on the left: tank collars mount to its edge, cups rest on the shelf below. */
+export const CUP_HOLDER = require('../../assets/kitchen/cup-holder.png');
+export const ROOM_BG_SIZE = { width: 1536, height: 1024 };
+export const ROOM_BG_TABLE = { top: 736, base: 950 };
 export const ROOM_BG_TEA_SHELF = {
-  x0: 168, x1: 624, capacity: 6,
-  // Mounted on the front of the middle rack; the cup stands on the lowest shelf's top face.
-  tankWidth: 64, mount: 314, bottom: 398,
+  x0: 38, x1: 610, tankWidth: 168,
+  bases: [300, 505],
 };
-
-/** The built-in ice machine under the tea rack, including its top and glass drawer. */
-export const ROOM_BG_ICE_MACHINE = {
-  x: 78, y: 416, width: 228, height: 89,
-  sign: { x: 36, y: 6, height: 24 },
-};
-
-/** Two rows of upright topping containers in the middle cabinet, left of the syrup recess. */
+export const ROOM_BG_ICE_MACHINE = { x: 230, y: 585, width: 265, height: 116 };
+/**
+ * Where the painting itself draws the cup holder. The holder is the one thing measured here that
+ * does *not* pan with the room — the cup stands on it and the cup stays put — so only its size
+ * and its height on the counter come from these pixels; it is centred on the screen, which is
+ * where the painting puts it anyway.
+ */
+export const ROOM_BG_CUP_HOLDER = { x: 553, y: 782, width: 424, height: 127 };
 export const ROOM_BG_TOPPING_SHELF = {
-  x0: 704, x1: 955, gap: 6, height: 82,
-  bases: [303, 395],
-  // Fixed slots follow the reference, independently of the order ingredients unlock.
+  x0: 1112, x1: 1500, gap: 8, height: 100,
+  bases: [539, 642],
   slots: ['pearls', 'popping', 'pudding', 'pandan', 'lychee', 'grass'],
 };
-
-/** Keep the holder wide enough for the cup without letting it spill over the countertop. */
-export const COASTER_WIDTH_RATIO = 1.5;
 
 /**
  * The original portrait room's 941x1672 coordinate system, retained for the existing equipment.
@@ -398,13 +390,10 @@ export const SCOOP_BOWL = { cx: 0.34, cy: 0.57, r: 0.17 };
 export const PRELOAD: number[] = [
   // the room itself, and what stands in it
   ROOM_BG,
-  COASTER,
-  TEA_TANK,
-  TOPPING_BOX_EMPTY,
-  ...Object.values(TOPPING_BOX),
-  SYRUP,
+  CUP_HOLDER,
+  BIN_EMPTY,
+  ...Object.values(BIN),
   SCOOP,
-  ...Object.values(MILK),
   ...Object.values(FOAM),
   // what you carry, and what lands in the cup
   ...Object.values(SCOOPFUL),

@@ -1,5 +1,6 @@
+import { useId } from 'react';
 import { Image, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
-import Svg, { ClipPath, Defs, Path, Rect } from 'react-native-svg';
+import Svg, { Defs, Mask, Path, Rect } from 'react-native-svg';
 
 import {
   CategoryId,
@@ -29,6 +30,14 @@ const SPOKEN: CategoryId[] = ['tea', 'milk', 'sweetness', 'ice', 'toppings', 'fo
 const HEART =
   'M12 21.1 C5.6 16.8 2.2 13.2 2.2 9.3 C2.2 6.2 4.6 3.9 7.6 3.9 C9.5 3.9 11.1 4.8 12 6.3 ' +
   'C12.9 4.8 14.5 3.9 16.4 3.9 C19.4 3.9 21.8 6.2 21.8 9.3 C21.8 13.2 18.4 16.8 12 21.1 Z';
+
+/**
+ * The panel's own height, held constant whether or not an order is selected.
+ *
+ * The kitchen below it is laid out from the height it is given (`layoutKitchen`), so a panel that
+ * grew a row when an order was picked would move every dispenser and the cup with it.
+ */
+export const ORDER_PANEL_HEIGHT = 132;
 
 interface Chip {
   key: string;
@@ -72,7 +81,7 @@ interface OrderBubbleProps {
   config: DayConfig;
   /** Fraction of the serve window still left; the heart empties with it. */
   patience: number;
-  /** The other taken orders, pegged under the card's right corner. */
+  /** The other taken orders, waiting their turn in the panel's own queue. */
   tickets: Ticket[];
   selectedSlot: number | null;
   width: number;
@@ -81,11 +90,13 @@ interface OrderBubbleProps {
 
 /**
  * The order the player is making, spoken back to them across the top of the kitchen: who it is
- * for, what the drink is called, and a tile for every thing that goes in it, each ticking off as
- * the cup comes together. The heart at the end is the customer's patience, emptying from the top.
+ * for, what the drink is called, how much of it is done, and a tile for every thing that goes in
+ * it. The heart beside the name is the customer's patience, emptying from the top.
  *
- * It is a **speech bubble over the room**, not a note pinned inside it, so nothing it covers is
- * ever something you reach for — and it takes no touches at all except on the pegged orders.
+ * It is a panel docked above the room rather than a note floating over it, so everything it has
+ * to say stays inside its own edges: the other waiting orders stand in a queue to the right of
+ * the heart instead of hanging off the card's corner, where they used to cover the last two
+ * ingredients of a full order. Only those queue portraits take touches.
  */
 export function OrderBubble({
   customer,
@@ -97,85 +108,75 @@ export function OrderBubble({
   width: W,
   onSelectTicket,
 }: OrderBubbleProps) {
-  const pad = Math.round(Math.max(7, W * 0.022));
-  const avatar = Math.round(Math.min(58, W * 0.155));
-  const title = Math.round(Math.min(19, W * 0.052));
-  const heart = Math.round(title * 1.5);
+  const pad = 10;
+  const avatar = 40;
   const others = tickets.filter((ticket) => ticket.slot !== selectedSlot);
-  const pin = Math.round(Math.min(30, W * 0.085));
 
   const chips = customer ? chipsFor(customer.order, cup, config) : [];
+  const done = chips.filter((chip) => chip.done).length;
   // The tiles stand together at one size and the row runs out from the left, the way the order
   // is read. Sharing the whole width out between them instead leaves a two-thing order as two
   // tiles marooned at either end of the card.
-  const room = W - pad * 3 - avatar;
-  const column = chips.length > 0 ? Math.min(room / chips.length, avatar * 1.24) : 0;
-  const tile = Math.round(Math.max(22, Math.min(column - 5, avatar * 0.84)));
-  const caption = Math.round(Math.max(7.5, Math.min(9.5, column * 0.2)));
+  const room = W - pad * 2;
+  const column = chips.length > 0 ? Math.min(room / chips.length, 56) : 0;
+  const tile = Math.round(Math.max(24, Math.min(column - 16, 32)));
+  const caption = Math.round(Math.max(9, Math.min(column * 0.2, 10.5)) * 2) / 2;
 
   return (
-    <View style={{ width: W }}>
-      <View style={[styles.card, { padding: pad, borderRadius: Math.round(W * 0.055) }, pointerEventsStyles.none]}>
-        <View style={styles.row}>
-          {/* who it is for */}
-          <View style={[styles.avatar, { width: avatar, height: avatar, borderRadius: avatar * 0.3 }]}>
-            {customer ? (
-              <Character look={customer.look} mood="happy" width={avatar * 0.92} headOnly />
-            ) : (
-              <Image source={ICON_CUP} style={{ width: avatar * 0.56, height: avatar * 0.56 }} resizeMode="contain" />
-            )}
-          </View>
-          {customer && (
-            <View style={[styles.badge, { width: heart * 0.62, height: heart * 0.62, borderRadius: heart * 0.31 }]}>
-              <Svg width={heart * 0.38} height={heart * 0.38} viewBox="0 0 24 24">
-                <Path d={HEART} fill={colors.primary} />
-              </Svg>
-            </View>
+    <View
+      style={[styles.card, { width: W, height: ORDER_PANEL_HEIGHT, padding: pad }, pointerEventsStyles.boxNone]}
+    >
+      <View style={styles.head}>
+        {/* who it is for */}
+        <View style={[styles.avatar, { width: avatar, height: avatar, borderRadius: avatar * 0.32 }]}>
+          {customer ? (
+            <Character look={customer.look} mood="happy" width={avatar * 0.92} headOnly />
+          ) : (
+            <Image source={ICON_CUP} style={{ width: avatar * 0.5, height: avatar * 0.5 }} resizeMode="contain" />
           )}
-
-          <View style={[styles.body, { marginLeft: pad }]}>
-            <View style={styles.head}>
-              <Text style={[styles.title, { fontSize: title, lineHeight: title * 1.3 }]} numberOfLines={1}>
-                {customer ? drinkName(customer.order) : 'Chọn order để pha'}
-              </Text>
-              {customer && <Patience size={heart} left={patience} />}
-            </View>
-
-            {customer ? (
-              <View style={styles.chips}>
-                {chips.map((chip) => (
-                  <ChipTile key={chip.key} chip={chip} width={column} tile={tile} caption={caption} />
-                ))}
-              </View>
-            ) : (
-              <Text style={[styles.hint, { fontSize: Math.max(10, title * 0.62) }]} numberOfLines={1}>
-                Nhận order ở quầy, rồi chọn một order ở đây
-              </Text>
-            )}
-          </View>
         </View>
-        {/* the bubble's tail, pointing down into the room */}
-        <View
-          style={[
-            styles.tail,
-            { left: Math.round(W * 0.12), width: pad * 1.7, height: pad * 1.7, bottom: -pad * 0.85 },
-          ]}
-        />
+        <View style={styles.name}>
+          <Text style={styles.title} numberOfLines={1}>
+            {customer ? drinkName(customer.order) : 'Chưa có order'}
+          </Text>
+          <Text style={styles.subtitle} numberOfLines={1}>
+            {customer ? `Cho ${customer.name} · xong ${done}/${chips.length}` : 'Vuốt sang Quầy để nhận order'}
+          </Text>
+        </View>
+        {customer && <Patience size={26} left={patience} />}
+        {others.length > 0 && (
+          <>
+            <View style={styles.split} />
+            <View style={styles.queue}>
+              {others.map(({ slot, customer: waiting }) => (
+                <OrderPin
+                  key={waiting.id}
+                  customer={waiting}
+                  cup={cup}
+                  config={config}
+                  size={32}
+                  onPress={() => onSelectTicket(slot)}
+                />
+              ))}
+            </View>
+          </>
+        )}
       </View>
 
-      {/* the other taken orders, pegged under the card's corner — tap one to make it next */}
-      {others.length > 0 && (
-        <View style={[styles.pins, { right: pad, bottom: -pin * 0.42, gap: Math.round(pin * 0.2) }]}>
-          {others.map(({ slot, customer: waiting }) => (
-            <OrderPin
-              key={waiting.id}
-              customer={waiting}
-              cup={cup}
-              config={config}
-              size={pin}
-              onPress={() => onSelectTicket(slot)}
-            />
+      {/* How much of the drink is made, under the name it is being made for. */}
+      <View style={styles.track}>
+        <View style={[styles.fill, { width: `${chips.length > 0 ? (done / chips.length) * 100 : 0}%` }]} />
+      </View>
+
+      {customer ? (
+        <View style={styles.chips}>
+          {chips.map((chip) => (
+            <ChipTile key={chip.key} chip={chip} width={column} tile={tile} caption={caption} />
           ))}
+        </View>
+      ) : (
+        <View style={styles.hintBox}>
+          <Text style={styles.hint}>Mỗi order hiện ở đây, kèm từng thứ cần cho vào ly.</Text>
         </View>
       )}
     </View>
@@ -196,19 +197,26 @@ function drinkName(order: Drink): string {
   return `Trà sữa ${tea}`;
 }
 
-/** The customer's patience, as a heart emptying from the top. */
+/**
+ * The customer's patience, as a heart emptying from the top.
+ *
+ * The emptying is a **mask**, not a clip: a clip path is built once and cached on Android, and
+ * nothing inside one can clear that cache, so the heart would stay as full as it was drawn the
+ * first time. See "Drawing on a phone" in CLAUDE.md.
+ */
 function Patience({ size, left }: { size: number; left: number }) {
+  const uid = useId().replace(/[^a-zA-Z0-9]/g, '');
   const p = Math.max(0, Math.min(1, left));
   const tone = p > 0.55 ? colors.primary : p > 0.28 ? colors.ok : colors.bad;
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24">
       <Defs>
-        <ClipPath id="orderHeart">
-          <Rect x={0} y={24 * (1 - p)} width={24} height={24 * p} />
-        </ClipPath>
+        <Mask id={`patience${uid}`} maskUnits="userSpaceOnUse" x={0} y={0} width={24} height={24}>
+          <Rect x={0} y={24 * (1 - p)} width={24} height={24 * p} fill="#FFFFFF" />
+        </Mask>
       </Defs>
       <Path d={HEART} fill="#FFFFFF" />
-      <Path d={HEART} fill={tone} clipPath="url(#orderHeart)" />
+      <Path d={HEART} fill={tone} mask={`url(#patience${uid})`} />
       <Path d={HEART} fill="none" stroke={tone} strokeWidth={1.8} strokeLinejoin="round" />
     </Svg>
   );
@@ -220,7 +228,7 @@ function ChipTile({ chip, width, tile, caption }: { chip: Chip; width: number; t
       <View
         style={[
           styles.tile,
-          { width: tile, height: tile, borderRadius: tile * 0.28 },
+          { width: tile, height: tile, borderRadius: tile * 0.3 },
           chip.done && styles.tileDone,
         ]}
       >
@@ -234,7 +242,7 @@ function ChipTile({ chip, width, tile, caption }: { chip: Chip; width: number; t
           </View>
         )}
         {chip.done && (
-          <View style={[styles.check, { width: tile * 0.4, height: tile * 0.4, borderRadius: tile * 0.2 }]}>
+          <View style={[styles.check, { width: tile * 0.42, height: tile * 0.42, borderRadius: tile * 0.21 }]}>
             <Text style={[styles.checkMark, { fontSize: tile * 0.26 }]}>✓</Text>
           </View>
         )}
@@ -249,7 +257,7 @@ function ChipTile({ chip, width, tile, caption }: { chip: Chip; width: number; t
   );
 }
 
-/** One of the other taken orders. */
+/** One of the other taken orders, waiting its turn. */
 function OrderPin({
   customer,
   cup,
@@ -269,6 +277,7 @@ function OrderPin({
       onPress={onPress}
       accessibilityRole="button"
       accessibilityLabel={`Order của ${customer.name}`}
+      hitSlop={5}
       style={[styles.pin, { width: size, height: size, borderRadius: size / 2 }]}
     >
       <Character look={customer.look} mood="happy" width={size * 0.8} headOnly />
@@ -279,9 +288,10 @@ function OrderPin({
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: colors.paper,
-    borderWidth: 3,
-    borderColor: '#FFFFFF',
+    backgroundColor: '#FFF8E7',
+    borderWidth: 2,
+    borderRadius: 18,
+    borderColor: '#D8B889',
     ...Platform.select({
       web: { boxShadow: '0px 4px 9px rgba(107, 74, 50, 0.22)' },
       default: {
@@ -293,61 +303,84 @@ const styles = StyleSheet.create({
       },
     }),
   },
-  row: {
+  head: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: 8,
   },
   avatar: {
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
-    backgroundColor: '#FFF1E2',
+    backgroundColor: '#F2E4BD',
     borderWidth: 2,
-    borderColor: '#F6D7C2',
+    borderColor: '#D8BC87',
   },
-  badge: {
-    position: 'absolute',
-    left: -2,
-    top: -3,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1.5,
-    borderColor: '#FFD7E3',
-  },
-  body: {
+  name: {
     flex: 1,
-  },
-  head: {
-    flexDirection: 'row',
-    alignItems: 'center',
   },
   title: {
-    flex: 1,
+    fontSize: 17,
+    lineHeight: 22,
     color: colors.ink,
     fontFamily: fonts.display,
   },
-  hint: {
-    marginTop: 2,
-    color: colors.inkSoft,
+  subtitle: {
+    fontSize: 11,
+    lineHeight: 14,
+    color: '#9C7B55',
     fontFamily: fonts.semi,
   },
-  chips: {
-    marginTop: 3,
-    // a two-line name needs its descenders clear of the card's edge
-    paddingBottom: 3,
+  split: {
+    width: 1.5,
+    height: 30,
+    borderRadius: 1,
+    backgroundColor: '#EBD7B4',
+  },
+  queue: {
     flexDirection: 'row',
+    gap: 5,
+  },
+  track: {
+    height: 5,
+    marginTop: 7,
+    marginBottom: 6,
+    borderRadius: 3,
+    overflow: 'hidden',
+    backgroundColor: '#F0E1C3',
+  },
+  fill: {
+    height: '100%',
+    borderRadius: 3,
+    backgroundColor: colors.good,
+  },
+  chips: {
+    flex: 1,
+    flexDirection: 'row',
+    justifyContent: 'flex-start',
+  },
+  hintBox: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  hint: {
+    fontSize: 13,
+    lineHeight: 18,
+    textAlign: 'center',
+    color: colors.inkSoft,
+    fontFamily: fonts.semi,
   },
   tile: {
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#FFFDF3',
     borderWidth: 1.8,
-    borderColor: '#F0DCCB',
+    borderColor: '#E4CEAA',
   },
   tileDone: {
-    borderColor: colors.good,
-    backgroundColor: '#EFFAF2',
+    borderColor: '#8C9A57',
+    backgroundColor: '#F0F2DC',
   },
   none: {
     alignItems: 'center',
@@ -369,14 +402,14 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: colors.good,
     borderWidth: 1.5,
-    borderColor: '#FFFFFF',
+    borderColor: '#FFF8E7',
   },
   checkMark: {
     color: '#FFFFFF',
     fontFamily: fonts.display,
   },
   caption: {
-    marginTop: 1,
+    marginTop: 2,
     textAlign: 'center',
     color: '#6B4A32',
     fontFamily: fonts.semi,
@@ -384,25 +417,13 @@ const styles = StyleSheet.create({
   captionDone: {
     color: colors.good,
   },
-  tail: {
-    position: 'absolute',
-    backgroundColor: colors.paper,
-    borderRightWidth: 3,
-    borderBottomWidth: 3,
-    borderColor: '#FFFFFF',
-    transform: [{ rotate: '45deg' }],
-  },
-  pins: {
-    position: 'absolute',
-    flexDirection: 'row',
-  },
   pin: {
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'hidden',
     backgroundColor: '#FFF6E9',
     borderWidth: 2,
-    borderColor: '#FFFFFF',
+    borderColor: '#D8B889',
   },
   pinReady: {
     position: 'absolute',
@@ -410,6 +431,6 @@ const styles = StyleSheet.create({
     bottom: 1,
     backgroundColor: colors.good,
     borderWidth: 1.5,
-    borderColor: '#FFFFFF',
+    borderColor: '#D8B889',
   },
 });

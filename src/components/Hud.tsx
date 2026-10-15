@@ -15,6 +15,7 @@ interface HudProps {
   coins: number;
   goal: number;
   onPause: () => void;
+  warm?: boolean;
   /** Reports where the wallet sits on screen (window coordinates) so flying coins can aim at it. */
   onWalletLayout: (x: number, y: number) => void;
 }
@@ -22,7 +23,7 @@ interface HudProps {
 /** Coins land in the wallet a moment after a sale; the counter waits for them. */
 const COIN_ARRIVAL_MS = 750;
 
-export function Hud({ day, clock, durationMs, coins, goal, onPause, onWalletLayout }: HudProps) {
+export function Hud({ day, clock, durationMs, coins, goal, onPause, onWalletLayout, warm = false }: HudProps) {
   const remaining = Math.max(0, durationMs - clock);
   const seconds = Math.ceil(remaining / 1000);
   const closing = remaining === 0;
@@ -42,18 +43,18 @@ export function Hud({ day, clock, durationMs, coins, goal, onPause, onWalletLayo
   const bumpStyle = useAnimatedStyle(() => ({ transform: [{ scale: bump.value }] }));
 
   return (
-    <View style={styles.hud}>
-      <View style={styles.pill}>
-        <Text style={styles.pillText}>Ngày {day}</Text>
+    <View style={[styles.hud, warm && styles.warmHud]}>
+      <View style={[styles.pill, warm && styles.warmPill]}>
+        <Text style={[styles.pillText, warm && styles.warmInk]}>Ngày {day}</Text>
       </View>
 
       <View style={styles.meter}>
         <View style={styles.meterRow}>
-          <ClockIcon fraction={remaining / durationMs} />
-          <Text style={[styles.meterLabel, closing && styles.closing]}>{timeLabel}</Text>
+          <ClockIcon fraction={remaining / durationMs} warm={warm} />
+          <Text style={[styles.meterLabel, warm && styles.warmInk, closing && styles.closing]}>{timeLabel}</Text>
         </View>
         <View style={styles.track}>
-          <View style={[styles.fill, { width: `${(remaining / durationMs) * 100}%`, backgroundColor: '#FFFFFF' }]} />
+          <View style={[styles.fill, { width: `${(remaining / durationMs) * 100}%`, backgroundColor: warm ? '#8D9856' : '#FFFFFF' }]} />
         </View>
       </View>
 
@@ -69,8 +70,8 @@ export function Hud({ day, clock, durationMs, coins, goal, onPause, onWalletLayo
               <Coin size={18} />
             </View>
           </Animated.View>
-          <Text style={styles.meterLabel} numberOfLines={1}>
-            {formatMoney(shown)} <Text style={styles.goal}>/ {formatMoney(goal)}</Text> {goalReached ? '✓' : ''}
+          <Text style={[styles.meterLabel, warm && styles.warmInk]} numberOfLines={1}>
+            {formatMoney(shown)} <Text style={[styles.goal, warm && styles.warmSoft]}>/ {formatMoney(goal)}</Text> {goalReached ? '✓' : ''}
           </Text>
         </View>
         <View style={styles.track}>
@@ -83,9 +84,9 @@ export function Hud({ day, clock, durationMs, coins, goal, onPause, onWalletLayo
         </View>
       </View>
 
-      <Pressable onPress={onPause} style={styles.pause} accessibilityLabel="Tạm dừng" hitSlop={8}>
-        <View style={styles.pauseBar} />
-        <View style={styles.pauseBar} />
+      <Pressable onPress={onPause} style={[styles.pause, warm && styles.warmPill]} accessibilityLabel="Tạm dừng" hitSlop={8}>
+        <View style={[styles.pauseBar, warm && styles.warmPauseBar]} />
+        <View style={[styles.pauseBar, warm && styles.warmPauseBar]} />
       </Pressable>
     </View>
   );
@@ -121,19 +122,24 @@ function useCountUp(target: number, delay: number) {
   return shown;
 }
 
-function ClockIcon({ fraction }: { fraction: number }) {
+function ClockIcon({ fraction, warm }: { fraction: number; warm: boolean }) {
   const angle = (1 - fraction) * 360;
   const rad = ((angle - 90) * Math.PI) / 180;
   return (
     <Svg width={18} height={18} viewBox="0 0 20 20">
-      <Circle cx={10} cy={10} r={8.5} fill="#FFFFFF" stroke={colors.primaryDark} strokeWidth={2} />
-      <Path d={`M10 10 L${10 + Math.cos(rad) * 5.5} ${10 + Math.sin(rad) * 5.5}`} stroke={colors.primary} strokeWidth={2.2} strokeLinecap="round" />
+      <Circle cx={10} cy={10} r={8.5} fill="#FFFFFF" stroke={warm ? '#AC8655' : colors.primaryDark} strokeWidth={2} />
+      <Path d={`M10 10 L${10 + Math.cos(rad) * 5.5} ${10 + Math.sin(rad) * 5.5}`} stroke={warm ? '#7B874B' : colors.primary} strokeWidth={2.2} strokeLinecap="round" />
       <Circle cx={10} cy={10} r={1.5} fill={colors.ink} />
     </Svg>
   );
 }
 
 const styles = StyleSheet.create({
+  warmHud: { backgroundColor: '#E9D0A7' },
+  warmPill: { backgroundColor: '#FFF5DF', borderBottomColor: '#C09A67' },
+  warmInk: { color: '#705030' },
+  warmSoft: { color: '#96764F' },
+  warmPauseBar: { backgroundColor: '#8D774D' },
   hud: {
     flexDirection: 'row',
     alignItems: 'center',

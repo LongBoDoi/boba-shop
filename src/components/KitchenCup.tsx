@@ -55,7 +55,7 @@ export const WELL_TOP = (CUP_SURFACE_BOTTOM - CUP_SURFACE_RUN) / ART.h;
  * through), and the near lip y 28–31, bright and solid.
  *
  * A pour splits here — in front of the cup above it, behind below — so it has to be the lip's edge
- * and not somewhere inside the lip, and not `WELL_TOP` (y 48), which is the center of the full
+ * and not somewhere inside the lip, and not `WELL_TOP` (y 36), which is the center of the full
  * liquid surface further down.
  */
 export const CUP_LIP = 28 / ART.h;

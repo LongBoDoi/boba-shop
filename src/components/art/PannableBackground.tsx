@@ -38,7 +38,8 @@ export const PannableBackground = memo(function PannableBackground({
   const { drawnWidth, drawnHeight, top } = fitBackground(width, height, imageWidth, imageHeight);
   const maxOffset = Math.max(0, drawnWidth - width);
 
-  // Start at the left-hand tea shelf. Ordinary game updates keep the player's pan position.
+  // A layout change puts the view back where touch scrolling measures from, so the shared offset
+  // the cup and the taps are hit-tested through cannot drift away from what is drawn.
   const resetView = useCallback(() => {
     onPanBegin();
     offset.set(0);

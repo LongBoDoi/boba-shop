@@ -4,17 +4,44 @@
  * live boundaries in here are masks and not clips.
  */
 export const CUP_ART = { w: 113, h: 174 };
+/**
+ * The middle of the cup's painted base ring, in those units — where the glass actually meets what
+ * it is standing on. The bottom of the sprite's box is the *front* of that ring, so a cup stood on
+ * a surface by its box sits forward of it by half the ring.
+ */
+export const CUP_FOOT = 158;
 /** The fill and ingredients meet the inside of the bottom rim, just above its painted outline. */
 export const CUP_SURFACE_BOTTOM = 155;
-export const CUP_SURFACE_RUN = CUP_SURFACE_BOTTOM - 48;
+/**
+ * Where the tea stands in a cup the game calls full — the line the pour meter's "Đầy" promises,
+ * and the line past which a pour spills.
+ *
+ * It is deliberately not where the design's full cup paints its tea (y 48). That is a drink made to
+ * be carried, with a fifth of the glass left clear for the lid, and taking it as the brim meant the
+ * meter ran to the end of its track, and then warned of tea going over the side, while the glass
+ * plainly still had room in it. The surface sits as high as the painted rim allows instead: its far
+ * edge reaches into the mouth of the cup, just under the lip.
+ */
+export const CUP_SURFACE_TOP = 36;
+export const CUP_SURFACE_RUN = CUP_SURFACE_BOTTOM - CUP_SURFACE_TOP;
+/**
+ * The inside of the tapered glass, as half-widths at the two ends of that run. The walls are
+ * straight between them, so everything in the cup — the surface oval, the ice that has to stay off
+ * the walls — takes its width off the same line.
+ */
+const CUP_RX_BOTTOM = 33.5;
+const CUP_RX_TOP = 42.4;
+const CUP_TAPER = (CUP_RX_TOP - CUP_RX_BOTTOM) / CUP_SURFACE_RUN;
+/** How deep the surface oval is for its width: the perspective the painted rim is drawn in. */
+const SURFACE_RATIO = 0.235;
 const FLOOR_RY = 9;
 export const CUP_FLOOR_FRONT = CUP_SURFACE_BOTTOM + FLOOR_RY;
-const CUP_FLOOR = `L90 ${CUP_SURFACE_BOTTOM} A33.5 ${FLOOR_RY} 0 0 1 23 ${CUP_SURFACE_BOTTOM} Z`;
-export const CUP_FLOOR_EDGE = `M23 ${CUP_SURFACE_BOTTOM} A33.5 ${FLOOR_RY} 0 0 0 90 ${CUP_SURFACE_BOTTOM}`;
-/** Inner glass measured from cup-design.png, inset from the painted walls and base ring. */
-export const CUP_WELL = `M15 48 A41.5 9.7525 0 0 1 98 48 ${CUP_FLOOR}`;
+const CUP_FLOOR = `L90 ${CUP_SURFACE_BOTTOM} A${CUP_RX_BOTTOM} ${FLOOR_RY} 0 0 1 23 ${CUP_SURFACE_BOTTOM} Z`;
+export const CUP_FLOOR_EDGE = `M23 ${CUP_SURFACE_BOTTOM} A${CUP_RX_BOTTOM} ${FLOOR_RY} 0 0 0 90 ${CUP_SURFACE_BOTTOM}`;
+/** Inner glass traced from cup-design.png, carried up its own taper to that brim. */
+export const CUP_WELL = `M${56.5 - CUP_RX_TOP} ${CUP_SURFACE_TOP} A${CUP_RX_TOP} ${(CUP_RX_TOP * SURFACE_RATIO).toFixed(2)} 0 0 1 ${56.5 + CUP_RX_TOP} ${CUP_SURFACE_TOP} ${CUP_FLOOR}`;
 /** Floating crowns can rise into the clear air beneath the lip; liquid keeps its own lower well. */
-export const CUP_ICE_WELL = `M14 37 A42.5 10 0 0 1 99 37 ${CUP_FLOOR}`;
+export const CUP_ICE_WELL = `M13.6 28 A42.9 10.1 0 0 1 99.4 28 ${CUP_FLOOR}`;
 /** The inner floor painting is behind the ingredients; its front edge and wall glints are in front. */
 export const CUP_REAR_FLOOR_GLASS = `M21.3 132H91.7 ${CUP_FLOOR}`;
 /** Original vertical highlights on the near wall, continuing across the ingredient pile. */
@@ -30,7 +57,7 @@ export function cupToppingPosition(x: number, rx: number, ry: number, angle: num
   const padding = 0.8;
   const cx = Math.max(23 + padding + halfWidth, Math.min(90 - padding - halfWidth, x));
   const farEdge = Math.abs(cx - 56.5) + halfWidth;
-  const floor = CUP_SURFACE_BOTTOM + FLOOR_RY * Math.sqrt(Math.max(0, 1 - (farEdge / 33.5) ** 2));
+  const floor = CUP_SURFACE_BOTTOM + FLOOR_RY * Math.sqrt(Math.max(0, 1 - (farEdge / CUP_RX_BOTTOM) ** 2));
   return { cx, cy: floor - halfHeight - padding - lift };
 }
 
@@ -57,7 +84,7 @@ export function cupIceRestPosition(x: number, r: number, angle: number, lift: nu
   let cy = Infinity;
   let contact = points[0];
   for (const point of points) {
-    const dx = (cx + point.x - 56.5) / 33.5;
+    const dx = (cx + point.x - 56.5) / CUP_RX_BOTTOM;
     const floor = CUP_SURFACE_BOTTOM + FLOOR_RY * Math.sqrt(Math.max(0, 1 - dx * dx));
     const support = floor - point.y - margin;
     if (support < cy) { cy = support; contact = point; }
@@ -77,8 +104,8 @@ export function cupSurface(raw: number) {
   'worklet';
   const fill = pourLevel(raw);
   const y = CUP_SURFACE_BOTTOM - fill * CUP_SURFACE_RUN;
-  const rx = 33.5 + fill * 8;
-  return { y, rx, ry: rx * 0.235, opacity: raw > 0 ? 1 : 0 };
+  const rx = CUP_RX_BOTTOM + fill * (CUP_RX_TOP - CUP_RX_BOTTOM);
+  return { y, rx, ry: rx * SURFACE_RATIO, opacity: raw > 0 ? 1 : 0 };
 }
 
 /** Seat cubes at the near side of the shared oval, so their crowns sit in front of its rear edge. */
@@ -103,7 +130,8 @@ export function cupIcePosition(raw: number, x: number, r: number, angle: number,
   for (const point of ICE_OUTLINE) {
     const px = (point[0] * cos - point[1] * sin) * r / 24;
     const py = (point[0] * sin + point[1] * cos) * r / 24;
-    const halfWidth = 33.5 + (155 - Math.max(48, Math.min(155, cy + py))) * 8 / 107;
+    const halfWidth = CUP_RX_BOTTOM
+      + (CUP_SURFACE_BOTTOM - Math.max(CUP_SURFACE_TOP, Math.min(CUP_SURFACE_BOTTOM, cy + py))) * CUP_TAPER;
     left = Math.max(left, 56.5 - halfWidth - px + margin);
     right = Math.min(right, 56.5 + halfWidth - px - margin);
   }

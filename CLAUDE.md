@@ -117,6 +117,7 @@ tools/                  cut-sheets.py: cuts the asset sheets into those sprites
                         cut-tea-jars.ps1: a whole dispenser per tea, off the kitchen sheet
                         cut-cup-design.ps1: the cup and its drink, off the cup design
                         cut-tea-front.ps1: the tea window's greenery, back out of its own plate
+                        cut-cup-holder.py: the holder under the cup, out of the kitchen painting
 src/motion.ts           shared animation timings/easings
 src/theme.ts            colours and font family names
 src/useSavedGame.ts     Async Storage read on launch, slow write while playing
@@ -323,19 +324,31 @@ Dropping the cup still standing on the work top sends it home.
   its spout. The cup scales to the shelf gap and its base rests on the lowest shelf surface,
   with a small contact shadow; picking it up restores its carrying size. `findStation` tests that particular tap in screen coordinates, including the pan
   offset. Hold its tap (`useHoldPour`) to raise the live liquid level; releasing commits the
-  amount and sends the cup back to its centered holder after 420ms. A tank cannot pour until the
-  cup is docked beneath it, and a cup holding a different tea locks that tank. Panning returns
+  amount and leaves the cup docked, ready for another pour. Drag the cup away to undock it.
+  A tank cannot pour until the cup is docked beneath it, and a cup holding a different tea locks
+  that tank. Panning returns
   a docked cup to its holder; scrolling is frozen during cup/tool dragging or pouring.
   `Stream` draws behind and in front of the cup, split at its scaled lip, with moving highlights
   and a trailing drop on release. `Spill` shows overflow.
   The removed tea-station dialog is no longer part of the game.
-- **A large vertical meter appears as soon as the cup docks**, before any tea is poured. It is
-  a `GameScreen` overlay at the screen edge, outside the kitchen/panorama and cup transforms.
-  `KitchenStation` reports its live shared level through `PrepPage.onMeterChange`. The marks are
-  Cạn / Ít / Nửa ly / Gần đầy / Đầy, without percentage labels or a serving target. The gauge fills
-  smoothly from bottom to top and highlights milestones; overflow displays Tràn ly. It remains
-  until the cup undocks and is hidden on the counter page. The overlay passes all touches through.
-  Milestone accessibility updates use `useAnimatedReaction`, with no JS polling.
+- **A small horizontal meter floats beneath the order bubble** while the cup is docked.
+  It is a 220×20px overlay, with no separate panel, idle placeholder or reserved scene space.
+  `KitchenStation` reports its live shared level to `PrepPage`; the room and taps keep their
+  geometry when the bar appears. The order panel stays fixed; the bar floats at the top of the
+  room, clear of it.
+  Quarter marks and an inline Cạn / Ít / Nửa ly / Gần đầy / Đầy label show the current fill,
+  without percentages or a serving target. The gauge fills smoothly from left to right;
+  overflow displays Tràn ly! and turns the track border pink. The bar passes all touches through.
+  Its animated width uses the cup's `pourLevel` mapping against an inner track, so a full cup
+  covers the entire bar without a measured-width scale transform. The bright front of the fill
+  fades out over the last few percent: it is the liquid's leading edge, and held on to the end it
+  sat between the fill and the track's rounded cap, where it read as a gap the bar never closed.
+  **The label's bands are not the quarters the marks are drawn at.** It used to be
+  `floor(level * 4)`, which called a cup a quarter full "Cạn" — dry — and only ever said "Đầy" at
+  exactly 1, so a held tap ran from "Gần đầy" straight to "Tràn ly!" without passing through full.
+  The bands are their own list in `PourFeedback`, and "Đầy" covers the last eighth, where the cup
+  is drawn brim-full.
+  Band accessibility updates use `useAnimatedReaction`, with no JS polling.
   There is no minimum amount required to serve and no fill-based tip bonus. Overflow still marks
   a messy drink. The cup and its holder remain horizontally centered at rest.
 - **Toppings stand in upright glass containers in the middle cabinet**, three across in two
@@ -477,7 +490,18 @@ the tap is opened, avoiding first-pour image decoding stutter.
 `cupGeometry` shares the traced well and surface coordinates between the liquid, foam and stream.
 `pourLevel` clamps the actual fill without adding an artificial minimum pool. The surface ellipse
 is never sliced off by a flat-topped clip.
-The vertical milestone meter floats outside the cup and kitchen transforms.
+
+**A full cup is drawn full, at `CUP_SURFACE_TOP` — the brim, not the line the design paints.**
+The design's full cup (`cut-cup-design.ps1`, `SURFACE_Y = 48`) is a drink made to be carried, with
+a fifth of the glass left clear for its lid, and the well was traced to it. Taking that as the
+game's brim made the meter lie: it ran to the end of its track, and then warned of tea going over
+the side, while the glass plainly still had room in it. The surface now stops where the painted rim
+stops it (y 36, its far edge reaching into the mouth of the cup), and `CUP_WELL` is carried up the
+glass's own taper to meet it — so `CUP_RX_BOTTOM`/`CUP_RX_TOP` and `CUP_TAPER` are where the inside
+of the glass is measured, and the oval, the floating ice and the ice well all read their widths off
+that one line. The painted drink texture only has pixels from y 48 down; above it the body is the
+vector gradient alone, which is why nothing in there may depend on the sprite to carry a shape.
+The small horizontal meter floats beneath the order bubble, outside the cup and kitchen transforms.
 The legacy `DRINK`, `DRINK_TOP` and jar assets remain in the repository.
 
 ### The kitchen's artwork
@@ -556,26 +580,40 @@ keeps the painted ticks, highlights and the cat decal on top of it:
   The active topping cabinet is measured in the panoramic background by
   `ROOM_BG_TOPPING_SHELF`. The portrait plate and `ROOM.tray` remain legacy geometry.
 
-**The prep page is all kitchen.** There is no ticket rail or order slip above it: the room fills
-everything between the tabs and the action buttons, which is what gives the equipment the size it has
-in the reference.
+**The prep page is all kitchen.** There is no ticket rail, and no row of shortcut buttons for
+walking to a station — the room fills everything between the order panel and the action buttons,
+which is what gives the equipment the size it has in the reference. The wall is reached by
+swiping it, which is the same gesture everything else in the room is worked with; the buttons
+that jumped the view to the tea, milk and topping ends of it were a second way to do one thing,
+and they cost the room a band the height of a dispenser.
 
 ### The order, spoken back
-[OrderBubble.tsx](src/components/OrderBubble.tsx) is a **speech bubble floating over the top of the
-room** (it used to be a paper note clipped to a rail inside it): who the drink is for, what it is
-called, and a tile for every thing that goes in it, each ticking off as the cup comes together. The
-heart at the end is the customer's patience, emptying from the top and turning amber then red — the
-`ClipPath` over the heart path is how, because a `View` cannot be heart-shaped.
+[OrderBubble.tsx](src/components/OrderBubble.tsx) is the **panel docked across the top of the
+prep page** (it was a paper note clipped to a rail inside the room, then a bubble floating over
+it): who the drink is for, what it is called, how far along it is, and a tile for every thing that
+goes in it, each ticking off as the cup comes together. The heart beside the name is the
+customer's patience, emptying from the top and turning amber then red. A 40px portrait, a 17px
+title, tiles up to 32px and a progress bar under the name; the empty state keeps the same box and
+centres a one-line prompt in it.
 
-Three things about it are deliberate:
+Five things about it are deliberate:
 
 - it lists the drink in `SPOKEN` order — tea, milk, sugar, ice, toppings, foam — not `BUILD_ORDER`,
   which runs bottom of the cup upwards. The card is read, not built;
 - the tiles stand together at one size and the row runs out from the left. Sharing the card's whole
   width between them leaves a two-thing order as two tiles marooned at either end;
-- the card takes **no touches at all** (`pointerEvents="none"`), so on a short phone, where it laps
-  over the dispenser shelf, nothing it covers stops being draggable. Only the pegged orders under
-  its right corner — the other taken tickets, tap one to switch — are live.
+- **its height is fixed** (`ORDER_PANEL_HEIGHT`). The kitchen is laid out from whatever height is
+  left under it, so a panel that grew a row when an order was picked would move every dispenser,
+  every topping box and the cup with it;
+- **the other taken orders stand inside it**, in a queue to the right of the heart — tap one to
+  make it next. They used to hang off the card's bottom-right corner, over the room, where a
+  seven-thing order had its last two ingredients covered by them;
+- the patience heart is emptied by a **`<Mask>`, not a `<ClipPath>`**, because a `View` cannot be
+  heart-shaped and a clip path is frozen at its first draw on Android — the heart would have
+  stayed as full as the frame it first appeared on. See "Drawing on a phone"; `check-drawing.cjs`
+  only catches the animated case, and this one is driven by ordinary renders.
+
+The card itself takes no touches (`box-none`); only the queue portraits are live.
 
 `drinkName` puts "sữa" where Vietnamese puts it, which is not the same place every time: "Trà Thái"
 becomes "Trà sữa Thái", "Hồng trà" becomes "Hồng trà sữa".
@@ -593,6 +631,19 @@ and a phone shorter than the painting then loses the work top off the bottom; th
 the working band instead (`KEEP`, the shelf down to the bench) and lets the ceiling and the
 floor be what goes. Anything that must stay reachable in a short room has to clamp itself into
 view — the hint pill does, because the pink units it sits on can be cropped away.
+
+**The holder under the cup is measured there too, and only half used.** `ROOM_BG_CUP_HOLDER` is the
+mat's box in the painting's own pixels, and `kitchenHolderFor` projects it like any other surface,
+so the holder comes out the size the design draws it. Its **x** is the one measurement thrown away:
+the wall pans and the cup standing on the holder does not, so the holder is centred on the screen
+instead — which is within a few pixels of where the painting puts it. Sizing it off the cup instead
+(it used to be `cupW * 1.5`) gave a mat less than half the painted one. The sprite itself is cut to
+twice that box by `tools/cut-cup-holder.py` rather than shipped at the two thousand pixels imagegen
+returned, because a woven grid reduced that far is sampled rather than averaged and the weave comes
+out as stripes; see `docs/cup-holder-art.md`. The cup's resting place is measured off the holder
+rather than off the counter: it is centred in it, standing on `CUP_FOOT` — the middle of its
+painted base ring — because the bottom of the cup's sprite box is the *front* of that ring, and a
+cup stood on a surface by its box sits forward of whatever it is on by half a ring.
 
 If the plate is re-cut, `ROOM` is what to re-measure: read a column of it for the horizontal
 lines and a row for the vertical ones. Two lines that look alike and are not: `shelf.x0`/`x1` are
