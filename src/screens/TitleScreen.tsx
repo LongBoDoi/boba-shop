@@ -10,7 +10,6 @@ import { Cup } from '../components/Cup';
 import { SettingsSheet } from '../components/SettingsSheet';
 import { CustomerLook } from '../game/customers';
 import { Drink } from '../game/ingredients';
-import { formatMoney } from '../game/money';
 import { GameMode } from '../game/reducer';
 import { DURATION, timing } from '../motion';
 import { colors, fonts } from '../theme';
@@ -39,13 +38,11 @@ function stepsFor(mode: GameMode) {
 
 interface TitleScreenProps {
   onStart: () => void;
-  /** What the shop has put by across every day it has traded. */
-  money: number;
   mode: GameMode;
   onChangeMode: (mode: GameMode) => void;
 }
 
-export function TitleScreen({ onStart, money, mode, onChangeMode }: TitleScreenProps) {
+export function TitleScreen({ onStart, mode, onChangeMode }: TitleScreenProps) {
   const { width, height } = useWindowDimensions();
   const cupWidth = Math.min(130, width * 0.32);
   const [settings, setSettings] = useState(false);
@@ -83,12 +80,6 @@ export function TitleScreen({ onStart, money, mode, onChangeMode }: TitleScreenP
 
           <SlideUp>
             <View style={styles.card}>
-              {/* The till is on the menu because this is where it will be spent: the shop a player
-                  buys from opens from here, so the balance has to be readable from here too. */}
-              <View style={styles.till}>
-                <Text style={styles.tillLabel}>Két tiền của tiệm</Text>
-                <Text style={styles.tillAmount}>{formatMoney(money)}</Text>
-              </View>
               {stepsFor(mode).map((step) => (
                 <Text key={step} style={styles.step}>
                   {step}
@@ -248,26 +239,6 @@ const styles = StyleSheet.create({
     gap: 8,
     borderBottomWidth: 6,
     borderBottomColor: colors.line,
-  },
-  till: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
-    justifyContent: 'space-between',
-    backgroundColor: '#FFF4D6',
-    borderRadius: 14,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-  },
-  tillLabel: {
-    fontSize: 14,
-    fontFamily: fonts.semi,
-    color: '#A07A3C',
-  },
-  tillAmount: {
-    fontSize: 20,
-    lineHeight: 26,
-    fontFamily: fonts.display,
-    color: colors.goldDark,
   },
   step: {
     fontSize: 16,

@@ -1,4 +1,5 @@
 import { TOPPING_PANS, TOPPING_PIECES, TOPPING_SCOOPS } from './toppingArt';
+import { TOPPING_TRAY_EDGES } from './toppingGeometry';
 
 /**
  * The painted kitchen, sprite by sprite, plus the geometry the code needs to line up with it.
@@ -212,12 +213,7 @@ export const ROOM_BG_ICE_MACHINE = { x: 230, y: 585, width: 265, height: 116 };
 export const ROOM_BG_CUP_HOLDER = { x: 553, y: 782, width: 424, height: 127 };
 export const ROOM_BG_TOPPING_SHELF = {
   // Shared boundaries project the whole grid into the basin's perspective.
-  edges: [
-    { x0: 1127, x1: 1499, y: 456 },
-    { x0: 1117, x1: 1507, y: 516 },
-    { x0: 1106, x1: 1515, y: 577 },
-    { x0: 1095, x1: 1523, y: 640 },
-  ],
+  edges: TOPPING_TRAY_EDGES,
   // Unlock order, read like a page: left to right along the back row, then the next row forward.
   slots: ['pearls', 'popping', 'lychee', 'pudding', 'grass', 'pandan', 'redbean', 'aloe', 'crystal'],
 };

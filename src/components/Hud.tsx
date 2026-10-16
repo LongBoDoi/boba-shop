@@ -12,9 +12,7 @@ interface HudProps {
   day: number;
   clock: number;
   durationMs: number;
-  /** Taken at the counter today: the number the flying coins land on. */
-  coins: number;
-  /** Everything the shop has put by, today's takings included. */
+  /** The shop's till: everything it has put by. The flying coins land on it. */
   money: number;
   onPause: () => void;
   warm?: boolean;
@@ -25,25 +23,22 @@ interface HudProps {
 /** Coins land in the wallet a moment after a sale; the counter waits for them. */
 const COIN_ARRIVAL_MS = 750;
 
-export function Hud({ day, clock, durationMs, coins, money, onPause, onWalletLayout, warm = false }: HudProps) {
+export function Hud({ day, clock, durationMs, money, onPause, onWalletLayout, warm = false }: HudProps) {
   const remaining = Math.max(0, durationMs - clock);
   const seconds = Math.ceil(remaining / 1000);
   const closing = remaining === 0;
   const timeLabel = closing ? 'Sắp đóng cửa!' : `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
-  const shown = useCountUp(coins, COIN_ARRIVAL_MS);
+  const shown = useCountUp(money, COIN_ARRIVAL_MS);
   const walletRef = useRef<View>(null);
-  // The till is counted up off the same number, so a sale lands on both at once instead of adding
-  // itself to the total while the day's takings are still rolling towards it.
-  const inTill = money - coins + shown;
 
   const bump = useSharedValue(1);
-  const previousCoins = useRef(coins);
+  const previousMoney = useRef(money);
   useEffect(() => {
-    if (coins > previousCoins.current) {
+    if (money > previousMoney.current) {
       bump.value = withDelay(COIN_ARRIVAL_MS, withSequence(withTiming(1.12, timing(DURATION.fast)), withTiming(1, timing(DURATION.base))));
     }
-    previousCoins.current = coins;
-  }, [bump, coins]);
+    previousMoney.current = money;
+  }, [bump, money]);
   const bumpStyle = useAnimatedStyle(() => ({ transform: [{ scale: bump.value }] }));
 
   return (
@@ -78,12 +73,9 @@ export function Hud({ day, clock, durationMs, coins, money, onPause, onWalletLay
             {formatMoney(shown)}
           </Text>
         </View>
-        {/* The day's takings are the big number because they are what the shift is; the till under
-            them is what the player actually has to spend. It stands where the goal's progress bar
-            used to, which keeps the HUD the height the kitchen is laid out from. */}
-        <Text style={[styles.till, warm && styles.warmSoft]} numberOfLines={1}>
-          Két {formatMoney(inTill)}
-        </Text>
+        {/* One number, and it is the till — what the shop has to spend, not what this shift has
+            taken. The day's own takings are the day-end screen's to report. There is nothing to
+            run a progress bar towards any more, so the clock alone sets the HUD's height. */}
       </View>
 
       <Pressable onPress={onPause} style={[styles.pause, warm && styles.warmPill]} accessibilityLabel="Tạm dừng" hitSlop={8}>
@@ -178,12 +170,6 @@ const styles = StyleSheet.create({
     lineHeight: 18,
     fontFamily: fonts.display,
     color: '#FFFFFF',
-  },
-  till: {
-    fontFamily: fonts.semi,
-    fontSize: 11,
-    lineHeight: 13,
-    color: '#FFE3EC',
   },
   closing: {
     color: '#FFF3B0',

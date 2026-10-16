@@ -8,6 +8,15 @@ export interface ToppingPanShape {
 
 export interface ToppingTrayEdge { x0: number; x1: number; y: number }
 
+/** Calibrate the tray's two ends; every divider between them stays on the same straight line. */
+const TRAY_BACK: ToppingTrayEdge = { x0: 1127, x1: 1501, y: 454 };
+const TRAY_FRONT: ToppingTrayEdge = { x0: 1095, x1: 1533, y: 640 };
+export const TOPPING_TRAY_EDGES: ToppingTrayEdge[] = [0, 1 / 3, 2 / 3, 1].map(t => ({
+  x0: TRAY_BACK.x0 + (TRAY_FRONT.x0 - TRAY_BACK.x0) * t,
+  x1: TRAY_BACK.x1 + (TRAY_FRONT.x1 - TRAY_BACK.x1) * t,
+  y: TRAY_BACK.y + (TRAY_FRONT.y - TRAY_BACK.y) * t,
+}));
+
 /** Divide one tray plane into cells with shared edges, rather than nine separate tapers. */
 export function toppingPanBounds(back: ToppingTrayEdge, front: ToppingTrayEdge, column: number) {
   const left = column / 3;
@@ -69,7 +78,9 @@ export function toppingPanBands(
   const left = (y: number) => (b * y + c) / (q * y + 1);
   const right = (y: number) => (a * width + b * y + c) / (q * y + 1);
   const travel = Math.max(Math.abs(left(height) - left(0)), Math.abs(right(height) - right(0)));
-  const count = Math.max(4, Math.min(32, Math.ceil(travel)));
+  // Almost-parallel target edges can cancel the atlas taper in this measure. Keep enough bands
+  // to resolve the curved painted rim even when its enclosing rectangle barely moves.
+  const count = Math.max(16, Math.min(64, Math.ceil(travel * 2)));
 
   const bands: ToppingPanBand[] = [];
   for (let i = 0; i < count; i++) {

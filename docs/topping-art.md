@@ -1,5 +1,7 @@
 # Nine-bin topping station
 
+The layout anchors are the back and front edges in `toppingGeometry.ts`. The intermediate row edges are interpolated from those anchors, keeping the outer sides and both column dividers straight through all three rows. Adjust the end anchors rather than individual row corners; `check-topping-layout.cjs` checks the production divider lines for bends.
+
 The reference's inset 3×3 tray uses three matching transparent atlases, generated with the built-in imagegen tool:
 
 - `src/assets/kitchen/topping-pans.png`: nine filled pans plus an empty pan for ingredients that have not unlocked.

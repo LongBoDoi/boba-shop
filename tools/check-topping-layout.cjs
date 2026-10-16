@@ -7,7 +7,7 @@ const code = ts.transpileModule(fs.readFileSync('src/components/art/toppingGeome
 }).outputText;
 const geometry = { exports: {} };
 new Function('exports', code)(geometry.exports);
-const { toppingPanBands, toppingPanBounds, toppingPanMatrix } = geometry.exports;
+const { toppingPanBands, toppingPanBounds, toppingPanMatrix, TOPPING_TRAY_EDGES } = geometry.exports;
 
 function near(actual, expected) {
   assert(Math.abs(actual - expected) < 1e-7, `${actual} should equal ${expected}`);
@@ -16,6 +16,19 @@ function project(m, x, y) {
   const denominator = m[3] * x + m[7] * y + m[15];
   return [(m[0] * x + m[4] * y + m[12]) / denominator,
     (m[1] * x + m[5] * y + m[13]) / denominator];
+}
+
+// Production geometry: outer edges and both column dividers must be straight through every row.
+// Independently moving a middle row's corner must fail this check, even if its pans still touch.
+const trayBack = TOPPING_TRAY_EDGES[0];
+const trayFront = TOPPING_TRAY_EDGES[TOPPING_TRAY_EDGES.length - 1];
+for (let divider = 0; divider <= 3; divider++) {
+  const fraction = divider / 3;
+  const xAt = edge => edge.x0 + (edge.x1 - edge.x0) * fraction;
+  for (const edge of TOPPING_TRAY_EDGES) {
+    near((xAt(edge) - xAt(trayBack)) * (trayFront.y - trayBack.y),
+      (edge.y - trayBack.y) * (xAt(trayFront) - xAt(trayBack)));
+  }
 }
 
 // Straight and skewed cells must map all four painted rim corners to their intended boundaries.
@@ -79,4 +92,4 @@ for (let i = 0; i < 2; i++) {
     near(right - left, 2);
   }
 }
-console.log('Passed: topping rim projection and its bands at phone/tablet scales; adjoining bins share covered seams.');
+console.log('Passed: straight topping columns; rim projection and bands at phone/tablet scales; covered seams.');

@@ -356,12 +356,14 @@ ngày N" button. What the shop takes it keeps, and tomorrow always opens.
 
 In its place are **two numbers, which are not the same thing**:
 
-- **`coins` is what was taken today.** `START_DAY` resets it, the flying coins land on it, and it
-  is what the day-end screen tallies.
+- **`coins` is what was taken today.** `START_DAY` resets it, and the **day-end screen is the only
+  place it is shown** ("Tiền bán hôm nay"). It is deliberately not in the HUD: two money numbers
+  side by side there read as one number and its target, which is the thing this replaced.
 - **`money` is the shop's till** — everything it has ever earned and not spent. It carries from
   day to day, it rides in the save, and it is what the shopping still to be built will be paid out
-  of. It is read on the HUD under the day's takings, on the opening sign, on the menu, and under
-  the tally at the end of the day.
+  of. It is the one money number during play: the HUD counts it up and the flying coins land on
+  it, the opening sign reads it, and the day-end screen shows where the day's takings went. The
+  menu shows no money at all.
 
 Both are added to in exactly one place (`serve`), and `SPEND` is the only thing that takes any
 out. Nothing dispatches `SPEND` yet: it and `canAfford` are there so that when a shop screen is
@@ -886,8 +888,9 @@ stands plainly inside the shelf; divided across the board it laps over the ends 
 - UI: `npx expo export --platform web`, serve `dist/`, and look at it at phone sizes
   (390×844 and the small 375×667). The Prep page is reached by swiping left or tapping the "Pha chế"
   tab. To test a later day quickly, temporarily change `START_DAY, day: 1` in `App.tsx` — revert
-  before committing. The money shows in four places (HUD, opening sign, menu, day end); the
-  quickest way to see any of them against a particular balance is to write a save with the `money`
+  before committing. The money shows in three places (the HUD and the opening sign, both the till;
+  the day-end screen, which is the only one that reports a single day's takings); the quickest way
+  to see any of them against a particular balance is to write a save with the `coins` and `money`
   you want straight to `localStorage`, the way the cup states are set up above.
 - Native bundles: `npx expo export --platform ios --platform android` catches native-only
   bundling errors; `npx expo-doctor` checks dependency health.

@@ -74,8 +74,10 @@ export function DayEndScreen({ state, onNextDay, onMenu }: DayEndScreenProps) {
           <Text style={styles.title}>{`Hoàn thành ngày ${day}!`}</Text>
           <Text style={styles.subtitle}>{VERDICT[stars]}</Text>
 
-          {/* The day's takings, and then where they went. Nothing here can be failed: the money is
-              banked whatever the stars say, and it is the till that the player goes shopping with. */}
+          {/* The day's takings, and then where they went. This is the only screen that reports a
+              single day's earnings — the HUD counts the till — so the two are labelled apart.
+              Nothing here can be failed: the money is banked whatever the stars say. */}
+          <Text style={styles.earnedLabel}>Tiền bán hôm nay</Text>
           <View style={styles.earnings}>
             <Coin size={30} />
             <CountUp value={coins} style={styles.earned} />
@@ -241,12 +243,18 @@ const styles = StyleSheet.create({
     color: colors.inkSoft,
     textAlign: 'center',
   },
+  earnedLabel: {
+    marginTop: 10,
+    fontSize: 14,
+    fontFamily: fonts.semi,
+    color: colors.inkSoft,
+    textAlign: 'center',
+  },
   earnings: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
-    marginTop: 10,
   },
   earned: {
     fontSize: 36,

@@ -210,7 +210,6 @@ export function GameScreen({ state, dispatch }: GameScreenProps) {
           warm={page === 1}
           clock={state.clock}
           durationMs={config.durationMs}
-          coins={state.coins}
           money={state.money}
           onPause={() => dispatch({ type: 'SET_PAUSED', paused: true })}
           onWalletLayout={(x, y) => setWallet({ x, y })}

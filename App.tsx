@@ -77,7 +77,6 @@ function Shop({ initial, writable }: { initial: GameState; writable: boolean }) 
         {screen.phase === 'title' && (
           <TitleScreen
             onStart={() => dispatch({ type: 'START_DAY', day: 1 })}
-            money={screen.money}
             mode={screen.mode}
             onChangeMode={(mode) => dispatch({ type: 'SET_MODE', mode })}
           />
