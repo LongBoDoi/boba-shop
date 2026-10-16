@@ -1,5 +1,5 @@
 import { memo, useId } from 'react';
-import { Platform, View } from 'react-native';
+import { View } from 'react-native';
 import Svg, { ClipPath, Defs, G, Image as SvgImage, Rect } from 'react-native-svg';
 
 import {
@@ -7,7 +7,7 @@ import {
   TOPPING_SCOOPS, TOPPING_SCOOP_ART,
 } from './toppingArt';
 import { pointerEventsStyles } from '../../pointerEvents';
-import { toppingPanMatrix, ToppingPanShape } from './toppingGeometry';
+import { toppingPanBands, ToppingPanShape } from './toppingGeometry';
 
 /**
  * One cell of a painted atlas, drawn through an SVG viewport rather than an oversized `Image` in
@@ -33,28 +33,50 @@ const AtlasSprite = memo(function AtlasSprite({ source, art, id, width, height }
   );
 });
 
+/**
+ * One pan, fitted to its cell of the tray so that its painted rims meet its neighbours'. The fit
+ * is a trapezoid, and it is drawn as a stack of bands rather than through a transform: see
+ * {@link toppingPanBands} for why a phone cannot be handed the matrix.
+ */
 export const ToppingPanArt = memo(function ToppingPanArt({ id = 'empty', width, height, shape }: {
   id?: string; width: number; height: number; shape?: ToppingPanShape;
 }) {
+  const uid = useId().replace(/[^a-zA-Z0-9]/g, '');
   const cell = TOPPING_PAN_ART.cells[id];
   if (!cell) return null;
   // Trim the transparent top/bottom gutter before fitting the painted rims to their shared edges.
   const cropHeight = cell.height - 6;
-  const sx = width / cell.width;
-  const sy = height / cropHeight;
-  const matrix = shape ? toppingPanMatrix(width, height, shape) : undefined;
-  // RN Web 0.21 serializes `matrix` as CSS's six-value matrix, even with 16 entries.
-  const transform = matrix && (Platform.OS === 'web' ? `matrix3d(${matrix.join(',')})` : [{ matrix }]);
+  const bands = shape
+    ? toppingPanBands(width, height, shape)
+    : [{ x: 0, y: 0, w: width, h: height, top: 0, bottom: 1 }];
+  // The fit is wider than the box it is fitted into, so the viewport has to be too, or it would
+  // clip away the very rim the fit exists to push out to the cell's edge.
+  const left = Math.min(...bands.map((band) => band.x));
+  const right = Math.max(...bands.map((band) => band.x + band.w));
+
   return (
     <View style={[{ width, height }, pointerEventsStyles.none]}>
-      <View style={{ width, height, overflow: 'hidden', transformOrigin: [0, 0, 0],
-        transform }}>
-        <Svg width={width} height={height}>
-          <SvgImage href={TOPPING_PANS} x={-cell.x * sx} y={-(cell.y + 3) * sy}
-            width={TOPPING_PAN_ART.width * sx} height={TOPPING_PAN_ART.height * sy}
-            preserveAspectRatio="none" />
-        </Svg>
-      </View>
+      <Svg width={right - left} height={height} style={{ position: 'absolute', left, top: 0 }}>
+        <Defs>
+          {bands.map((band, i) => (
+            <ClipPath key={i} id={`pan-${uid}-${i}`}>
+              {/* A hair of overlap, so the seam between two bands never opens into a bright line. */}
+              <Rect x={band.x - left} y={band.y - 0.25} width={band.w} height={band.h + 0.5} />
+            </ClipPath>
+          ))}
+        </Defs>
+        {bands.map((band, i) => {
+          const sx = band.w / cell.width;
+          const sy = band.h / ((band.bottom - band.top) * cropHeight);
+          return (
+            <SvgImage key={i} href={TOPPING_PANS}
+              x={band.x - left - cell.x * sx}
+              y={band.y - (cell.y + 3 + band.top * cropHeight) * sy}
+              width={TOPPING_PAN_ART.width * sx} height={TOPPING_PAN_ART.height * sy}
+              preserveAspectRatio="none" clipPath={`url(#pan-${uid}-${i})`} />
+          );
+        })}
+      </Svg>
     </View>
   );
 });

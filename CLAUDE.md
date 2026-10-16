@@ -789,10 +789,11 @@ stands plainly inside the shelf; divided across the board it laps over the ends 
   - no `Math.random()` during render (use the deterministic `noise()` in `Effects.tsx`);
   - don't read refs during render.
 - **Drawing on a phone, not in a browser.** `react-native-svg` is not an SVG renderer with a
-  React wrapper — it is three renderers, and the web one is the forgiving one. Three gaps have
-  already cost a crash, a dead animation and a drink that stopped following its tea, and every one
-  of them is easy to walk back into. `tools/check-drawing.cjs` (in `npm test`) reads the source for
-  all three, because nothing else will:
+  React wrapper — it is three renderers, and the web one is the forgiving one. Four gaps have
+  already cost a crash, a dead animation, a drink that stopped following its tea and a tray of
+  topping pans that would not close up, and every one of them is easy to walk back into.
+  `tools/check-drawing.cjs` (in `npm test`) reads the source for all four, because nothing else
+  will:
   - **An animated `transform` has to be the array form** — `[{ translateX }, { translateY },
     { rotate: '12deg' }]` — never the SVG string `translate(…) rotate(…)`. The string is turned
     into the `matrix` prop a phone reads by JavaScript, *inside* the element, and an animated prop
@@ -819,6 +820,15 @@ stands plainly inside the shelf; divided across the board it laps over the ends 
     dispenser amber, on the *web* build, from a cold load, until something forced the element to
     repaint. This is the one gap that runs the other way — a phone drew it correctly and a
     browser did not — so the only honest check is a screenshot of the exported build.
+  - **A 4x4 matrix is not a transform a phone will perform.** Only two of the three renderers do
+    a projective transform: React Native hands Android's `View` the matrix through
+    `MatrixMathHelper.decomposeMatrix`, which gives it back as `setTranslation`, `setRotation`,
+    `setScale` and a camera distance. A `View` has no `setSkew`, and a perspective divide is not a
+    camera distance, so both are dropped — the topping pans came out too small and in the wrong
+    place, which on a tray reads as a gap between every pan and the next. The pans are drawn as a
+    stack of horizontal bands instead (`toppingPanBands`): plain numbers and plain rectangles,
+    which all three renderers agree about. `toppingPanMatrix` is still the fit; it is what the
+    bands are read off, and what `check-topping-layout.cjs` holds them to.
   - **`<Use>` is not safe.** Asked for the path of a template it cannot find at that moment, it
     hands back nothing — which Android calls a method on and iOS passes to `CFAutorelease`. Draw
     the shape where it is needed, even when that means repeating it.

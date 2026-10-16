@@ -57,9 +57,21 @@ for (const file of sources('src')) {
   }
 }
 
+// 4. A 4x4 matrix is a projective transform, and Android's View cannot perform one: React Native
+//    decomposes it into translation, rotation, scale and a camera distance, which is where its
+//    skew and its perspective divide are lost. This one is not about SVG, so it reads everything.
+for (const file of sources('src')) {
+  const whole = readFileSync(file, 'utf8');
+  const source = whole.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/[^\n]*/g, '$1');
+  if (/\[\s*\{\s*matrix\b/.test(source) || /matrix3d\(/.test(source)) {
+    fail(file.replace(/\\/g, '/'), 'a 4x4 matrix is given to a view as its transform',
+      'Android decomposes it and drops the skew and the perspective divide. Draw the shape in the geometry instead, as toppingPanBands does.');
+  }
+}
+
 if (failures.length) {
   console.error('check-drawing: this does not draw on a phone\n');
   for (const failure of failures) console.error(`  - ${failure}\n`);
   process.exit(1);
 }
-console.log('check-drawing: no animated clips, no string transforms, no <Use>');
+console.log('check-drawing: no animated clips, no string transforms, no <Use>, no 4x4 matrices');

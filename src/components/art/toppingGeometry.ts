@@ -28,6 +28,67 @@ export function toppingPanBounds(back: ToppingTrayEdge, front: ToppingTrayEdge, 
   };
 }
 
+/** One horizontal band of a pan, with the slice of the painted cell it shows. */
+export interface ToppingPanBand {
+  /** Where the band goes in the pan's own box. */
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  /** The fractions of the cell's cropped height this band is cut from. */
+  top: number;
+  bottom: number;
+}
+
+/**
+ * The pan's cell as a stack of horizontal bands, each with the exact scale and offset of its own
+ * middle row — the same trapezoid {@link toppingPanMatrix} describes, drawn with plain rectangles
+ * instead of a transform.
+ *
+ * It has to be plain rectangles. A 4x4 matrix is a projective transform, and only two of the three
+ * renderers perform one: React Native hands Android's `View` the matrix through
+ * `MatrixMathHelper.decomposeMatrix`, which can only give it back `setTranslation`, `setRotation`,
+ * `setScale` and a camera distance. There is no `setSkew` on a `View`, and a perspective divide is
+ * not a camera distance, so both are dropped and the pan is drawn too small and in the wrong
+ * place — which on a tray is a gap between every pan and the next. Bands are numbers and
+ * rectangles, so all three renderers draw the same tray.
+ *
+ * The count comes from the fit itself rather than the pan's size: however far the rims travel
+ * between the back of the cell and the front, each band covers at most a point of it, so the step
+ * from one band to the next stays under half a point however large the room is drawn.
+ */
+export function toppingPanBands(
+  width: number, height: number, shape: ToppingPanShape,
+): ToppingPanBand[] {
+  const m = toppingPanMatrix(width, height, shape);
+  const [a, , , , b, denominator, , q] = m;
+  const c = m[12];
+  // The matrix's own two mappings, read straight off it: where a row lands, and where that row's
+  // left and right rims sit once the tray's perspective has had its say.
+  const rowY = (y: number) => denominator * y / (q * y + 1);
+  const left = (y: number) => (b * y + c) / (q * y + 1);
+  const right = (y: number) => (a * width + b * y + c) / (q * y + 1);
+  const travel = Math.max(Math.abs(left(height) - left(0)), Math.abs(right(height) - right(0)));
+  const count = Math.max(4, Math.min(32, Math.ceil(travel)));
+
+  const bands: ToppingPanBand[] = [];
+  for (let i = 0; i < count; i++) {
+    const y0 = height * i / count;
+    const y1 = height * (i + 1) / count;
+    const middle = q * (y0 + y1) / 2 + 1;
+    const top = rowY(y0);
+    bands.push({
+      x: (b * (y0 + y1) / 2 + c) / middle,
+      y: top,
+      w: a * width / middle,
+      h: rowY(y1) - top,
+      top: y0 / height,
+      bottom: y1 / height,
+    });
+  }
+  return bands;
+}
+
 /** Project the atlas's individual trapezoid onto its cell in the continuous tray plane. */
 export function toppingPanMatrix(width: number, height: number, shape: ToppingPanShape) {
   // Intersections of the painted side rims, measured after trimming the atlas's vertical gutter.
