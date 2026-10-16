@@ -24,7 +24,6 @@ export interface DayConfig {
   patienceMs: number;
   spawnMinMs: number;
   spawnMaxMs: number;
-  goal: number;
 }
 
 export function getDayConfig(day: number): DayConfig {
@@ -50,8 +49,6 @@ export function getDayConfig(day: number): DayConfig {
     patienceMs: Math.max(60_000, 90_000 + categories.length * 4_000 - (day - 1) * 5_000),
     spawnMinMs,
     spawnMaxMs: spawnMinMs + 5_000,
-    // Scaled with the longer day, so a target still means the same day's work.
-    goal: Math.min(65 + (day - 1) * 20, 240),
   };
 }
 

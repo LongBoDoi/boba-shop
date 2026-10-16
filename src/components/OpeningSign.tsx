@@ -9,14 +9,15 @@ import { Button } from './Button';
 
 interface OpeningSignProps {
   day: number;
-  goal: number;
+  /** What the shop has put by. The sign is the one place a day opens, so it is where it is read. */
+  money: number;
   title: string;
   lines: string[];
   onDone: () => void;
 }
 
 /** The "open" sign shown at the start of each day. It stays until the player taps Start. */
-export function OpeningSign({ day, goal, title, lines, onDone }: OpeningSignProps) {
+export function OpeningSign({ day, money, title, lines, onDone }: OpeningSignProps) {
   const shown = useSharedValue(0);
   const closing = useRef(false);
 
@@ -49,8 +50,8 @@ export function OpeningSign({ day, goal, title, lines, onDone }: OpeningSignProp
           <View style={styles.inner}>
             <Text style={styles.open}>MỞ CỬA</Text>
             <Text style={styles.day}>Ngày {day}</Text>
-            <View style={styles.goal}>
-              <Text style={styles.goalText}>Mục tiêu: {formatMoney(goal)}</Text>
+            <View style={styles.till}>
+              <Text style={styles.tillText}>Két tiền: {formatMoney(money)}</Text>
             </View>
             {lines.length > 0 && (
               <View style={styles.news}>
@@ -125,14 +126,14 @@ const styles = StyleSheet.create({
     lineHeight: 28,
     color: colors.ink,
   },
-  goal: {
+  till: {
     marginTop: 6,
     backgroundColor: '#FFF4D6',
     borderRadius: 10,
     paddingHorizontal: 10,
     paddingVertical: 2,
   },
-  goalText: {
+  tillText: {
     fontFamily: fonts.bold,
     fontSize: 15,
     color: colors.goldDark,

@@ -27,6 +27,30 @@ function warn(what: string, error: unknown) {
   console.warn(`[update] ${what}:`, error);
 }
 
+/**
+ * How long each half of installing an update is given before the player gets their game back.
+ *
+ * **Both of these are the difference between a slow update and a dead app.** The dialog takes the
+ * whole screen and swallows every touch, and while it is downloading or restarting it has nothing
+ * on it to press — so anything that leaves either step unfinished leaves the player holding a
+ * picture of a boba shop. `fetchUpdateAsync` has no timeout of its own and a stalled download
+ * never settles; a download the system suspends when the game is put down may never come back at
+ * all. And `reloadAsync` replaces the process, so it *cannot* resolve if it worked: still being
+ * here afterwards is itself the error.
+ */
+const FETCH_LIMIT_MS = 60_000;
+const RELOAD_LIMIT_MS = 15_000;
+
+function deadline<T>(work: Promise<T>, ms: number, what: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout>;
+  return Promise.race([
+    work,
+    new Promise<never>((_, giveUp) => {
+      timer = setTimeout(() => giveUp(new Error(`${what} took longer than ${ms}ms`)), ms);
+    }),
+  ]).finally(() => clearTimeout(timer)) as Promise<T>;
+}
+
 export type UpdateStatus =
   /** Nothing to say: the web build, a dev build, no update, or the player said no. */
   | 'none'
@@ -76,12 +100,13 @@ export function useUpdate(beforeRestart: () => Promise<void>): Update {
   const accept = useCallback(() => {
     setStep('accepted');
     (async () => {
-      await Updates.fetchUpdateAsync();
+      await deadline(Updates.fetchUpdateAsync(), FETCH_LIMIT_MS, 'downloading the new version');
       setStep('restarting');
       // The restart replaces this process. Everything that has to survive it goes now.
       await beforeRestart();
-      await Updates.reloadAsync();
+      await deadline(Updates.reloadAsync(), RELOAD_LIMIT_MS, 'restarting into the new version');
     })().catch((error: unknown) => {
+      // Whatever went wrong, the player gets a card they can close rather than one they cannot.
       warn('could not install the new version', error);
       setStep('failed');
     });

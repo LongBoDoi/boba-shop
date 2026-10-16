@@ -8,7 +8,7 @@ import { Button } from '../components/Button';
 import { Coin, Confetti } from '../components/Effects';
 import { describeUnlocks } from '../game/levels';
 import { formatMoney } from '../game/money';
-import { GameState } from '../game/reducer';
+import { DayStats, GameState } from '../game/reducer';
 import { DURATION, timing } from '../motion';
 import { colors, fonts } from '../theme';
 import { pointerEventsStyles } from '../pointerEvents';
@@ -16,20 +16,33 @@ import { pointerEventsStyles } from '../pointerEvents';
 interface DayEndScreenProps {
   state: GameState;
   onNextDay: () => void;
-  onRetry: () => void;
   onMenu: () => void;
 }
 
-export function starsFor(coins: number, goal: number) {
-  if (coins < goal) return 0;
-  return coins >= goal * 1.6 ? 3 : coins >= goal * 1.3 ? 2 : 1;
+/**
+ * How the day went, out of three. There is no money target any more — a day cannot be failed and
+ * the takings are simply kept — so the stars rate the *service*: how many customers got a drink at
+ * all, and how many got the one they actually asked for. Money is the reward; this is the grade.
+ */
+export function starsFor({ served, perfect, missed }: DayStats) {
+  if (served === 0) return 0;
+  const happy = served / (served + missed);
+  if (happy >= 0.9 && perfect >= served * 0.6) return 3;
+  if (happy >= 0.7) return 2;
+  return 1;
 }
 
-export function DayEndScreen({ state, onNextDay, onRetry, onMenu }: DayEndScreenProps) {
+const VERDICT = [
+  'Hôm nay chưa bán được ly nào.',
+  'Vẫn còn khách phải chờ lâu.',
+  'Một ngày bán hàng tốt.',
+  'Tiệm đông nghịt cả ngày!',
+];
+
+export function DayEndScreen({ state, onNextDay, onMenu }: DayEndScreenProps) {
   const { width } = useWindowDimensions();
-  const { day, coins, config, stats } = state;
-  const passed = coins >= config.goal;
-  const stars = starsFor(coins, config.goal);
+  const { day, coins, money, stats } = state;
+  const stars = starsFor(stats);
   const unlocks = describeUnlocks(day + 1);
 
   const rows: [string, string][] = [
@@ -50,7 +63,7 @@ export function DayEndScreen({ state, onNextDay, onRetry, onMenu }: DayEndScreen
 
   return (
     <View style={styles.screen}>
-      {passed && <SunRays width={width} />}
+      {stars > 0 && <SunRays width={width} />}
       <SafeAreaView style={styles.content}>
         <Animated.View style={[styles.card, cardStyle]}>
           <View style={styles.stars}>
@@ -58,15 +71,17 @@ export function DayEndScreen({ state, onNextDay, onRetry, onMenu }: DayEndScreen
               <Star key={i} earned={i < stars} delay={400 + i * 250} big={i === 1} />
             ))}
           </View>
-          <Text style={styles.title}>{passed ? `Hoàn thành ngày ${day}!` : `Ngày ${day}: chưa đạt mục tiêu`}</Text>
-          <Text style={styles.subtitle}>
-            {passed ? 'Tiệm đang đắt khách.' : `Bạn cần thêm ${formatMoney(config.goal - coins)}.`}
-          </Text>
+          <Text style={styles.title}>{`Hoàn thành ngày ${day}!`}</Text>
+          <Text style={styles.subtitle}>{VERDICT[stars]}</Text>
 
+          {/* The day's takings, and then where they went. Nothing here can be failed: the money is
+              banked whatever the stars say, and it is the till that the player goes shopping with. */}
           <View style={styles.earnings}>
             <Coin size={30} />
             <CountUp value={coins} style={styles.earned} />
-            <Text style={styles.goal}>/ {formatMoney(config.goal)}</Text>
+          </View>
+          <View style={styles.till}>
+            <Text style={styles.tillText}>Két tiền: {formatMoney(money)}</Text>
           </View>
 
           <View style={styles.table}>
@@ -75,7 +90,7 @@ export function DayEndScreen({ state, onNextDay, onRetry, onMenu }: DayEndScreen
             ))}
           </View>
 
-          {passed && unlocks.length > 0 && (
+          {unlocks.length > 0 && (
             <View style={styles.unlocks}>
               <Text style={styles.unlockTitle}>Mở khóa cho ngày {day + 1}</Text>
               {unlocks.map((line) => (
@@ -87,16 +102,12 @@ export function DayEndScreen({ state, onNextDay, onRetry, onMenu }: DayEndScreen
           )}
 
           <View style={styles.buttons}>
-            {passed ? (
-              <Button label={`Bắt đầu ngày ${day + 1}`} onPress={onNextDay} />
-            ) : (
-              <Button label={`Chơi lại ngày ${day}`} onPress={onRetry} />
-            )}
+            <Button label={`Bắt đầu ngày ${day + 1}`} onPress={onNextDay} />
             <Button label="Về menu chính" variant="secondary" onPress={onMenu} />
           </View>
         </Animated.View>
       </SafeAreaView>
-      {passed && (
+      {stars > 0 && (
         <View style={[StyleSheet.absoluteFill, pointerEventsStyles.none]}>
           <Confetti at={{ x: width * 0.5, y: 150 }} delay={900} pieces={16} power={1.2} />
         </View>
@@ -243,10 +254,18 @@ const styles = StyleSheet.create({
     fontFamily: fonts.display,
     color: colors.goldDark,
   },
-  goal: {
-    fontSize: 18,
-    fontFamily: fonts.semi,
-    color: colors.inkSoft,
+  till: {
+    alignSelf: 'center',
+    marginTop: 4,
+    backgroundColor: '#FFF4D6',
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 2,
+  },
+  tillText: {
+    fontSize: 15,
+    fontFamily: fonts.bold,
+    color: colors.goldDark,
   },
   table: {
     marginTop: 10,

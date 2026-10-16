@@ -112,7 +112,65 @@ try {
   assert.equal(overflow.stats.served, 1, 'An overflowing cup can be served');
   assert.equal(overflow.stats.tips, 0, 'Overflow still loses its tip');
   assert.equal(overflow.coins, Math.ceil(drinkPrice(recipe) / 2), 'Overflow retains the existing spill penalty');
-  console.log('Passed: tiny pours serve; fill-independent payment and tips; tea/order guards; overflow behavior.');
+  for (const [optionId, day] of [['redbean', 6], ['aloe', 7], ['crystal', 8]]) {
+    assert.ok(!getDayConfig(day - 1).options.toppings.includes(optionId), 'New topping waits for its unlock day');
+    assert.ok(getDayConfig(day).options.toppings.includes(optionId), 'New topping unlocks with the next day');
+    assert.ok(describeUnlocks(day).length > 0, 'The new ingredient is announced');
+    let state = gameReducer(createInitialState(4242), { type: 'START_DAY', day });
+    state = gameReducer(state, { type: 'TICK', dt: 5000 });
+    const slot = state.slots.findIndex(Boolean);
+    state = gameReducer(state, { type: 'TAKE_ORDER', slot });
+    state.slots[slot].order = { tea: 'black', toppings: [optionId, 'pearls'], milk: null, ice: null, sweetness: null, foam: null };
+    state = gameReducer(state, { type: 'POUR', category: 'tea', optionId: 'black', amount: 0.5 });
+    state = gameReducer(state, { type: 'SCOOP', category: 'toppings', optionId });
+    assert.equal(gameReducer(state, { type: 'SCOOP', category: 'toppings', optionId }), state, 'A new topping cannot be added twice');
+    state = gameReducer(state, { type: 'SCOOP', category: 'toppings', optionId: 'pearls' });
+    assert.equal(gameReducer(state, { type: 'SCOOP', category: 'toppings', optionId: 'pudding' }), state, 'New toppings respect the two-portion limit');
+    const restored = parseGame(serializeGame(state));
+    assert.ok(restored, 'A drink with the new topping restores correctly');
+    assert.deepEqual(restored.cup.toppings, [optionId, 'pearls']);
+    const served = gameReducer(gameReducer(restored, { type: 'SET_PAUSED', paused: false }), { type: 'SERVE' });
+    assert.equal(served.stats.perfect, 1, 'A recipe with the new topping can be served perfectly after reload');
+  }
+  // ------------------------------------------------------------------ the shop's money
+  // A till that keeps everything earned reaches numbers a price never did, and a wall of digits is
+  // not a number anyone can read at a glance.
+  const { formatMoney } = require(path.join(__dirname, '../src/game/money.ts'));
+  assert.equal(formatMoney(0), '0k', 'An empty till');
+  assert.equal(formatMoney(8), '80k', 'A price is unchanged');
+  assert.equal(formatMoney(99), '990k', 'Right up to the last three digits');
+  assert.equal(formatMoney(100), '1.000k', 'And groups from there');
+  assert.equal(formatMoney(318), '3.180k', "A week's trade");
+  assert.equal(formatMoney(123456), '1.234.560k', 'However long a run gets');
+
+  // No day can be failed any more, so nothing hangs on a target: the takings are simply kept, and
+  // the till is what carries from one day to the next.
+  assert.equal(getDayConfig(1).goal, undefined, 'A day no longer sets a money target');
+  const paid = gameReducer(makeCup(0.8), { type: 'SERVE' });
+  assert.ok(paid.coins > 0, 'Serving a drink pays');
+  assert.equal(paid.money, paid.coins, "A new shop's till is exactly what it has taken");
+
+  const nextDay = gameReducer(paid, { type: 'START_DAY', day: 2 });
+  assert.equal(nextDay.coins, 0, "A new day's takings start at nothing");
+  assert.equal(nextDay.money, paid.money, 'The till carries over');
+  assert.deepEqual(nextDay.stats, { served: 0, perfect: 0, missed: 0, tips: 0 }, 'And the stats do not');
+  // The money is the player's, not the run's: abandoning a run at the menu must not empty the till,
+  // or anything bought with it would be a punishment for quitting.
+  const quit = gameReducer(nextDay, { type: 'GO_TO_TITLE' });
+  assert.equal(quit.money, paid.money, 'Going back to the menu keeps the money');
+  assert.equal(gameReducer(quit, { type: 'START_DAY', day: 1 }).money, paid.money, 'And so does starting over');
+  assert.equal(parseGame(serializeGame(nextDay)).money, paid.money, 'The till is written down with the shop');
+
+  const till = nextDay.money;
+  assert.equal(gameReducer(nextDay, { type: 'SPEND', amount: till }).money, 0, 'The shop can spend what it has');
+  assert.equal(gameReducer(nextDay, { type: 'SPEND', amount: 2 }).money, till - 2, 'And part of it');
+  for (const amount of [till + 1, -5, 1.5, NaN, Infinity]) {
+    assert.equal(gameReducer(nextDay, { type: 'SPEND', amount }), nextDay, `${amount} is not a price the till pays`);
+  }
+  assert.equal(gameReducer(nextDay, { type: 'SPEND', amount: 1 }).coins, nextDay.coins,
+    "Spending comes out of the till, not out of the day's takings");
+
+  console.log('Passed: tiny pours serve; fill-independent payment and tips; tea/order guards; overflow behavior; new topping unlocks, saves and serving; money earned, carried and spent.');
 } finally {
   if (previousLoader) require.extensions['.ts'] = previousLoader;
   else delete require.extensions['.ts'];

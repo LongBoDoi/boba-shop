@@ -1,10 +1,11 @@
 import { memo, useEffect, useId } from 'react';
 import Animated, { cancelAnimation, DerivedValue, useAnimatedProps, useSharedValue, withTiming } from 'react-native-reanimated';
-import { Defs, Ellipse, G, Image as SvgImage, Mask, Path } from 'react-native-svg';
+import { Defs, Ellipse, G, Mask, Path } from 'react-native-svg';
 
 import { getIngredient, Topping } from '../game/ingredients';
 import { DURATION, timing } from '../motion';
-import { PIECE, PIECE_ART } from './art/kitchenArt';
+import { ToppingPieceArt } from './art/ToppingSprites';
+import { TOPPING_PIECE_ART } from './art/toppingArt';
 import { CUP_ART, cupToppingPosition } from './cupGeometry';
 
 const AnimatedGroup = Animated.createAnimatedComponent(G);
@@ -75,7 +76,8 @@ function ToppingPortion({ id, portion, liquidShape, teaColor, milkColor }: Omit<
   }), [liquidShape, settled]);
   const option = getIngredient('toppings', id) as Topping | undefined;
   const cube = option?.shape === 'cube';
-  const aspect = PIECE_ART[id] ?? 1;
+  const art = TOPPING_PIECE_ART.cells[id];
+  const aspect = art ? art.width / art.height : 1;
   const seed = [...id].reduce((value, letter) => value + letter.charCodeAt(0), 0);
   const tint = milkColor ?? teaColor;
 
@@ -107,8 +109,7 @@ function ToppingPortion({ id, portion, liquidShape, teaColor, milkColor }: Omit<
             <Ellipse cx={cx + 0.3} cy={cy + ry * 0.78} rx={rx * 0.88} ry={ry * 0.2}
               fill="#271710" opacity={0.08 + spot.depth * 0.1} />
             <G transform={`translate(${cx},${cy}) rotate(${angle})`}>
-              <SvgImage href={PIECE[id]} x={-rx} y={-ry} width={rx * 2} height={ry * 2}
-                opacity={opacity} preserveAspectRatio="xMidYMid meet" />
+              <ToppingPieceArt id={id} x={-rx} y={-ry} width={rx * 2} height={ry * 2} opacity={opacity} />
             </G>
             {tint && (
               <G mask={`url(#topping-wet-${uid})`}>

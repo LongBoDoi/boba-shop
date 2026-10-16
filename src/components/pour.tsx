@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState } from 'react';
+import { useEffect, useId, useRef } from 'react';
 import { GestureResponderHandlers, StyleSheet } from 'react-native';
 import Animated, { cancelAnimation, Easing, interpolate, SharedValue, useAnimatedStyle, useSharedValue, withRepeat, withTiming } from 'react-native-reanimated';
 
@@ -46,6 +46,7 @@ export function useHoldPour({
   onCommit,
   onBlocked,
   swipe,
+  abort = 0,
 }: {
   enabled: boolean;
   fill: number;
@@ -55,17 +56,23 @@ export function useHoldPour({
   onCommit: (amount: number) => void;
   onBlocked: () => void;
   swipe?: TapSwipe;
+  /** Bumped when the tap has to be let go of by something other than a finger. */
+  abort?: number;
 }) {
   const startedAt = useRef(0);
   const from = useRef({ x: 0, y: 0 });
   const mode = useRef<'pour' | 'swipe'>('pour');
   /** A tap that was never going to pour — it still presses, and says so when the finger lifts. */
   const shut = useRef(false);
-  const [pouring, setPouring] = useState(false);
+  /**
+   * Whether tea is running, as a ref and not as state: every reader of it is an event — a finger
+   * moving, a finger lifting, the app being put down — and nothing drawn here depends on it.
+   */
+  const running = useRef(false);
 
   const stop = () => {
     press.set(withTiming(1, { duration: 160, easing: ease }));
-    setPouring(false);
+    running.current = false;
     onStart(false);
   };
   const down = (x: number, y: number) => {
@@ -75,7 +82,7 @@ export function useHoldPour({
     press.set(withTiming(0.96, { duration: 80 }));
     if (!enabled) return;
     startedAt.current = Date.now();
-    setPouring(true);
+    running.current = true;
     onStart(true);
     const room = Math.max(0.02, MAX_POUR - fill);
     level.set(withTiming(MAX_POUR, { duration: (room / POUR_RATE) * 1000, easing: Easing.linear }));
@@ -90,16 +97,38 @@ export function useHoldPour({
       onBlocked();
       return;
     }
-    if (!pouring) return;
-    setPouring(false);
+    if (!running.current) return;
+    running.current = false;
     onStart(false);
     const amount = ((Date.now() - startedAt.current) / 1000) * POUR_RATE;
     level.set(withTiming(Math.min(1, fill + amount), timing(DURATION.fast)));
     onCommit(amount);
   };
 
+  /**
+   * The app going away takes the finger with it, and a pour is the worst of the things that can be
+   * left running: how much went in is measured off the wall clock when the finger lifts, so a tap
+   * still held when the game was put down would tip however long the player was away into the cup
+   * and ruin a drink they never touched. Whatever had run goes back in the jar instead.
+   *
+   * The generation already dealt with is remembered, because this cannot depend on `abort` alone —
+   * the lint wants every value the body reads in the list, and a re-run on the next sip of tea
+   * would fight the pour it is meant to protect.
+   */
+  const aborted = useRef(0);
+  useEffect(() => {
+    if (abort === aborted.current) return;
+    aborted.current = abort;
+    mode.current = 'pour';
+    shut.current = false;
+    press.set(withTiming(1, { duration: 1 }));
+    if (!running.current) return;
+    running.current = false;
+    level.set(withTiming(fill, timing(DURATION.fast)));
+    onStart(false);
+  }, [abort, fill, level, press, onStart]);
+
   return {
-    pouring,
     handlers: {
       ...GRABBY,
       onResponderGrant: (event) => down(event.nativeEvent.pageX, event.nativeEvent.pageY),
@@ -111,7 +140,7 @@ export function useHoldPour({
           mode.current = 'swipe';
           shut.current = false;
           // Whatever ran while the finger was making up its mind goes back in the jar.
-          if (pouring) {
+          if (running.current) {
             level.set(withTiming(fill, timing(DURATION.fast)));
             stop();
           }

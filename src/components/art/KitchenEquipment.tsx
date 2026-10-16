@@ -1,46 +1,7 @@
 import { memo, useId } from 'react';
-import Svg, { Circle, Defs, Ellipse, G, LinearGradient, Path, Rect, Stop } from 'react-native-svg';
+import Svg, { Circle, Defs, G, LinearGradient, Path, Rect, Stop } from 'react-native-svg';
 
 import { pointerEventsStyles } from '../../pointerEvents';
-
-/** Warm, ink-outlined equipment shares the painted room's caramel and cream palette. */
-export const KitchenDispenser = memo(function KitchenDispenser({ width, height, color, active, pouring }: {
-  width: number; height: number; color: string; active: boolean; pouring: boolean;
-}) {
-  const id = useId().replace(/[^a-zA-Z0-9]/g, '');
-  return (
-    <Svg width={width} height={height} viewBox="0 0 140 160" style={pointerEventsStyles.none}>
-      <Defs>
-        <LinearGradient id={`lid${id}`} x1="0" y1="0" x2="0" y2="1">
-          <Stop offset="0" stopColor="#8C6A47" /><Stop offset="0.4" stopColor="#58412D" /><Stop offset="1" stopColor="#382C22" />
-        </LinearGradient>
-        <LinearGradient id={`tea${id}`} x1="0" y1="0" x2="1" y2="0">
-          <Stop offset="0" stopColor="#633B1D" /><Stop offset="0.18" stopColor={color} /><Stop offset="0.7" stopColor={color} /><Stop offset="1" stopColor="#8E5027" />
-        </LinearGradient>
-        <LinearGradient id={`glass${id}`} x1="0" y1="0" x2="1" y2="0">
-          <Stop offset="0" stopColor="#FFF7DF" stopOpacity="0.7" /><Stop offset="0.18" stopColor="#FFF7DF" stopOpacity="0.05" />
-          <Stop offset="0.8" stopColor="#FFF7DF" stopOpacity="0.08" /><Stop offset="1" stopColor="#FFF7DF" stopOpacity="0.5" />
-        </LinearGradient>
-      </Defs>
-      <Ellipse cx={70} cy={144} rx={62} ry={5} fill="#67401F" opacity={0.18} />
-      <Rect x={9} y={25} width={122} height={112} rx={17} fill="#EACDA6" fillOpacity={0.22} stroke="#735234" strokeWidth={2.5} />
-      <Path d="M14 57 Q70 66 126 57 V120 Q126 135 110 135 H30 Q14 135 14 120 Z" fill={`url(#tea${id})`} />
-      <Ellipse cx={70} cy={57} rx={56} ry={6} fill={color} stroke="#FFDB96" strokeWidth={1.5} />
-      <Path d="M17 61 Q70 68 123 61" fill="none" stroke="#FFF1BD" strokeWidth={1.5} strokeDasharray={pouring ? '3 3' : '1 7'} opacity={0.8} />
-      <Rect x={11} y={29} width={118} height={105} rx={16} fill={`url(#glass${id})`} />
-      <Path d="M22 39 V116 M28 43 V70 M118 39 V112" stroke="#FFF9E6" strokeWidth={4} strokeLinecap="round" opacity={0.65} />
-      <Path d="M7 31 Q5 9 29 8 H111 Q135 9 133 31 Z" fill={`url(#lid${id})`} stroke="#624229" strokeWidth={2.5} />
-      <Path d="M15 24 Q19 12 42 12 H103 Q118 13 124 23" fill="none" stroke="#C5996A" strokeWidth={2} opacity={0.75} />
-      <Ellipse cx={70} cy={10} rx={15} ry={3} fill="#32281E" />
-      <Path d="M9 126 Q70 141 131 126 V139 Q70 151 9 139 Z" fill={`url(#lid${id})`} stroke="#624229" strokeWidth={2} />
-      <Rect x={47} y={74} width={46} height={34} rx={5} fill="#FFF0C7" stroke={active ? '#748443' : '#D29A4E'} strokeWidth={2} />
-      <Path d="M65 80 Q56 73 56 83 Q60 88 68 88 Q75 76 82 80 Q80 88 69 90 M69 86 L68 96" fill="#98A344" stroke="#7C873A" strokeWidth={0.7} />
-      <Path d="M61 123 L64 114 Q70 111 76 114 L79 123 L75 127 V151 Q70 160 65 151 V127 Z" fill={pouring ? '#96724B' : '#42382A'} stroke="#382B1D" strokeWidth={2} />
-      <Path d="M66 117 H74 M69 132 V148" stroke="#B99A70" strokeWidth={2} strokeLinecap="round" />
-      <Path d="M8 129 L6 140 Q9 145 19 143 L22 135 M132 129 L134 140 Q131 145 121 143 L118 135" fill="#665035" stroke="#4A3522" strokeWidth={2} />
-    </Svg>
-  );
-});
 
 export const KitchenBottle = memo(function KitchenBottle({ width, height, color }: { width: number; height: number; color: string }) {
   const id = useId().replace(/[^a-zA-Z0-9]/g, '');

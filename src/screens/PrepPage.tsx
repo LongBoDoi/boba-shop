@@ -10,7 +10,7 @@ import { PourMeter, PourMeterState } from '../components/PourFeedback';
 import { Ticket } from '../components/TicketRail';
 import { Drink } from '../game/ingredients';
 import { DayConfig } from '../game/levels';
-import { Customer, CupBuild } from '../game/reducer';
+import { Customer, CupBuild, patienceLeft } from '../game/reducer';
 import { fonts } from '../theme';
 import { pointerEventsStyles } from '../pointerEvents';
 
@@ -100,7 +100,7 @@ export function PrepPage({
       <View style={styles.orderHeader}>
         <OrderBubble
           customer={selectedCustomer} cup={cup} config={config}
-          patience={selectedCustomer ? Math.max(0, 1 - (clock - (selectedCustomer.orderedAt ?? selectedCustomer.arrivedAt)) / selectedCustomer.patienceMs) : 1}
+          patience={selectedCustomer ? patienceLeft(selectedCustomer, clock) : 1}
           tickets={tickets} selectedSlot={selectedSlot} width={width - GUTTER * 2} onSelectTicket={onSelectTicket}
         />
       </View>

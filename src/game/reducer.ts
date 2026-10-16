@@ -90,7 +90,14 @@ export interface GameState {
   config: DayConfig;
   /** Game time in ms since the day started; only advances while playing. */
   clock: number;
+  /** Taken at the counter *today*, and reset by `START_DAY`. The day-end tally reports this. */
   coins: number;
+  /**
+   * Everything the shop has ever earned and not spent — see "The shop's money" in CLAUDE.md. It
+   * carries across days and survives going back to the menu, because it is the player's, not the
+   * run's; `SPEND` is the only thing that takes any out.
+   */
+  money: number;
   slots: (Customer | null)[];
   selectedSlot: number | null;
   cup: Drink;
@@ -123,7 +130,9 @@ export type GameAction =
   | { type: 'ICE_SCOOP' }
   | { type: 'SUGAR_PUMP' }
   | { type: 'CLEAR_CUP' }
-  | { type: 'SERVE' };
+  | { type: 'SERVE' }
+  /** Buy something: refused outright if the shop cannot afford it. */
+  | { type: 'SPEND'; amount: number };
 
 const FIRST_CUSTOMER_AT_MS = 1_200;
 const RETRY_SPAWN_MS = 1_500;
@@ -133,10 +142,10 @@ const MAX_TIP = 3;
 const DEPARTURE_MS = 1_300;
 
 export function createInitialState(seed: number): GameState {
-  return { ...buildDay(1, seed, 'standard'), phase: 'title' };
+  return { ...buildDay(1, seed, 'standard', 0), phase: 'title' };
 }
 
-function buildDay(day: number, seed: number, mode: GameMode): GameState {
+function buildDay(day: number, seed: number, mode: GameMode, money: number): GameState {
   const config = getDayConfig(day);
   return {
     phase: 'playing',
@@ -146,6 +155,7 @@ function buildDay(day: number, seed: number, mode: GameMode): GameState {
     config,
     clock: 0,
     coins: 0,
+    money,
     slots: Array.from({ length: config.slots }, () => null),
     selectedSlot: null,
     cup: EMPTY_DRINK,
@@ -165,7 +175,7 @@ function buildDay(day: number, seed: number, mode: GameMode): GameState {
 export function gameReducer(state: GameState, action: GameAction): GameState {
   switch (action.type) {
     case 'START_DAY':
-      return buildDay(action.day, state.seed, state.mode);
+      return buildDay(action.day, state.seed, state.mode, state.money);
     case 'GO_TO_TITLE':
       return { ...state, phase: 'title', paused: false };
     case 'SET_PAUSED':
@@ -192,7 +202,28 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       return isActive(state) ? clearCup(state) : state;
     case 'SERVE':
       return isActive(state) ? serve(state) : state;
+    case 'SPEND':
+      return spend(state, action.amount);
   }
+}
+
+/**
+ * Whether the shop can pay `price`. The shop never goes into debt, so this is the one gate — and
+ * prices are whole units of money (`formatMoney` is what turns them into đồng), so half of one is
+ * not a price.
+ */
+export function canAfford(state: GameState, price: number): boolean {
+  return Number.isInteger(price) && price >= 0 && price <= state.money;
+}
+
+/**
+ * Take money out of the till. Nothing in the game spends yet — the shopping this pays for is still
+ * to be built — but every future purchase goes through here, so that the balance has exactly one
+ * way down and the refusal is in the game's logic rather than in whichever screen asked.
+ */
+function spend(state: GameState, amount: number): GameState {
+  if (!canAfford(state, amount) || amount === 0) return state;
+  return { ...state, money: state.money - amount };
 }
 
 function isActive(state: GameState) {
@@ -258,15 +289,44 @@ function tick(state: GameState, dt: number): GameState {
     ...state,
     phase: dayOver ? 'dayEnd' : state.phase,
     clock,
-    slots,
-    feedback,
-    departures,
+    // Handed back as the very same arrays when nothing in them moved. A tick is ten times a
+    // second and almost every one of them changes nothing but the clock, so a fresh copy each
+    // time told every list on both screens that it had new contents to draw — and on a phone
+    // that is the difference between a drag that follows the finger and one that catches up with
+    // it afterwards. The copies above are still made, because this one does the pushing.
+    slots: unchanged(state.slots, slots),
+    feedback: unchanged(state.feedback, feedback),
+    departures: unchanged(state.departures, departures),
     nextId,
     nextSpawnAt,
     seed: rng.seed,
     selectedSlot: resolveSelection(slots, state.selectedSlot),
     stats: missed > 0 ? { ...state.stats, missed: state.stats.missed + missed } : state.stats,
   };
+}
+
+/**
+ * How much patience a customer has left for whichever stage they are waiting in, 1 to 0. It reads
+ * the same two clocks the timeout above does, so the ring beside a customer empties exactly as
+ * their limit runs out.
+ *
+ * **It is rounded to a fiftieth, and that is the point.** This number is drawn as a ring 20px
+ * across and a heart of 26, where a fiftieth is half a pixel; handed the raw fraction, both of
+ * them were rebuilt ten times a second, for every customer on the counter, all day, to move
+ * something nobody can see. Rounding it lets `memo` do its job.
+ */
+export function patienceLeft(customer: Customer, clock: number): number {
+  const requesting = customer.status === 'requesting';
+  const since = requesting ? customer.arrivedAt : customer.orderedAt ?? customer.arrivedAt;
+  const limit = requesting ? customer.orderPatienceMs : customer.patienceMs;
+  return Math.round(Math.max(0, 1 - (clock - since) / limit) * 50) / 50;
+}
+
+/** The original list if the copy holds exactly the same things in the same order, else the copy. */
+function unchanged<T>(before: readonly T[], after: T[]): T[] {
+  return before.length === after.length && before.every((item, i) => item === after[i])
+    ? (before as T[])
+    : after;
 }
 
 /**
@@ -436,6 +496,7 @@ function serve(state: GameState): GameState {
     ...state,
     slots,
     coins: state.coins + earned,
+    money: state.money + earned,
     cup: EMPTY_DRINK,
     build: EMPTY_BUILD,
     cupId: state.cupId + 1,

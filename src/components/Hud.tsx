@@ -12,8 +12,10 @@ interface HudProps {
   day: number;
   clock: number;
   durationMs: number;
+  /** Taken at the counter today: the number the flying coins land on. */
   coins: number;
-  goal: number;
+  /** Everything the shop has put by, today's takings included. */
+  money: number;
   onPause: () => void;
   warm?: boolean;
   /** Reports where the wallet sits on screen (window coordinates) so flying coins can aim at it. */
@@ -23,14 +25,16 @@ interface HudProps {
 /** Coins land in the wallet a moment after a sale; the counter waits for them. */
 const COIN_ARRIVAL_MS = 750;
 
-export function Hud({ day, clock, durationMs, coins, goal, onPause, onWalletLayout, warm = false }: HudProps) {
+export function Hud({ day, clock, durationMs, coins, money, onPause, onWalletLayout, warm = false }: HudProps) {
   const remaining = Math.max(0, durationMs - clock);
   const seconds = Math.ceil(remaining / 1000);
   const closing = remaining === 0;
   const timeLabel = closing ? 'Sắp đóng cửa!' : `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
   const shown = useCountUp(coins, COIN_ARRIVAL_MS);
   const walletRef = useRef<View>(null);
-  const goalReached = shown >= goal;
+  // The till is counted up off the same number, so a sale lands on both at once instead of adding
+  // itself to the total while the day's takings are still rolling towards it.
+  const inTill = money - coins + shown;
 
   const bump = useSharedValue(1);
   const previousCoins = useRef(coins);
@@ -71,17 +75,15 @@ export function Hud({ day, clock, durationMs, coins, goal, onPause, onWalletLayo
             </View>
           </Animated.View>
           <Text style={[styles.meterLabel, warm && styles.warmInk]} numberOfLines={1}>
-            {formatMoney(shown)} <Text style={[styles.goal, warm && styles.warmSoft]}>/ {formatMoney(goal)}</Text> {goalReached ? '✓' : ''}
+            {formatMoney(shown)}
           </Text>
         </View>
-        <View style={styles.track}>
-          <View
-            style={[
-              styles.fill,
-              { width: `${Math.min(1, shown / goal) * 100}%`, backgroundColor: goalReached ? '#7CF0B0' : colors.gold },
-            ]}
-          />
-        </View>
+        {/* The day's takings are the big number because they are what the shift is; the till under
+            them is what the player actually has to spend. It stands where the goal's progress bar
+            used to, which keeps the HUD the height the kitchen is laid out from. */}
+        <Text style={[styles.till, warm && styles.warmSoft]} numberOfLines={1}>
+          Két {formatMoney(inTill)}
+        </Text>
       </View>
 
       <Pressable onPress={onPause} style={[styles.pause, warm && styles.warmPill]} accessibilityLabel="Tạm dừng" hitSlop={8}>
@@ -177,9 +179,10 @@ const styles = StyleSheet.create({
     fontFamily: fonts.display,
     color: '#FFFFFF',
   },
-  goal: {
+  till: {
     fontFamily: fonts.semi,
-    fontSize: 12,
+    fontSize: 11,
+    lineHeight: 13,
     color: '#FFE3EC',
   },
   closing: {

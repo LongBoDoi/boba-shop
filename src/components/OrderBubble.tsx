@@ -1,4 +1,4 @@
-import { useId } from 'react';
+import { memo, useId } from 'react';
 import { Image, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import Svg, { Defs, Mask, Path, Rect } from 'react-native-svg';
 
@@ -98,7 +98,7 @@ interface OrderBubbleProps {
  * the heart instead of hanging off the card's corner, where they used to cover the last two
  * ingredients of a full order. Only those queue portraits take touches.
  */
-export function OrderBubble({
+export const OrderBubble = memo(function OrderBubble({
   customer,
   cup,
   config,
@@ -181,7 +181,7 @@ export function OrderBubble({
       )}
     </View>
   );
-}
+});
 
 /**
  * What the drink is called. A tea on its own goes by its own name; with milk in it the word

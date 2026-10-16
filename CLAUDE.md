@@ -89,13 +89,13 @@ App.tsx                 fonts (Baloo 2), useReducer game state, phase switching 
 src/game/               pure game logic, no React
   reducer.ts            GameState + CupBuild, actions (START_DAY, TICK, TAKE_ORDER, POUR, SCOOP,
                         ICE_SCOOP, SUGAR_PUMP, SERVE, CLEAR_CUP, SET_MODE…), scoring
-  levels.ts             getDayConfig(day): unlock schedule, order/serve patience, spawn rate, goal; describeUnlocks
+  levels.ts             getDayConfig(day): unlock schedule, order/serve patience, spawn rate; describeUnlocks
   ingredients.ts        all ingredients (Vietnamese names, colours, prices), Drink type, categories,
                         and the hands-on constants (POUR_RATE, DEFAULT_ID…)
   orders.ts             random order generation, price, evaluateDrink (perfect/close/wrong)
   customers.ts          random customer looks (hair, skin, shirt, accessory) and names
   random.ts             seeded RNG; the seed lives in state so the reducer stays pure
-  money.ts              formatMoney: 1 game unit = 10.000 ₫, shown as "10k"
+  money.ts              formatMoney: 1 game unit = 10.000 ₫, shown as "10k" / "3.180k"
   save.ts               serialize/validate a GameState for storage; see "Saving the shop"
 src/updates/            useUpdate.ts: ask EAS Update once a launch, download and restart into it;
                         see "Updating itself"
@@ -162,6 +162,26 @@ not re-litigating:
 - **Storage failures are reported, never swallowed.** A store that cannot be read is
   indistinguishable from a first launch and a rejected write is invisible, so both warn — the silence
   is what hid the seed bug on a native build, where the shop simply never came back.
+- **A read that *fails* is not a shop that isn't there, and it must never be written over.** The
+  read is retried (three times, backing off), and if it still fails the game opens a new shop and
+  `useSaveGame` is handed `writable: false`, so nothing is stored for the rest of that launch. This
+  is the one that cost a player their week: a moment's trouble reading the store looked exactly
+  like a first launch, the game opened a fresh shop, and the two-second writer committed it over a
+  save that was sitting there intact. Playing a session that will not be kept is the cheaper
+  failure, and the next launch gets the real shop back.
+- **A save that cannot be parsed is set aside, not deleted.** It is still thrown away rather than
+  patched — a fresh shop is a better failure than a half-restored one — but the bytes go to
+  `boba-shop.save.v1.broken` first. Nothing reads that key; it is there so that a validator the
+  format has outgrown costs a diagnosis instead of a week.
+- **Writes go one at a time.** The slow timer and the flush on the way out overlap easily and
+  `setItem` makes no promise about which lands last, so they are chained. An older shift settling
+  on top of a newer one is indistinguishable, from the player's side, from the game losing a day.
+- **A field that is merely new is migrated, not discarded.** `SAVE_VERSION` is the switch that
+  throws a save away on sight, and it is for a save this build genuinely cannot read — not for one
+  it knows how to finish reading. `money` is the worked example: it is optional in `SavedGame`, and
+  a save written before the till opens with today's takings in it. Bumping the version instead
+  would have wiped every shop in existence to gain a tidier format, which is the same trade this
+  whole section exists to refuse.
 - **Everything read back is validated, and a save that doesn't check out is thrown away** rather
   than patched; a fresh shop is a better failure than a half-restored one. On the web the save sits
   in `localStorage`, where it can be edited, and a save from an older build can name an ingredient
@@ -244,6 +264,14 @@ Five parts, and the first is the one that bites:
 - **The save is flushed and awaited before the restart.** `useSaveGame` returns its flush for this
   one caller: `reloadAsync()` replaces the process, and a write still in flight when it goes is a
   lost shift.
+- **Both halves of installing one are on a deadline, and the card can always be left.** The dialog
+  covers the screen and takes every touch, and while it downloads or restarts there is nothing on
+  it to press, so anything that does not finish leaves the player holding a picture of a boba shop
+  — a complete freeze, on a real build only, which is why a browser will never show it to you.
+  `fetchUpdateAsync` has no timeout of its own and a stalled download never settles, so it gets 60
+  seconds; `reloadAsync` replaces the process and therefore *cannot* resolve if it worked, so
+  still being here 15 seconds later is itself the error. Either one failing lands on `failed`,
+  which has a button. The downloading state has a "Để sau" as well.
 - **The channel is set in `app.json`**, as `updates.requestHeaders['expo-channel-name']`, not in
   `eas.json`. The `.apk` is built by EAS Build but the `.ipa` is archived by the workflow itself,
   which would get no channel from a build profile; set here, every build asks for the same one
@@ -267,6 +295,50 @@ The menu **scrolls** (`flexGrow` keeps the spread-out layout wherever there is r
 vertical slack — on a 375x667 phone the logo was already sliding under the awning before anything
 was put above the card — so nothing that only sometimes appears may crop the shop's own name.
 
+### What the game's clock is allowed to redraw
+
+A shift ticks every `TICK_MS` and each tick is a new `GameState`, so **every tick is a render of
+both pages**. On a phone that is the most expensive repeating thing in the app, and it used to
+reach everything: `KitchenStation` was not memoized and the object of shared props it spread into
+the equipment was rebuilt every time, so six dispensers, six topping containers, the ice machine,
+the bottles, their contact shadows and the cup were all reconciled ten times a second — on the
+same JavaScript thread that the drag gestures are delivered on. That is why dragging and panning
+stuttered on a phone and felt fine in a browser, where there is a JIT and no bridge. Four rules
+keep it out:
+
+- **`KitchenStation` is memoized, and every prop it takes has to stay the same between ticks.**
+  Adding one that doesn't — an object or arrow function built in `PrepPage`'s body — silently puts
+  the whole cascade back, and nothing will fail. The same goes for the `shared` object inside it
+  and the `carry` handle `useCarry` returns, which is why `node` is returned *beside* that handle
+  rather than on it: the element is new every render, and the equipment must not see it.
+- **`tick` hands back the same `slots`, `feedback` and `departures` arrays when nothing in them
+  moved** (`unchanged`). Almost every tick changes nothing but the clock, and a fresh copy told
+  every list on both screens it had new contents to draw.
+- **`patienceLeft` is rounded to a fiftieth.** It is drawn as a 20px ring and a 26px heart, where
+  that is half a pixel, and the raw fraction rebuilt both of them on every tick for every customer
+  on the counter.
+- **`TICK_MS` is how often the shop is redrawn, not how accurately it runs.** Every rule is
+  written against the measured `dt`, so this number is free to be as slow as the slowest thing on
+  screen can stand — and after the two rules above, nothing clock-driven can show the difference.
+
+### Hands are emptied when the game is put down
+
+A gesture here ends when the finger lifts (see `GRABBY`), and backgrounding the app takes the
+finger away without lifting it: Android ends the touch as the window loses focus and makes no
+promise of delivering a terminate to the responder, which has in any case refused to hand the
+gesture to anyone who might have cleaned up after it. So `KitchenStation` watches `AppState` and,
+on the way out, cancels the carry, stands the cup down, clears `dragging`, and bumps the `abort`
+its dispensers pass to `useHoldPour`.
+
+None of that is cosmetic. `interacting` is what holds the room still while something is carried
+and the pager is frozen for the same reason, so a drag that never ended left the prep page a
+picture: the wall would not pan, the swipe back to the counter did nothing, and a scoop was stuck
+to the middle of the screen. It looked exactly like the app hanging, and it was reported as that.
+The pour is the worst of the three to leave running, because `onCommit` measures how long the tap
+was held off the wall clock — a tap still open when the game was put down would tip however long
+the player was away into the cup and ruin a drink they never touched, so what had run is
+discarded rather than committed.
+
 ### The two pages (swipe navigation)
 `GameScreen` keeps the reducer state, the tick loop, haptics and the `measureInWindow` refs, and hosts a
 horizontal `pagingEnabled` `ScrollView` with `CounterPage` (left) and `PrepPage` (right). The `PageTabs`
@@ -274,6 +346,43 @@ indicator under the HUD highlights the active page and badges each side (Quầy 
 Pha chế = # tickets to make); tapping a tab scrolls the pager (swiping is the primary gesture). Because
 `PrepPage` is off-screen until swiped to, it re-measures its machine/bin positions when the parent bumps
 its `measureToken` on scroll-settle, and reports them up via `onGeometry` for the effects overlay.
+
+### The shop's money
+
+**A day cannot be failed.** There used to be a target — `DayConfig.goal`, a number of units the
+day had to take — and falling short meant replaying it. That is gone, and with it the HUD's
+progress bar towards it, the sign's "Mục tiêu", the day-end screen's pass/fail and its "Chơi lại
+ngày N" button. What the shop takes it keeps, and tomorrow always opens.
+
+In its place are **two numbers, which are not the same thing**:
+
+- **`coins` is what was taken today.** `START_DAY` resets it, the flying coins land on it, and it
+  is what the day-end screen tallies.
+- **`money` is the shop's till** — everything it has ever earned and not spent. It carries from
+  day to day, it rides in the save, and it is what the shopping still to be built will be paid out
+  of. It is read on the HUD under the day's takings, on the opening sign, on the menu, and under
+  the tally at the end of the day.
+
+Both are added to in exactly one place (`serve`), and `SPEND` is the only thing that takes any
+out. Nothing dispatches `SPEND` yet: it and `canAfford` are there so that when a shop screen is
+built, the refusal already lives in the game's logic rather than in whichever screen happened to
+ask, and so the balance has one way up and one way down. Prices are whole units — `canAfford`
+refuses half of one, along with anything negative or not finite.
+
+Three decisions worth not re-litigating:
+
+- **The till survives going back to the menu.** `GO_TO_TITLE` only changes the phase and
+  `START_DAY` carries `money` through `buildDay`, so abandoning a run and starting again at day 1
+  keeps the money. It is the player's, not the run's; anything they had bought with it would
+  otherwise be confiscated for quitting.
+- **The stars rate the service now, not the money.** With no target there is nothing for the
+  takings to fall short of, so `starsFor` reads `DayStats` instead: how many customers got a drink
+  at all (`served` against `served + missed`), and how many got the one they asked for. The money
+  is the reward; the stars are the grade.
+- **`formatMoney` groups thousands with a dot** (`3.180k`), by hand rather than through
+  `toLocaleString` — the locale data that needs is the one thing here a phone's JavaScript engine
+  may not carry. A drink costs eight units and a tip is one, so nothing used to reach four digits;
+  a till that keeps everything does so within a week.
 
 ### Game modes
 
@@ -314,7 +423,8 @@ Dropping the cup still standing on the work top sends it home.
   projects both the image and tanks at the same scale. Tanks are children of the background's
   ScrollView content, so they remain rigidly attached to the shelf. `panOffset` is only used for
   hit testing and positioning the cup/stream, never for moving the tank graphics. Start at the left shelf, with available
-  teas growing from left to right in six fixed slots. The new transparent `tea-tank.png` frame
+  teas growing from left to right along the top shelf and then down to the second, in six fixed
+  slots that are the catalogue's own order — so the week unlocks them across the rack and down. The new transparent `tea-tank.png` frame
   supplies the dark lid, glass highlights and lever tap. Shaded tea is rendered behind it and
   `TeaTankMount` supplies a static metal shelf bracket with bolted end plates, a beveled rail,
   bent cradle arms and a contact shadow, behind the tank's lower collar and clear of its tap.
@@ -357,8 +467,11 @@ Dropping the cup still standing on the work top sends it home.
   empty slots and each container's cream nameplate are children of the same background
   ScrollView as the tea tanks, so they remain attached while panning. Each available topping
   carries a compact, single-line Vietnamese name on its lid, clear of the ingredients.
-  Fixed slots follow the reference: pearls, popping pearls and pudding above; pandan, lychee
-  and grass jelly below. Unlock order stays unchanged; `TOPPING_BOX_EMPTY` fills unavailable
+  Fixed slots are the catalogue's own order, read like a page: left to right along the back row,
+  then the next row forward. The week therefore fills the tray from its back-left corner.
+  Each pan carries its name on a small cream card clipped to its near lip, the one band of steel
+  the ingredients never reach over (`TOPPING_TAG` in `toppingArt.ts` places it, and the card is
+  kept inside its own pan so nine of them never touch). Unlock order stays unchanged; `TOPPING_BOX_EMPTY` fills unavailable
   slots, while `TOPPING_BOX[id]` draws an available container. New sprites are extracted from
   `tools/sheets/topping-shelf-boxes.png` by `tools/cut-topping-boxes.py`; the prompt and workflow
   are in `tools/topping-station-prompt.md`. Legacy `BIN` assets are retained for older art.
@@ -426,6 +539,11 @@ Dropping the cup still standing on the work top sends it home.
   `SUGAR_PUMP`, or `POUR` of `MILK_SPLASH` for a carton) or puts it back. The cup doesn't move for these —
   drop onto it wherever it stands. Syrup shows how many pumps went in on the machine itself.
   Milk takes room in the cup, so a cup filled to the brim with tea has nowhere to put it.
+  **While the cup is docked under a tap, none of it can be picked up.** Every carried tool dims
+  and answers a touch with `Ly đang ở dưới vòi … — kéo ly ra trước` rather than lifting — it still
+  takes the touch, so the room does not pan out from under it. The cup is up at the shelf, nowhere
+  near the bench, and a drop counts over the cup's *home* as well as over the cup itself: a scoop
+  tipped onto the coaster it left behind went into a cup that was not there.
 
 **Tea slots remain fixed across days**, filling the second rack from left to right. The tank art
 is sized to the rack and available space below its spout, independently of the other equipment.
@@ -694,6 +812,13 @@ stands plainly inside the shelf; divided across the board it laps over the ends 
     which are cheaper. Mask contents are filled `#FFFFFF`, and `fillRule="evenodd"` on the path
     itself is read by all three renderers — a clip instead took its rule from whatever referenced
     it, and the platforms disagreed about the default.
+  - **An atlas cell is drawn through an SVG viewport, not an oversized `<Image>` in an
+    `overflow: hidden` box.** That box is clipped correctly and its CSS reads correctly, but
+    Chrome keeps one raster per element for the background and, for cells near the sheet's left
+    edge, paints the wrong slice of it: the black pearls pan came out orange and the taro
+    dispenser amber, on the *web* build, from a cold load, until something forced the element to
+    repaint. This is the one gap that runs the other way — a phone drew it correctly and a
+    browser did not — so the only honest check is a screenshot of the exported build.
   - **`<Use>` is not safe.** Asked for the path of a template it cannot find at that moment, it
     hands back nothing — which Android calls a method on and iOS passes to `CFAutorelease`. Draw
     the shape where it is needed, even when that means repeating it.
@@ -737,9 +862,22 @@ stands plainly inside the shelf; divided across the board it laps over the ends 
   load the game and dismiss the pause card.
 - The loading screen: it is over in a flash on a warm cache, so throttle the network to see it
   (`Network.emulateNetworkConditions` over CDP, or the browser's own throttle).
+- Performance: a desktop browser absorbs anything this game does, so measuring it there says
+  nothing until the CPU is slowed to roughly phone class (`Emulation.setCPUThrottlingRate`, rate 8
+  over CDP). Then `Performance.getMetrics`' `ScriptDuration` over a fixed window of play — idle on
+  the prep page, and again while a drag is driven in a loop — is comparable between two exports,
+  which is enough to tell a change that removed work from one that only moved it. It is still a
+  browser: it cannot tell you how the gesture *feels* on the phone, and it has none of
+  `react-native-svg`'s per-view cost on Android.
+- Storage failures: `localStorage.getItem` can be made to throw for one key from an init script
+  that runs before the bundle, which is the only way to reach the read-failure path above — and
+  the thing to assert afterwards is that the save is still there, byte for byte, after several
+  write intervals of play.
 - UI: `npx expo export --platform web`, serve `dist/`, and look at it at phone sizes
   (390×844 and the small 375×667). The Prep page is reached by swiping left or tapping the "Pha chế"
-  tab. To test a later day quickly, temporarily change `START_DAY, day: 1` in `App.tsx` (and the goal
-  in `levels.ts`) — revert before committing.
+  tab. To test a later day quickly, temporarily change `START_DAY, day: 1` in `App.tsx` — revert
+  before committing. The money shows in four places (HUD, opening sign, menu, day end); the
+  quickest way to see any of them against a particular balance is to write a save with the `money`
+  you want straight to `localStorage`, the way the cup states are set up above.
 - Native bundles: `npx expo export --platform ios --platform android` catches native-only
   bundling errors; `npx expo-doctor` checks dependency health.

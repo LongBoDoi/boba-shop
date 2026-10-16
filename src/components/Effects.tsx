@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from 'react';
+import { memo, useEffect, useMemo } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import Animated, {
   Easing,
@@ -38,7 +38,7 @@ interface EffectsLayerProps {
  * Serve and discard effects drawn over the whole game screen. Each effect is keyed by the
  * reducer event that caused it, so it plays once on mount and disappears when the event expires.
  */
-export function EffectsLayer({ departures, discarded, geometry, cupWidth }: EffectsLayerProps) {
+export const EffectsLayer = memo(function EffectsLayer({ departures, discarded, geometry, cupWidth }: EffectsLayerProps) {
   return (
     <View style={[StyleSheet.absoluteFill, pointerEventsStyles.none]}>
       {discarded && <TossedCup key={discarded.id} drink={discarded.drink} from={geometry.cup} to={geometry.trash} cupWidth={cupWidth} />}
@@ -54,7 +54,7 @@ export function EffectsLayer({ departures, discarded, geometry, cupWidth }: Effe
       ))}
     </View>
   );
-}
+});
 
 function TossedCup({ drink, from, to, cupWidth }: { drink: Drink; from: Point; to: Point; cupWidth: number }) {
   const progress = useSharedValue(0);

@@ -1,3 +1,5 @@
+import { TOPPING_PANS, TOPPING_PIECES, TOPPING_SCOOPS } from './toppingArt';
+
 /**
  * The painted kitchen, sprite by sprite, plus the geometry the code needs to line up with it.
  * Most sprites are cut from `tools/sheets/` by `tools/cut-sheets.py` — read that script before
@@ -59,6 +61,17 @@ export const JAR_TEA: Record<string, number> = {
 export const TEA_TANK = require('../../assets/kitchen/tea-tank.png');
 // Geometry measured in the generated frame; see tools/tea-tank-prompt.md for its source.
 export const TEA_TANK_ART = { width: 971, height: 1619, collar: 0.83, spout: 0.96 };
+/** Painted squat glass reservoirs matching the warm kitchen reference, in one transparent atlas. */
+export const TEA_DISPENSERS = require('../../assets/kitchen/tea-dispensers.png');
+export const TEA_DISPENSER_ART = {
+  imageWidth: 1536, imageHeight: 1024, width: 414, height: 452,
+  foot: 0.90, spout: 0.994,
+  label: { left: 0.323, top: 0.432, width: 0.34, height: 0.105 },
+  cells: {
+    black: { x: 76, y: 38 }, green: { x: 562, y: 38 }, oolong: { x: 1045, y: 38 },
+    taro: { x: 76, y: 516 }, matcha: { x: 562, y: 516 }, thai: { x: 1045, y: 516 },
+  } as Record<string, { x: number; y: number }>,
+};
 export const CUP_SPRITE = require('../../assets/kitchen/cup.png');
 export const CUP_BASE = require('../../assets/kitchen/cup-base.png');
 /**
@@ -183,8 +196,11 @@ export const CUP_HOLDER = require('../../assets/kitchen/cup-holder.png');
 export const ROOM_BG_SIZE = { width: 1536, height: 1024 };
 export const ROOM_BG_TABLE = { top: 736, base: 950 };
 export const ROOM_BG_TEA_SHELF = {
-  x0: 38, x1: 610, tankWidth: 168,
-  bases: [300, 505],
+  x0: 16, x1: 636, tankWidth: 198,
+  // The feet sit on the lit wooden faces; the tap hangs over the front edge.
+  bases: [308, 523],
+  // The catalogue's own order, so the week fills the rack left to right and then down a shelf.
+  slots: ['black', 'green', 'thai', 'oolong', 'taro', 'matcha'],
 };
 export const ROOM_BG_ICE_MACHINE = { x: 230, y: 585, width: 265, height: 116 };
 /**
@@ -195,9 +211,15 @@ export const ROOM_BG_ICE_MACHINE = { x: 230, y: 585, width: 265, height: 116 };
  */
 export const ROOM_BG_CUP_HOLDER = { x: 553, y: 782, width: 424, height: 127 };
 export const ROOM_BG_TOPPING_SHELF = {
-  x0: 1112, x1: 1500, gap: 8, height: 100,
-  bases: [539, 642],
-  slots: ['pearls', 'popping', 'pudding', 'pandan', 'lychee', 'grass'],
+  // Shared boundaries project the whole grid into the basin's perspective.
+  edges: [
+    { x0: 1127, x1: 1499, y: 456 },
+    { x0: 1117, x1: 1507, y: 516 },
+    { x0: 1106, x1: 1515, y: 577 },
+    { x0: 1095, x1: 1523, y: 640 },
+  ],
+  // Unlock order, read like a page: left to right along the back row, then the next row forward.
+  slots: ['pearls', 'popping', 'lychee', 'pudding', 'grass', 'pandan', 'redbean', 'aloe', 'crystal'],
 };
 
 /**
@@ -390,14 +412,16 @@ export const SCOOP_BOWL = { cx: 0.34, cy: 0.57, r: 0.17 };
 export const PRELOAD: number[] = [
   // the room itself, and what stands in it
   ROOM_BG,
+  TEA_DISPENSERS,
   CUP_HOLDER,
-  BIN_EMPTY,
-  ...Object.values(BIN),
+  TOPPING_PANS,
+  TOPPING_SCOOPS,
+  TOPPING_PIECES,
   SCOOP,
   ...Object.values(FOAM),
   // what you carry, and what lands in the cup
-  ...Object.values(SCOOPFUL),
-  ...Object.values(PIECE),
+  SCOOPFUL.ice,
+  PIECE.ice,
   CUP_ICE,
   // the cup, and the painted tea inside it
   CUP_SPRITE,

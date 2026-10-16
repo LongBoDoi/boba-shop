@@ -37,7 +37,8 @@ try {
   assert.equal(restored.paused, true, 'A restored shift is paused, not already running down');
   assert.equal(restored.day, state.day, 'Same day');
   assert.equal(restored.clock, state.clock, 'Same point in the day');
-  assert.equal(restored.coins, state.coins, 'Same takings');
+  assert.equal(restored.coins, state.coins, "Same takings");
+  assert.equal(restored.money, state.money, 'Same money in the till');
   assert.equal(restored.seed, state.seed, 'The RNG carries on where it left off');
   assert.equal(restored.mode, state.mode, 'Same mode');
   assert.equal(restored.cupId, state.cupId, 'Same cup');
@@ -132,6 +133,9 @@ try {
   assert.equal(parseGame(broken((s) => (s.clock = -1))), null, 'A clock before opening');
   assert.equal(parseGame(broken((s) => (s.clock = 'soon'))), null, 'A clock that is not a number');
   assert.equal(parseGame(broken((s) => (s.coins = Infinity))), null, 'Infinite takings');
+  assert.equal(parseGame(broken((s) => (s.money = -1))), null, 'A till in debt');
+  assert.equal(parseGame(broken((s) => (s.money = 12.5))), null, 'Half a unit of money');
+  assert.equal(parseGame(broken((s) => (s.money = 'lots'))), null, 'A till that is not a number');
   assert.equal(parseGame(broken((s) => (s.seed = 1e40))), null, 'A seed that is not a 32-bit int');
   assert.equal(parseGame(broken((s) => (s.slots = {}))), null, 'A counter that is not a list');
   assert.equal(parseGame(broken((s) => (s.stats = null))), null, 'Missing stats');
@@ -151,6 +155,15 @@ try {
   assert.equal(parseGame(broken((s) => (s.slots[slot].orderedAt = 'now'))), null, 'An order taken at no time');
 
   // ------------------------------------------------------------------ saves that are tidied up
+  // The till was added after the game shipped. A save from before it has to come back — losing a
+  // run to gain a tidier format is the one failure this file exists to prevent — carrying today's
+  // takings, which is the only money in such a save that can be accounted for.
+  const earlier = parseGame(broken((s) => delete s.money));
+  assert.ok(earlier, 'A save written before the till still loads');
+  assert.equal(earlier.money, earlier.coins, "It opens with today's takings in the till");
+  assert.equal(earlier.day, state.day, 'On the day it was saved on');
+  assert.deepEqual(earlier.cup, parseGame(serializeGame(state)).cup, 'With the cup it was building');
+
   const narrower = parseGame(broken((s) => s.slots.push(s.slots[slot])));
   assert.ok(narrower, 'A save from a day with more spots than today still loads');
   assert.equal(narrower.slots.length, getDayConfig(state.day).slots, "Fitted to today's counter");

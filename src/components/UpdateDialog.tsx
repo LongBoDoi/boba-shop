@@ -55,6 +55,11 @@ export function UpdateDialog({ update }: { update: Update }) {
               <View style={styles.track}>
                 <View style={[styles.fill, { width: `${Math.round(clamp(update.progress) * 100)}%` }]} />
               </View>
+              {/* A card over the whole screen that takes every touch must always have a way off
+                  it. Without this one, a download that stalled left the game unusable until the
+                  app was force-stopped — the update gives up on its own eventually, but a player
+                  staring at a bar that has not moved should not have to wait for it. */}
+              <Button label="Để sau" variant="secondary" onPress={update.dismiss} style={styles.action} />
             </>
           )}
 

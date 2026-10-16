@@ -1,9 +1,9 @@
-import { memo, useEffect, useState } from 'react';
+import { memo, useEffect, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import Animated, { interpolate, useAnimatedStyle, useSharedValue, withDelay, withTiming } from 'react-native-reanimated';
 import Svg, { Circle, Path } from 'react-native-svg';
 
-import { Customer, Departure, Feedback } from '../game/reducer';
+import { Customer, Departure, Feedback, patienceLeft } from '../game/reducer';
 import { ease, easeInOut, timing } from '../motion';
 import { colors } from '../theme';
 import { Character, Mood } from './art/Character';
@@ -32,14 +32,6 @@ interface CustomerStageProps {
   onFocusTicket: (slot: number) => void;
 }
 
-/** Fraction of patience left for whichever stage the customer is in (1 = full, 0 = gave up). */
-function patienceOf(customer: Customer, clock: number) {
-  if (customer.status === 'requesting') {
-    return Math.max(0, 1 - (clock - customer.arrivedAt) / customer.orderPatienceMs);
-  }
-  return Math.max(0, 1 - (clock - (customer.orderedAt ?? customer.arrivedAt)) / customer.patienceMs);
-}
-
 /** Character size for a stage, shared with the effects layer so cups land on the right spot. */
 export function stageMetrics(width: number, height: number, slotCount: number) {
   const slotWidth = width / slotCount;
@@ -52,7 +44,9 @@ export function stageMetrics(width: number, height: number, slotCount: number) {
 }
 
 export function CustomerStage({ width, height, slots, departures, selectedSlot, clock, feedback, onTakeOrder, onFocusTicket }: CustomerStageProps) {
-  const metrics = stageMetrics(width, height, slots.length);
+  // The same object between renders, so a customer whose patience has not visibly moved is left
+  // alone on the game's clock instead of being drawn again.
+  const metrics = useMemo(() => stageMetrics(width, height, slots.length), [width, height, slots.length]);
 
   return (
     <View style={{ width, height }}>
@@ -83,7 +77,7 @@ export function CustomerStage({ width, height, slots, departures, selectedSlot, 
                 key={customer.id}
                 customer={customer}
                 selected={slot === selectedSlot}
-                patience={patienceOf(customer, clock)}
+                patience={patienceLeft(customer, clock)}
                 metrics={metrics}
                 enterFrom={slot < slots.length / 2 ? -1 : 1}
               />
@@ -132,7 +126,7 @@ interface ActiveCustomerProps {
   enterFrom: number;
 }
 
-function ActiveCustomer({ customer, selected, patience, metrics, enterFrom }: ActiveCustomerProps) {
+const ActiveCustomer = memo(function ActiveCustomer({ customer, selected, patience, metrics, enterFrom }: ActiveCustomerProps) {
   const mood: Mood = patience > 0.6 ? 'happy' : patience > 0.3 ? 'neutral' : 'angry';
   const blinking = useBlink();
   const walk = useSharedValue(0);
@@ -182,7 +176,7 @@ function ActiveCustomer({ customer, selected, patience, metrics, enterFrom }: Ac
       </Animated.View>
     </>
   );
-}
+});
 
 /** A little speech bubble with "…" shown over a customer who wants to order but hasn't yet. */
 function OrderPad() {

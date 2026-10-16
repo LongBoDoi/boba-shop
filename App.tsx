@@ -27,7 +27,7 @@ const WIPE_MS = 250;
 
 export default function App() {
   const [fontsLoaded, fontError] = useFonts({ Baloo2_500Medium, Baloo2_600SemiBold, Baloo2_700Bold, Baloo2_800ExtraBold });
-  const initial = useSavedGame();
+  const restored = useSavedGame();
   const artwork = useArtwork();
 
   // Three things have to be in hand before the first screen can be drawn, and the saved shop is
@@ -35,18 +35,18 @@ export default function App() {
   // not something laid over a day that has already opened. The artwork could be left to arrive as
   // it is drawn, and that is exactly what made the kitchen fill itself in plank by plank.
   const lettering = fontsLoaded || fontError;
-  if (!lettering || !initial || artwork < 1) {
+  if (!lettering || !restored || artwork < 1) {
     // The bar is weighted the way the wait actually falls: the artwork is nearly all of it.
-    const progress = (lettering ? 0.1 : 0) + (initial ? 0.05 : 0) + artwork * 0.85;
+    const progress = (lettering ? 0.1 : 0) + (restored ? 0.05 : 0) + artwork * 0.85;
     return <LoadingScreen progress={progress} />;
   }
 
-  return <Shop initial={initial} />;
+  return <Shop initial={restored.state} writable={restored.writable} />;
 }
 
-function Shop({ initial }: { initial: GameState }) {
+function Shop({ initial, writable }: { initial: GameState; writable: boolean }) {
   const [state, dispatch] = useReducer(gameReducer, initial);
-  const save = useSaveGame(state);
+  const save = useSaveGame(state, writable);
   const update = useUpdate(save);
 
   // When the phase changes, keep showing the old screen (frozen) until the wipe covers it.
@@ -77,6 +77,7 @@ function Shop({ initial }: { initial: GameState }) {
         {screen.phase === 'title' && (
           <TitleScreen
             onStart={() => dispatch({ type: 'START_DAY', day: 1 })}
+            money={screen.money}
             mode={screen.mode}
             onChangeMode={(mode) => dispatch({ type: 'SET_MODE', mode })}
           />
@@ -86,7 +87,6 @@ function Shop({ initial }: { initial: GameState }) {
           <DayEndScreen
             state={screen}
             onNextDay={() => dispatch({ type: 'START_DAY', day: screen.day + 1 })}
-            onRetry={() => dispatch({ type: 'START_DAY', day: screen.day })}
             onMenu={() => dispatch({ type: 'GO_TO_TITLE' })}
           />
         )}

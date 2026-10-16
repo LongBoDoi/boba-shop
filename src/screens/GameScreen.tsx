@@ -1,4 +1,4 @@
-import { Dispatch, useCallback, useEffect, useRef, useState } from 'react';
+import { Dispatch, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   AppState,
   NativeScrollEvent,
@@ -27,7 +27,14 @@ import { tapHaptic, toneHaptic } from '../utils/haptics';
 import { CounterPage } from './CounterPage';
 import { PrepGeometry, PrepPage } from './PrepPage';
 
-const TICK_MS = 100;
+/**
+ * How often the day moves. Nothing about the game's accuracy rides on this — every rule is written
+ * against the measured `dt` below, not against a number of ticks — so it is purely how often the
+ * shop is redrawn, and on a phone that is the most expensive repeating thing in the app. Ten times
+ * a second was buying nothing: the clock is read to the second, and a patience heart is rounded to
+ * a fiftieth of its run (see `patienceLeft`), so neither of them can show a difference.
+ */
+const TICK_MS = 150;
 // Cap a single step so returning from the background doesn't skip time.
 const MAX_STEP_MS = 250;
 
@@ -61,7 +68,12 @@ export function GameScreen({ state, dispatch }: GameScreenProps) {
 
   useEffect(() => {
     const subscription = AppState.addEventListener('change', (status) => {
-      if (status !== 'active') dispatch({ type: 'SET_PAUSED', paused: true });
+      if (status === 'active') return;
+      dispatch({ type: 'SET_PAUSED', paused: true });
+      // The kitchen empties its own hands when this happens; this is the pager's half of the same
+      // thing. A drag the system took away without ending leaves this `true` for good, and the
+      // player comes back to a prep page they cannot swipe off.
+      setDragging(false);
     });
     return () => subscription.remove();
   }, [dispatch]);
@@ -163,15 +175,18 @@ export function GameScreen({ state, dispatch }: GameScreenProps) {
   // The counter owns a whole page now, so the stage can be taller and the customers larger.
   const stageHeight = Math.round(Math.min(360, Math.max(240, windowHeight * 0.44)));
 
-  const geometry: EffectsGeometry = {
+  // Both of these are read by memoized children, and the day's clock runs through here ten times
+  // a second: rebuilt on every one of those, they told the effects layer and the order panel that
+  // nothing about them was the same as before.
+  const geometry: EffectsGeometry = useMemo(() => ({
     cup: { x: prep.machine.x - origin.x, y: prep.machine.y - origin.y },
     money: { x: wallet.x - origin.x, y: wallet.y - origin.y },
     trash: { x: prep.trash.x - origin.x, y: prep.trash.y - origin.y },
-  };
+  }), [prep.machine.x, prep.machine.y, prep.trash.x, prep.trash.y, wallet.x, wallet.y, origin.x, origin.y]);
 
-  const tickets: Ticket[] = state.slots.flatMap((customer, slot) =>
+  const tickets: Ticket[] = useMemo(() => state.slots.flatMap((customer, slot) =>
     customer && customer.status === 'ordered' ? [{ slot, customer }] : [],
-  );
+  ), [state.slots]);
   const selectedCustomer = state.selectedSlot === null ? null : state.slots[state.selectedSlot];
   const requestingCount = state.slots.filter((customer) => customer?.status === 'requesting').length;
 
@@ -196,7 +211,7 @@ export function GameScreen({ state, dispatch }: GameScreenProps) {
           clock={state.clock}
           durationMs={config.durationMs}
           coins={state.coins}
-          goal={config.goal}
+          money={state.money}
           onPause={() => dispatch({ type: 'SET_PAUSED', paused: true })}
           onWalletLayout={(x, y) => setWallet({ x, y })}
         />
@@ -255,7 +270,7 @@ export function GameScreen({ state, dispatch }: GameScreenProps) {
         {opening && (
           <OpeningSign
             day={state.day}
-            goal={config.goal}
+            money={state.money}
             title={state.day === 1 ? 'Cách chơi' : 'Mới hôm nay'}
             lines={intro}
             onDone={finishOpening}

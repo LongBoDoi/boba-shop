@@ -34,7 +34,12 @@ import { Customer, CupBuild, DayStats, GameMode, GameState, Phase } from './redu
  */
 export const SAVE_VERSION = 1;
 
-/** Bump `SAVE_VERSION` when this shape changes; an older save is then discarded on sight. */
+/**
+ * Bump `SAVE_VERSION` when this shape changes **incompatibly**; an older save is then discarded on
+ * sight. A field that is merely *new* is migrated instead, as `money` is below — discarding costs
+ * the player their shop, so it is for saves that genuinely cannot be read, not for ones this build
+ * knows how to finish reading.
+ */
 interface SavedGame {
   v: number;
   phase: Phase;
@@ -42,6 +47,8 @@ interface SavedGame {
   day: number;
   clock: number;
   coins: number;
+  /** Added after launch; a save without it is migrated rather than thrown away. See `parseGame`. */
+  money?: number;
   slots: (Customer | null)[];
   selectedSlot: number | null;
   cup: Drink;
@@ -64,6 +71,7 @@ export function serializeGame(state: GameState): string {
     day: state.day,
     clock: state.clock,
     coins: state.coins,
+    money: state.money,
     slots: state.slots,
     selectedSlot: state.selectedSlot,
     cup: state.cup,
@@ -102,6 +110,11 @@ export function parseGame(json: string | null | undefined): GameState | null {
   const day = int(save.day, 1, 9_999);
   const clock = num(save.clock, 0);
   const coins = int(save.coins, 0);
+  // The till was added after the game shipped, so a save from before it has no record of what the
+  // shop had put by — and today's takings are the only money in it we can account for. Starting
+  // such a player on what they earned today is the honest read; the alternative, refusing the
+  // save, costs them the whole run to gain a tidier format.
+  const money = save.money === undefined ? coins : int(save.money, 0);
   const cupId = int(save.cupId, 1);
   const nextId = int(save.nextId, 1);
   const nextSpawnAt = num(save.nextSpawnAt, 0);
@@ -110,7 +123,7 @@ export function parseGame(json: string | null | undefined): GameState | null {
   // the first tick holds a number the size of `Date.now()`. Bounding this to an int32 threw those
   // away — the whole opening of a run, up to and including the day's sign.
   const seed = int(save.seed, Number.MIN_SAFE_INTEGER);
-  if (!phase || !mode || day === null || clock === null || coins === null) return null;
+  if (!phase || !mode || day === null || clock === null || coins === null || money === null) return null;
   if (cupId === null || nextId === null || nextSpawnAt === null || seed === null) return null;
 
   const config = getDayConfig(day);
@@ -135,6 +148,7 @@ export function parseGame(json: string | null | undefined): GameState | null {
     config,
     clock,
     coins,
+    money,
     slots,
     selectedSlot,
     cup: {
