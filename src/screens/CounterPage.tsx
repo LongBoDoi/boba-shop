@@ -9,6 +9,8 @@ import { colors } from '../theme';
 interface CounterPageProps {
   width: number;
   stageHeight: number;
+  /** Sideways: bigger customers, so a wide stage is not a row of distant figures. */
+  wide: boolean;
   slots: (Customer | null)[];
   departures: Departure[];
   selectedSlot: number | null;
@@ -22,6 +24,7 @@ interface CounterPageProps {
 export function CounterPage({
   width,
   stageHeight,
+  wide,
   slots,
   departures,
   selectedSlot,
@@ -36,6 +39,7 @@ export function CounterPage({
       <CustomerStage
         width={width}
         height={stageHeight}
+        wide={wide}
         slots={slots}
         departures={departures}
         selectedSlot={selectedSlot}

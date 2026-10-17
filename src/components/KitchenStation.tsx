@@ -101,10 +101,18 @@ export interface KitchenLayout {
   homeY: number;
 }
 
-/** Cup stays on the foreground counter while the ingredient wall pans behind it. */
+/**
+ * Cup stays on the foreground counter while the ingredient wall pans behind it.
+ *
+ * Its size is the work top's, not the screen's: the depth of the painted counter is what says how
+ * big a cup standing on it looks, and that depth is however large the room is drawn. A flat cap in
+ * screen pixels was a phone's cup on a tablet's counter — a thimble on a coaster three times its
+ * width — so the only absolute left is a floor for small phones and a ceiling far enough out that
+ * nothing but a desktop window reaches it.
+ */
 export function cupSizeFor(W: number, H: number) {
   const table = kitchenTableFor(W, H);
-  const width = Math.round(Math.max(56, Math.min(82, W * 0.19, (table.base - table.top) * 0.58)));
+  const width = Math.round(Math.max(56, Math.min(150, W * 0.19, (table.base - table.top) * 0.58)));
   return { width, height: Math.round(width / ART.cup) };
 }
 

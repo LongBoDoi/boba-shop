@@ -39,6 +39,37 @@ const HEART =
  */
 export const ORDER_PANEL_HEIGHT = 132;
 
+/** The card's own frame, which its width is measured inside of. */
+const CARD_BORDER = 2;
+/** The progress bar and its margins, and the line the other taken orders stand on. */
+const TRACK_HEIGHT = 18;
+const QUEUE_HEIGHT = 44;
+
+/**
+ * How wide a tile's column is in a card standing on its end, where the row wraps.
+ *
+ * The tiles want to be big — this card has the width for it — but a phone turned sideways gives
+ * the column a couple of hundred pixels in all, and a day-seven order wrapped at that size walks
+ * straight out of the bottom of the card and under the buttons. So the biggest size that still
+ * stands the whole order inside the height it has is the one taken, and when nothing fits (an
+ * order longer than any card this short can show) it is the smallest, which clips the least.
+ */
+function fitTiles(count: number, room: number, budget: number) {
+  let grid = { column: Math.min(room, 86) };
+  for (let column = 86; column >= 38; column -= 4) {
+    const perRow = Math.max(1, Math.floor(room / column));
+    const tile = Math.max(24, Math.min(column - 16, 44));
+    const caption = Math.max(9, Math.min(column * 0.2, 12));
+    // the tile, its caption (two lines of it, at worst) and the gap to the row below
+    const rowHeight = tile + caption * 2.5 + 10;
+    grid = { column: Math.min(room / Math.max(1, Math.min(count, perRow)), column) };
+    // Before the column has been measured there is no budget to fit; take the full size, which
+    // is what every card that has the room ends up with anyway.
+    if (budget <= 0 || Math.ceil(count / perRow) * rowHeight <= budget) break;
+  }
+  return grid;
+}
+
 interface Chip {
   key: string;
   category: CategoryId;
@@ -85,6 +116,14 @@ interface OrderBubbleProps {
   tickets: Ticket[];
   selectedSlot: number | null;
   width: number;
+  /**
+   * The card stands in a column beside the kitchen rather than in a band above it (see
+   * `isWideLayout`): it takes the column's height, and the tiles wrap down it instead of running
+   * out along one row.
+   */
+  tall?: boolean;
+  /** Tall: the height the column has for it, so a short column gets smaller tiles. */
+  maxHeight?: number;
   onSelectTicket: (slot: number) => void;
 }
 
@@ -106,10 +145,12 @@ export const OrderBubble = memo(function OrderBubble({
   tickets,
   selectedSlot,
   width: W,
+  tall = false,
+  maxHeight = 0,
   onSelectTicket,
 }: OrderBubbleProps) {
   const pad = 10;
-  const avatar = 40;
+  const avatar = tall ? 44 : 40;
   const others = tickets.filter((ticket) => ticket.slot !== selectedSlot);
 
   const chips = customer ? chipsFor(customer.order, cup, config) : [];
@@ -117,14 +158,41 @@ export const OrderBubble = memo(function OrderBubble({
   // The tiles stand together at one size and the row runs out from the left, the way the order
   // is read. Sharing the whole width out between them instead leaves a two-thing order as two
   // tiles marooned at either end of the card.
-  const room = W - pad * 2;
-  const column = chips.length > 0 ? Math.min(room / chips.length, 56) : 0;
-  const tile = Math.round(Math.max(24, Math.min(column - 16, 32)));
-  const caption = Math.round(Math.max(9, Math.min(column * 0.2, 10.5)) * 2) / 2;
+  //
+  // A tall card has the width for three or four of them and the height to spare, so its row is
+  // allowed to wrap: a full order stands as a block of tiles rather than being squeezed into a
+  // line of thumbnails.
+  // The card's border is inside its width, so a row laid out on `W - pad * 2` is two pixels a
+  // side too wide — enough, in the column, to drop the last tile of a row onto the next one.
+  const room = W - pad * 2 - CARD_BORDER * 2;
+  const band = { column: chips.length > 0 ? Math.min(room / chips.length, 56) : 0 };
+  const grid = tall
+    ? fitTiles(chips.length, room, (maxHeight || 0) - pad * 2 - CARD_BORDER * 2
+      - Math.max(avatar, 30) - TRACK_HEIGHT - (others.length > 0 ? QUEUE_HEIGHT : 0))
+    : band;
+  const column = grid.column;
+  const tile = Math.round(Math.max(24, Math.min(column - 16, tall ? 44 : 32)));
+  const caption = Math.round(Math.max(9, Math.min(column * 0.2, tall ? 12 : 10.5)) * 2) / 2;
+
+  const queue = others.map(({ slot, customer: waiting }) => (
+    <OrderPin
+      key={waiting.id}
+      customer={waiting}
+      cup={cup}
+      config={config}
+      size={tall ? 36 : 32}
+      onPress={() => onSelectTicket(slot)}
+    />
+  ));
 
   return (
     <View
-      style={[styles.card, { width: W, height: ORDER_PANEL_HEIGHT, padding: pad }, pointerEventsStyles.boxNone]}
+      style={[
+        styles.card,
+        { width: W, padding: pad },
+        tall ? styles.cardTall : { height: ORDER_PANEL_HEIGHT },
+        pointerEventsStyles.boxNone,
+      ]}
     >
       <View style={styles.head}>
         {/* who it is for */}
@@ -144,21 +212,11 @@ export const OrderBubble = memo(function OrderBubble({
           </Text>
         </View>
         {customer && <Patience size={26} left={patience} />}
-        {others.length > 0 && (
+        {/* Side by side the head has the width for the queue; stacked it would crush the name. */}
+        {!tall && queue.length > 0 && (
           <>
             <View style={styles.split} />
-            <View style={styles.queue}>
-              {others.map(({ slot, customer: waiting }) => (
-                <OrderPin
-                  key={waiting.id}
-                  customer={waiting}
-                  cup={cup}
-                  config={config}
-                  size={32}
-                  onPress={() => onSelectTicket(slot)}
-                />
-              ))}
-            </View>
+            <View style={styles.queue}>{queue}</View>
           </>
         )}
       </View>
@@ -168,8 +226,15 @@ export const OrderBubble = memo(function OrderBubble({
         <View style={[styles.fill, { width: `${chips.length > 0 ? (done / chips.length) * 100 : 0}%` }]} />
       </View>
 
+      {tall && queue.length > 0 && (
+        <View style={styles.waiting}>
+          <Text style={styles.waitingLabel}>Đang chờ</Text>
+          <View style={styles.queue}>{queue}</View>
+        </View>
+      )}
+
       {customer ? (
-        <View style={styles.chips}>
+        <View style={[styles.chips, tall && styles.chipsWrap]}>
           {chips.map((chip) => (
             <ChipTile key={chip.key} chip={chip} width={column} tile={tile} caption={caption} />
           ))}
@@ -289,7 +354,7 @@ function OrderPin({
 const styles = StyleSheet.create({
   card: {
     backgroundColor: '#FFF8E7',
-    borderWidth: 2,
+    borderWidth: CARD_BORDER,
     borderRadius: 18,
     borderColor: '#D8B889',
     ...Platform.select({
@@ -302,6 +367,14 @@ const styles = StyleSheet.create({
         elevation: 5,
       },
     }),
+  },
+  /**
+   * Standing in a column, the card is as tall as what it has to say — a full order's tiles wrap
+   * into another row and it grows. Stretched to the column instead it is mostly empty card, and
+   * nothing below it moves when it grows, which is the only reason the band's height is fixed.
+   */
+  cardTall: {
+    flexShrink: 1,
   },
   head: {
     flexDirection: 'row',
@@ -358,6 +431,25 @@ const styles = StyleSheet.create({
     flex: 1,
     flexDirection: 'row',
     justifyContent: 'flex-start',
+  },
+  /** A tall card's tiles fill out from the top left, a row at a time. */
+  chipsWrap: {
+    flexGrow: 0,
+    flexWrap: 'wrap',
+    alignContent: 'flex-start',
+    rowGap: 8,
+  },
+  /** The other taken orders, on their own line where the card is too narrow for the head row. */
+  waiting: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 8,
+  },
+  waitingLabel: {
+    fontSize: 11,
+    color: '#9C7B55',
+    fontFamily: fonts.semi,
   },
   hintBox: {
     flex: 1,

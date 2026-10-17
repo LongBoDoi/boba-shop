@@ -1,6 +1,6 @@
 import { memo, useId } from 'react';
 import { View } from 'react-native';
-import Svg, { ClipPath, Defs, G, Image as SvgImage, Rect } from 'react-native-svg';
+import Svg, { ClipPath, Defs, Image as SvgImage, Rect } from 'react-native-svg';
 
 import {
   ToppingAtlas, TOPPING_PANS, TOPPING_PAN_ART, TOPPING_PIECES, TOPPING_PIECE_ART,
@@ -88,7 +88,15 @@ export const ToppingScoopArt = memo(function ToppingScoopArt({ id, size }: { id:
     width={size} height={size * cell.height / cell.width} />;
 });
 
-/** The static viewport clips one painted piece; the parent animates its position and tea wash. */
+/**
+ * The static viewport clips one painted piece; the parent animates its position and tea wash.
+ *
+ * The fade goes on the image itself and **not** on a group around it. A `<G>` whose opacity is
+ * anything but 1 makes react-native-svg allocate a bitmap the size of the whole canvas, and
+ * recycle and reallocate it on every single draw (`GroupView.drawGroup`) — seventeen of these per
+ * portion of topping, three portions deep, was most of what made a full cup stutter on a phone.
+ * The group held one visual child, so moving the fade down to it is the same picture.
+ */
 export const ToppingPieceArt = memo(function ToppingPieceArt({ id, x, y, width, height, opacity }: {
   id: string; x: number; y: number; width: number; height: number; opacity: number;
 }) {
@@ -98,11 +106,11 @@ export const ToppingPieceArt = memo(function ToppingPieceArt({ id, x, y, width, 
   const sx = width / cell.width;
   const sy = height / cell.height;
   return (
-    <G opacity={opacity}>
+    <>
       <Defs><ClipPath id={`piece-${uid}`}><Rect x={x} y={y} width={width} height={height} /></ClipPath></Defs>
       <SvgImage href={TOPPING_PIECES} x={x - cell.x * sx} y={y - cell.y * sy}
         width={TOPPING_PIECE_ART.width * sx} height={TOPPING_PIECE_ART.height * sy}
-        preserveAspectRatio="none" clipPath={`url(#piece-${uid})`} />
-    </G>
+        preserveAspectRatio="none" clipPath={`url(#piece-${uid})`} opacity={opacity} />
+    </>
   );
 });

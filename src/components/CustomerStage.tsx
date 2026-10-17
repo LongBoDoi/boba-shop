@@ -30,12 +30,23 @@ interface CustomerStageProps {
   onTakeOrder: (slot: number) => void;
   /** Tap a customer whose order is already taken to jump to their ticket on the prep page. */
   onFocusTicket: (slot: number) => void;
+  /** A stage laid sideways, with the room for larger figures; see `stageMetrics`. */
+  wide?: boolean;
 }
 
-/** Character size for a stage, shared with the effects layer so cups land on the right spot. */
-export function stageMetrics(width: number, height: number, slotCount: number) {
+/**
+ * Character size for a stage, shared with the effects layer so cups land on the right spot.
+ *
+ * The 108 is a phone's: a figure drawn any larger than that is wider than the slot it stands in.
+ * A stage laid sideways has three or four times that width per slot and the height to match, and
+ * holding the cap there leaves the customers small and far apart, like a shop seen from across
+ * the street — so a wide stage sizes them off its own height instead, and the slot width and the
+ * stage's headroom still have the last word.
+ */
+export function stageMetrics(width: number, height: number, slotCount: number, wide = false) {
   const slotWidth = width / slotCount;
-  const charWidth = Math.min(108, slotWidth * 0.8, (height - 76) / 1.2);
+  const cap = wide ? Math.min(170, Math.max(108, height * 0.42)) : 108;
+  const charWidth = Math.min(cap, slotWidth * 0.8, (height - 76) / 1.2);
   const charHeight = charWidth * 1.2;
   const bubbleBottom = charHeight * 0.86 + FIGURE_LIFT;
   // Centre of the speech bubble, measured from the top of the stage.
@@ -43,19 +54,26 @@ export function stageMetrics(width: number, height: number, slotCount: number) {
   return { slotWidth, charWidth, charHeight, bubbleBottom, bubbleCenterY };
 }
 
-export function CustomerStage({ width, height, slots, departures, selectedSlot, clock, feedback, onTakeOrder, onFocusTicket }: CustomerStageProps) {
+export function CustomerStage({ width, height, slots, departures, selectedSlot, clock, feedback, wide = false, onTakeOrder, onFocusTicket }: CustomerStageProps) {
   // The same object between renders, so a customer whose patience has not visibly moved is left
   // alone on the game's clock instead of being drawn again.
-  const metrics = useMemo(() => stageMetrics(width, height, slots.length), [width, height, slots.length]);
+  const metrics = useMemo(() => stageMetrics(width, height, slots.length, wide), [width, height, slots.length, wide]);
+
+  // Two customers given half a sideways stage each stand a room apart, one at either end of an
+  // empty counter. Sideways they keep a slot's worth of elbow room and queue in the middle of it
+  // instead, which is also where the shop's own backdrop leaves room for them.
+  const slotWidth = wide ? Math.min(width / slots.length, metrics.charWidth * 1.6) : undefined;
 
   return (
     <View style={{ width, height }}>
       <ShopBackdrop width={width} height={height} />
-      <View style={styles.row}>
+      <View style={[styles.row, wide && styles.rowCentred]}>
         {slots.map((customer, slot) => (
           <Pressable
             key={slot}
-            style={styles.slot}
+            // The width has to go in as the flex basis: `styles.slot` is `flex: 1`, which carries
+            // a basis of 0, and a basis — even an inherited one — outranks a width.
+            style={[styles.slot, slotWidth !== undefined && { flexGrow: 0, flexShrink: 0, flexBasis: slotWidth }]}
             onPress={() => (customer?.status === 'requesting' ? onTakeOrder(slot) : onFocusTicket(slot))}
             disabled={!customer}
             accessibilityRole="button"
@@ -271,6 +289,9 @@ const styles = StyleSheet.create({
   row: {
     ...StyleSheet.absoluteFill,
     flexDirection: 'row',
+  },
+  rowCentred: {
+    justifyContent: 'center',
   },
   slot: {
     flex: 1,

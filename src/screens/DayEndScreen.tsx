@@ -212,6 +212,10 @@ const styles = StyleSheet.create({
     padding: 20,
   },
   card: {
+    /** Centred and held to a readable width, rather than stretched across a tablet. */
+    width: '100%',
+    maxWidth: 520,
+    alignSelf: 'center',
     backgroundColor: colors.floor,
     borderRadius: 28,
     padding: 20,

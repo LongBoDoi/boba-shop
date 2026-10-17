@@ -1,5 +1,5 @@
 import { memo, useEffect, useId, useMemo } from 'react';
-import Animated, { cancelAnimation, SharedValue, useAnimatedProps, useDerivedValue, useSharedValue, withTiming } from 'react-native-reanimated';
+import Animated, { cancelAnimation, DerivedValue, SharedValue, useAnimatedProps, useDerivedValue, useSharedValue, withTiming } from 'react-native-reanimated';
 import { ClipPath, Defs, Ellipse, G, Image as SvgImage, LinearGradient, Mask, Path, Stop } from 'react-native-svg';
 
 import { CUP_ICE } from './art/kitchenArt';
@@ -20,6 +20,9 @@ const SIDE_FACE = 'M8-2L21-10L18 14Q18 16 16 17L9 22Q8 23 6 22Z';
 /** The cup's own box, for the even-odd hole that leaves everything above the water exposed. */
 const BOX = 'M0 0H113V174H0Z';
 
+/** How much of the drink's colour a cube under the tea takes. See `fade` in `CupIce`. */
+const TINT = 0.28;
+
 /**
  * Which side of the waterline this is drawing. Ice is drawn twice, from either side of the cup's
  * painted front wall: what is under the tea keeps the glass wash over it, and the crowns standing
@@ -28,14 +31,54 @@ const BOX = 'M0 0H113V174H0Z';
  */
 export type IceLayer = 'submerged' | 'exposed';
 
+/** One cube's live pose, as `cupIcePosition` reports it. */
+type IcePose = ReturnType<typeof cupIcePosition>;
+
+export interface IcePlacements {
+  /** Where each cube of the layout rests on the dry bed, by its own index in that layout. */
+  dry: ReturnType<typeof cupIceRestPosition>[];
+  /** Where each cube is *now*, by the same index — the whole tray of them, in one worklet. */
+  poses: DerivedValue<IcePose[]>;
+}
+
+/**
+ * Fit every cube in the layout to the live tea, once per frame.
+ *
+ * This used to be a `useDerivedValue` inside each cube, and each cube appears four times over: it
+ * is drawn on both sides of the waterline, it has a contact shadow, and it has a meniscus. So a
+ * full cup ran `cupIcePosition` — an eighteen-point fit of the painted outline against the tapered
+ * glass, with its own trigonometry — forty-eight times on every frame of a pour, for twelve
+ * answers. They all read the same level, so the fit is done once here and handed out by index.
+ *
+ * It fits the whole layout rather than the cubes currently in the cup, so an index means the same
+ * thing however many scoops have gone in: a cube that mounts with the second scoop cannot find
+ * itself off the end of an array that has not caught up with it yet.
+ */
+export function useIcePlacements(layout: IcePlacement[], level: SharedValue<number>, hasTea: boolean,
+  toppingLayers: number): IcePlacements {
+  const dry = useMemo(
+    () => layout.map((cube) => cupIceRestPosition(cube.restX, cube.r, cube.restAngle,
+      cube.restLift + toppingLayers * 10)),
+    [layout, toppingLayers],
+  );
+  const poses = useDerivedValue(() => {
+    // Always read the live level, including while the empty cup is waiting for its first tea.
+    const raw = hasTea ? level.get() : 0;
+    return layout.map((cube, i) => cupIcePosition(raw, cube.x, cube.r, cube.angle, cube.depth,
+      dry[i].cx, dry[i].cy, cube.restAngle, cube.submergedDepth ?? 0, cube.immersion ?? 0.42));
+  }, [layout, dry, level, hasTea]);
+  return { dry, poses };
+}
+
 interface CupIceProps {
   cubes: number;
-  /** Shared by both layers, so the two sides of the waterline are the same ice. */
+  /** The whole layout, so an index is stable; `cubes` says how many of it are in the cup. */
   layout: IcePlacement[];
+  /** Shared by both layers, so the two sides of the waterline are the same ice. */
+  placements: IcePlacements;
   layer: IceLayer;
   level: SharedValue<number>;
   hasTea: boolean;
-  toppingLayers: number;
   teaColor?: string;
   milkColor?: string;
 }
@@ -44,7 +87,7 @@ interface CupIceProps {
  * Frosted ice resting on the dry ingredient bed, then floating with the live tea surface.
  *
  * **Everything here has to draw on a phone, not only in a browser**, and react-native-svg is not a
- * browser. Two of its gaps shape this file:
+ * browser. Its gaps shape this file:
  *
  * - **`<Use>` does not survive.** A `Use` inside a `ClipPath` asks the native renderer for the path
  *   of whatever it points at, and a template it cannot find at that moment hands back nothing —
@@ -61,25 +104,59 @@ interface CupIceProps {
  *   not been drawn. So the waterline here is a `Mask`: a mask's contents *are* drawn, every frame,
  *   which is what makes an animated `d` inside one arrive. Fixed shapes stay clips, which are
  *   cheaper.
+ * - **A mask and a faded group are both expensive, so there is one of each.** See "What a group
+ *   costs" in CLAUDE.md: every masked element buys four canvas-sized offscreen layers and draws
+ *   its mask twice, and every `<G>` whose opacity is not 1 allocates and throws away a bitmap the
+ *   size of the canvas on each draw. Both used to be per cube.
  */
-export const CupIce = memo(function CupIce({ cubes, layout, layer, ...props }: CupIceProps) {
+export const CupIce = memo(function CupIce({ cubes, layout, placements, layer, level, hasTea,
+  teaColor, milkColor }: CupIceProps) {
   const uid = useId().replace(/[^a-zA-Z0-9]/g, '');
   const submerged = layer === 'submerged';
+  const { dry, poses } = placements;
   // The tea's rear arc stays behind the ice; every cube shares its near-side water boundary.
   const liquidShape = useDerivedValue(() => {
-    const raw = props.level.get();
-    return cupIceFillPath(props.hasTea ? raw : 0);
-  }, [props.level, props.hasTea]);
+    const raw = level.get();
+    return cupIceFillPath(hasTea ? raw : 0);
+  }, [level, hasTea]);
   const waterProps = useAnimatedProps(() => {
     const shape = liquidShape.get();
     return { d: submerged ? shape || 'M0 0Z' : `${BOX} ${shape}` };
   }, [liquidShape, submerged]);
+  /** The tea's own near arc, which anchors a cube breaking the surface to the drink. */
+  const waterlineProps = useAnimatedProps(() => {
+    const surface = cupSurface(hasTea ? level.get() : 0);
+    return {
+      d: `M${56.5 - surface.rx} ${surface.y} A${surface.rx} ${surface.ry} 0 0 0 ${56.5 + surface.rx} ${surface.y}`,
+      opacity: surface.opacity * 0.55,
+    };
+  }, [hasTea, level]);
 
-  // Back to front, so the cubes nearer the viewer overlap the ones behind them.
+  // Back to front, so the cubes nearer the viewer overlap the ones behind them. `at` is the cube's
+  // index in the whole layout, which is how it finds its own pose.
   const standing = useMemo(
-    () => layout.slice(0, cubes).map((cube, i) => ({ cube, i })).sort((a, b) => a.cube.depth - b.cube.depth),
+    () => layout.slice(0, cubes).map((cube, at) => ({ cube, at })).sort((a, b) => a.cube.depth - b.cube.depth),
     [layout, cubes],
   );
+  const surfacing = standing.filter(({ cube }) => !cube.submergedDepth);
+  /**
+   * Under the tea the whole tray of ice is softened at once, and takes a wash of the drink's
+   * colour — rather than a cube at a time, which was a faded group per cube and so a canvas-sized
+   * bitmap per cube on every frame.
+   *
+   * Fading the tray as one lands in the same colour only if the wash is folded into the same
+   * group, and at the right strength. `TINT` over a cube softened to `s` over the room is
+   * `TINT·t + (1-TINT)·s·c + (1-TINT)(1-s)·b`; a group at `fade` holding the cube and a wash at
+   * `wash` is `fade·wash·t + fade(1-wash)·c + (1-fade)·b`. Matching the room's share gives the
+   * `fade` below, and the wash is what is left of `TINT` inside it.
+   *
+   * What this cannot reproduce is one cube showing through another: inside the group they stack
+   * opaquely and are faded once, where before each was faded and then stacked. `createIceLayout`
+   * samples them with a gap wider than their own radius, so there is very little of that.
+   */
+  const tint = submerged ? milkColor ?? teaColor : undefined;
+  const soften = submerged ? (milkColor ? 0.65 : 0.62) : 1;
+  const fade = tint ? 1 - (1 - TINT) * (1 - soften) : soften;
 
   return (
     <G>
@@ -107,55 +184,65 @@ export const CupIce = memo(function CupIce({ cubes, layout, layer, ...props }: C
         </LinearGradient>
       </Defs>
       {/* The contact shadow belongs to the cup's floor, so it is never clipped to the tea. */}
-      {submerged && standing.map(({ cube, i }) => (
-        <IceShadow key={i} cube={cube} level={props.level} hasTea={props.hasTea}
-          toppingLayers={props.toppingLayers} />
+      {submerged && standing.map(({ cube, at }) => (
+        <IceShadow key={at} at={at} r={cube.r} dry={dry[at]} poses={poses} />
       ))}
-      <G mask={`url(#ice-water-${uid})`}>
-        {standing.map(({ cube, i }) => (
-          <IceCube key={i} uid={uid} cube={cube} submerged={submerged} {...props} />
+      <G mask={`url(#ice-water-${uid})`} opacity={fade}>
+        {standing.map(({ cube, at }) => (
+          <IceCube key={at} at={at} r={cube.r} uid={uid} poses={poses}
+            tint={tint} wash={TINT / fade} />
         ))}
       </G>
-      {/* A cube that breaks the surface is anchored to it by the tea's own near arc. */}
-      {!submerged && standing.filter(({ cube }) => !cube.submergedDepth).map(({ cube, i }) => (
-        <IceMeniscus key={i} uid={`${uid}-${i}`} cube={cube} level={props.level} hasTea={props.hasTea}
-          toppingLayers={props.toppingLayers} teaColor={props.teaColor} />
-      ))}
+      {/* Every cube that breaks the surface is anchored to it by the same arc, drawn through one
+          mask holding all of their outlines. */}
+      {!submerged && surfacing.length > 0 && (
+        <G>
+          <Defs>
+            <Mask id={`ice-edges-${uid}`} maskUnits="userSpaceOnUse" x={0} y={0} width={CUP_ART.w} height={CUP_ART.h}>
+              {surfacing.map(({ cube, at }) => (
+                <IceEdge key={at} at={at} r={cube.r} poses={poses} />
+              ))}
+            </Mask>
+          </Defs>
+          <G mask={`url(#ice-edges-${uid})`}>
+            <AnimatedPath animatedProps={waterlineProps} fill="none" stroke={teaColor ?? '#769FAC'} strokeWidth={0.8} />
+          </G>
+        </G>
+      )}
     </G>
   );
 });
 
-/** Where this cube rests, where it is now, and how far through settling in it is. */
-function useCube(cube: IcePlacement, level: SharedValue<number>, hasTea: boolean, toppingLayers: number) {
-  const { r, angle } = cube;
-  const dry = useMemo(
-    () => cupIceRestPosition(cube.restX, r, cube.restAngle, cube.restLift + toppingLayers * 10),
-    [cube.restX, cube.restAngle, cube.restLift, r, toppingLayers],
-  );
+/** A cube drops the last few pixels into place as it is added, each on its own clock. */
+function useSettle() {
   const settled = useSharedValue(0);
   useEffect(() => {
     settled.set(withTiming(1, timing(DURATION.base)));
     return () => cancelAnimation(settled);
   }, [settled]);
-  const position = useDerivedValue(() => {
-    // Always read the live level, including while the empty cup is waiting for its first tea.
-    const raw = level.get();
-    return cupIcePosition(hasTea ? raw : 0, cube.x, r, angle, cube.depth, dry.cx, dry.cy, cube.restAngle,
-      cube.submergedDepth ?? 0, cube.immersion ?? 0.42);
-  }, [cube.x, cube.depth, cube.restAngle, cube.submergedDepth, cube.immersion, r, angle, dry.cx, dry.cy, level, hasTea]);
-  return { dry, settled, position };
+  return settled;
 }
 
-function IceCube({ cube, uid, submerged, level, hasTea, toppingLayers, teaColor, milkColor }:
-  Omit<CupIceProps, 'cubes' | 'layout' | 'layer'> & {
-  cube: IcePlacement;
+/** Off the side of the sprite box, for the frame a cube mounts on before the fit includes it. */
+const AWAY: IcePose = { cx: -999, cy: -999, angle: 0, waterY: 0, floating: false, rise: 0 };
+
+interface CubeProps {
+  /** The cube's index in the whole layout, which is how it reads its own pose. */
+  at: number;
+  r: number;
+  poses: DerivedValue<IcePose[]>;
+}
+
+function IceCube({ at, r, uid, poses, tint, wash }: CubeProps & {
   uid: string;
-  submerged: boolean;
+  /** The drink's colour, when this is the cube under the tea. */
+  tint?: string;
+  /** That colour's strength *inside* the group the whole tray is faded by. See `fade` above. */
+  wash: number;
 }) {
-  const { r } = cube;
-  const { settled, position } = useCube(cube, level, hasTea, toppingLayers);
+  const settled = useSettle();
   const placement = useAnimatedProps(() => {
-    const { cx, cy, angle: tilt } = position.get();
+    const { cx, cy, angle: tilt } = poses.get()[at] ?? AWAY;
     const fall = 1 - settled.get();
     return {
       transform: [
@@ -164,13 +251,12 @@ function IceCube({ cube, uid, submerged, level, hasTea, toppingLayers, teaColor,
         { rotate: `${tilt - 7 * fall}deg` },
       ],
     };
-  }, [position, settled]);
+  }, [poses, at, settled]);
   const scale = `scale(${r / 24})`;
-  const tint = milkColor ?? teaColor;
 
   return (
     <AnimatedGroup animatedProps={placement}>
-      <G transform={scale} opacity={submerged ? (milkColor ? 0.65 : 0.62) : 1}>
+      <G transform={scale}>
         <Path d={CUBE_SHAPE} fill={`url(#ice-front-${uid})`} />
         <Path d={TOP_FACE} fill={`url(#ice-top-${uid})`} />
         <Path d={SIDE_FACE} fill={`url(#ice-side-${uid})`} />
@@ -182,59 +268,31 @@ function IceCube({ cube, uid, submerged, level, hasTea, toppingLayers, teaColor,
         <Path d="M-18-5L-17 9 M-6-16L4-13" fill="none" stroke="#FFFFFF"
           strokeWidth={3} strokeLinecap="round" opacity={0.85} />
       </G>
-      {/* Under the tea the body is softened and takes the drink's colour. */}
-      {submerged && tint && <Path d={CUBE_SHAPE} transform={scale} fill={tint} opacity={0.28} />}
+      {/* Under the tea the body takes the drink's colour, at the strength that comes out at `TINT`
+          once the group around the whole tray has been faded. */}
+      {tint && <Path d={CUBE_SHAPE} transform={scale} fill={tint} opacity={wash} />}
     </AnimatedGroup>
   );
 }
 
-function IceShadow({ cube, level, hasTea, toppingLayers }: {
-  cube: IcePlacement;
-  level: SharedValue<number>;
-  hasTea: boolean;
-  toppingLayers: number;
-}) {
-  const { dry, settled, position } = useCube(cube, level, hasTea, toppingLayers);
+function IceShadow({ at, r, dry, poses }: CubeProps & { dry: ReturnType<typeof cupIceRestPosition> }) {
+  const settled = useSettle();
   const fade = useAnimatedProps(() => ({
-    opacity: (1 - position.get().rise) * settled.get() * 0.18,
-  }), [position, settled]);
+    opacity: (1 - (poses.get()[at] ?? AWAY).rise) * settled.get() * 0.18,
+  }), [poses, at, settled]);
   return (
     <AnimatedEllipse animatedProps={fade} cx={dry.contactX} cy={dry.contactY}
-      rx={cube.r * 0.7} ry={1.6} fill="#506576" />
+      rx={r * 0.7} ry={1.6} fill="#506576" />
   );
 }
 
-function IceMeniscus({ cube, uid, level, hasTea, toppingLayers, teaColor }: {
-  cube: IcePlacement;
-  uid: string;
-  level: SharedValue<number>;
-  hasTea: boolean;
-  toppingLayers: number;
-  teaColor?: string;
-}) {
-  const { settled, position } = useCube(cube, level, hasTea, toppingLayers);
+/** One surfacing cube's silhouette, inside the mask the waterline is drawn through. */
+function IceEdge({ at, r, poses }: CubeProps) {
+  const settled = useSettle();
   const outline = useAnimatedProps(() => {
-    const { cx, cy, angle } = position.get();
+    const { cx, cy, angle } = poses.get()[at] ?? AWAY;
     const fall = 1 - settled.get();
-    return { d: cupIceOutlinePath(cx, cy - 10 * fall, angle - 7 * fall, cube.r) };
-  }, [position, settled, cube.r]);
-  const waterline = useAnimatedProps(() => {
-    const surface = cupSurface(hasTea ? level.get() : 0);
-    return {
-      d: `M${56.5 - surface.rx} ${surface.y} A${surface.rx} ${surface.ry} 0 0 0 ${56.5 + surface.rx} ${surface.y}`,
-      opacity: surface.opacity * 0.55,
-    };
-  }, [hasTea, level]);
-  return (
-    <G>
-      <Defs>
-        <Mask id={`ice-edge-${uid}`} maskUnits="userSpaceOnUse" x={0} y={0} width={CUP_ART.w} height={CUP_ART.h}>
-          <AnimatedPath fill="#FFFFFF" animatedProps={outline} />
-        </Mask>
-      </Defs>
-      <G mask={`url(#ice-edge-${uid})`}>
-        <AnimatedPath animatedProps={waterline} fill="none" stroke={teaColor ?? '#769FAC'} strokeWidth={0.8} />
-      </G>
-    </G>
-  );
+    return { d: cupIceOutlinePath(cx, cy - 10 * fall, angle - 7 * fall, r) };
+  }, [poses, at, settled, r]);
+  return <AnimatedPath fill="#FFFFFF" animatedProps={outline} />;
 }

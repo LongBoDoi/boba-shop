@@ -233,6 +233,11 @@ const styles = StyleSheet.create({
     marginBottom: -4,
   },
   card: {
+    // On a tablet — sideways especially — a card the width of the screen puts a metre of pink
+    // between a line of text and its own full stop, and makes a button of the whole shop front.
+    width: '100%',
+    maxWidth: 520,
+    alignSelf: 'center',
     backgroundColor: colors.floor,
     borderRadius: 24,
     padding: 20,

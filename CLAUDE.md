@@ -506,6 +506,13 @@ Dropping the cup still standing on the work top sends it home.
   resting tilts, floating angles, and immersion depths. Samples too close after fitting the glass
   are retried; adding the second scoop keeps the first scoop in place. The seed keeps the layout stable
   through pours, game ticks and reloads, while fresh cups get different arrangements.
+  **Where the ice is *now* is worked out once a frame, for the whole tray, by `useIcePlacements`**,
+  which `KitchenCup` calls and both sides of the waterline share. Each cube appears four times over
+  — drawn above the tea, drawn below it, its contact shadow and its meniscus — so leaving the fit
+  inside each of those ran `cupIcePosition`, an eighteen-point fit of the painted outline against
+  the tapered glass, forty-eight times a frame for twelve answers. It fits the whole `ICE_LAYOUT`
+  rather than the cubes currently in the cup, so an index means the same thing however many scoops
+  have gone in and a cube cannot mount off the end of an array that has not caught up with it.
   `cupIceRestPosition` fits the actual rounded cube outline to the curved floor; the first scoop
   touches that floor, while later pieces stack with varied overlap and small contact shadows.
   New cubes settle briefly, then tilt and spread as tea lifts them, without any looping motion.
@@ -836,6 +843,27 @@ stands plainly inside the shelf; divided across the board it laps over the ends 
     the shape where it is needed, even when that means repeating it.
   None of them shows up in a browser, in `tsc`, or in the lint, and there is no emulator here: the
   only honest check on anything new is a build on a real phone.
+- **What a group costs.** The four gaps above are things a phone draws *wrong*. These two it draws
+  correctly and ruinously slowly, which is the same bug with a longer fuse — and a desktop browser
+  will never show you either, because it has a GPU compositor where `react-native-svg` has
+  `android.graphics.Canvas`. Read `GroupView.java` and `RenderableView.java` before arguing:
+  - **A `<G>` whose opacity is not 1 allocates a bitmap the size of the whole canvas, throws it
+    away, and allocates it again — on every draw.** That is `GroupView.drawGroup`, and nothing
+    caches it. The fade belongs on the leaves instead, which cost nothing; that is only a different
+    picture where the leaves overlap, so it is a judgement each time. The cup's toppings were
+    seventeen faded groups per portion and three portions deep, which is fifty-one canvas-sized
+    bitmaps allocated and freed every frame, and it is most of why a finished drink stuttered on a
+    phone. Submerged ice keeps *one* group fade, because its cubes genuinely do overlap.
+  - **A masked element costs four canvas-sized offscreen layers (`saveLayer`) and draws the mask's
+    own contents twice** — once through `luminanceToAlpha` and once for its alpha. So masks are for
+    boundaries that *move*, where the rule above forbids a clip, and there should be as few as the
+    picture allows. Where a moving boundary can be turned inside out — drawing the boundary and
+    clipping it to the static shape, rather than drawing the shape and masking it to the boundary —
+    that is the same picture for a canvas clip instead of four layers, and it is what `CupToppings`
+    does for the tea wash on each piece.
+  Nothing checks either of these; `check-drawing.cjs` is about pictures that come out wrong. The
+  honest measurement is still a phone, and what a browser *can* prove is that a change made for a
+  phone left the web alone — export before and after and diff the cup, as "Verifying changes" says.
 - Reanimated 4 + `react-native-worklets`; the Babel plugin is configured automatically by
   `babel-preset-expo` (no babel config file).
 - Custom fonts: set `fontFamily: fonts.*` and don't also set `fontWeight`.

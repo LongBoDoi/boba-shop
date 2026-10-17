@@ -44,10 +44,13 @@ export const Character = memo(function Character({ look, mood, blinking, width, 
       <Hair look={look} />
 
       {(mood === 'happy' || mood === 'delighted') && (
-        <G opacity={0.45}>
-          <Ellipse cx={35} cy={62} rx={5} ry={3.2} fill="#FF7FA0" />
-          <Ellipse cx={65} cy={62} rx={5} ry={3.2} fill="#FF7FA0" />
-        </G>
+        /* Faded a cheek at a time rather than as a group: a group whose opacity is not 1 costs
+           a canvas-sized bitmap on every draw of it, and a blinking customer redraws often. The
+           two never overlap, so this is the same picture. See "What a group costs" in CLAUDE.md. */
+        <>
+          <Ellipse cx={35} cy={62} rx={5} ry={3.2} fill="#FF7FA0" opacity={0.45} />
+          <Ellipse cx={65} cy={62} rx={5} ry={3.2} fill="#FF7FA0" opacity={0.45} />
+        </>
       )}
       {mood === 'angry' && <Circle cx={50} cy={52} r={26} fill="#FF4D4D" opacity={0.18} />}
 

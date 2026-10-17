@@ -10,7 +10,7 @@ import Svg, { ClipPath, Defs, Ellipse, G, Image as SvgImage, LinearGradient, Mas
 import { Drink, getIngredient, ICE_LEVELS, Tea } from '../game/ingredients';
 import { TeaLiquid } from './TeaLiquid';
 import { CupToppings } from './CupToppings';
-import { CupIce } from './CupIce';
+import { CupIce, useIcePlacements } from './CupIce';
 import { createIceLayout } from './iceLayout';
 import { CUP_ART, CUP_FLOOR_FRONT, CUP_FRONT_GLINTS, CUP_ICE_WELL, CUP_REAR_FLOOR_GLASS, CUP_SURFACE_BOTTOM, CUP_SURFACE_RUN, CUP_WELL, cupFillPath, cupSurface } from './cupGeometry';
 import { shade } from './art/Character';
@@ -80,6 +80,8 @@ export const KitchenCup = memo(function KitchenCup({ drink, iceSeed = 1, width, 
   // One arrangement, shared by the two sides of the waterline, so they are the same ice.
   const iceLayout = useMemo(() => createIceLayout(iceSeed), [iceSeed]);
   const hasTea = Boolean(tea);
+  // Both sides of the waterline are the same ice, fitted to the tea once for the pair.
+  const icePlacements = useIcePlacements(iceLayout, level, hasTea, drink.toppings.length);
 
   const filledGlass = useDerivedValue(() => cupFillPath(hasTea ? level.get() : 0), [level, hasTea]);
   // Toppings do not change the cup's glass. Only actual liquid changes its front reflections.
@@ -146,8 +148,8 @@ export const KitchenCup = memo(function KitchenCup({ drink, iceSeed = 1, width, 
             teaColor={tea?.color} milkColor={milk?.color} />
         </G>
         <G clipPath={`url(#ice-well-${uid})`}>
-          {ice && <CupIce cubes={ice.cubes} layout={iceLayout} layer="submerged" level={level}
-            hasTea={hasTea} toppingLayers={drink.toppings.length}
+          {ice && <CupIce cubes={ice.cubes} layout={iceLayout} placements={icePlacements}
+            layer="submerged" level={level} hasTea={hasTea}
             teaColor={tea?.color} milkColor={milk?.color} />}
         </G>
         <G clipPath={`url(#wellp-${uid})`}>
@@ -165,8 +167,8 @@ export const KitchenCup = memo(function KitchenCup({ drink, iceSeed = 1, width, 
         {/* The crowns standing out of the tea are drawn over the painted plastic rather than
             punched out of it: a mask built from the ice could not be read on a phone. */}
         <G clipPath={`url(#ice-well-${uid})`}>
-          {ice && <CupIce cubes={ice.cubes} layout={iceLayout} layer="exposed" level={level}
-            hasTea={hasTea} toppingLayers={drink.toppings.length}
+          {ice && <CupIce cubes={ice.cubes} layout={iceLayout} placements={icePlacements}
+            layer="exposed" level={level} hasTea={hasTea}
             teaColor={tea?.color} milkColor={milk?.color} />}
         </G>
         <SvgImage href={CUP_SPRITE} x={0} y={0} width={ART.w} height={ART.h}

@@ -24,6 +24,7 @@ import { GameAction, GameState } from '../game/reducer';
 import { timing } from '../motion';
 import { colors, fonts } from '../theme';
 import { tapHaptic, toneHaptic } from '../utils/haptics';
+import { isWideLayout } from '../responsive';
 import { CounterPage } from './CounterPage';
 import { PrepGeometry, PrepPage } from './PrepPage';
 
@@ -172,8 +173,18 @@ export function GameScreen({ state, dispatch }: GameScreenProps) {
 
   const measureRoot = () => rootRef.current?.measureInWindow((x, y) => setOrigin({ x, y }));
 
-  // The counter owns a whole page now, so the stage can be taller and the customers larger.
-  const stageHeight = Math.round(Math.min(360, Math.max(240, windowHeight * 0.44)));
+  // Sideways, the page is wider than it is tall and the stacked panels would leave the kitchen a
+  // band. Both pages lay themselves out differently for it; see `isWideLayout`.
+  const wide = isWideLayout(width, windowHeight);
+  // The pager's own box: what is left of the window once the HUD and the tabs have had theirs.
+  const [pageHeight, setPageHeight] = useState(0);
+
+  // The counter owns a whole page now, so the stage can be taller and the customers larger. Laid
+  // sideways it is measured off the page rather than the window: a fixed share of a short window
+  // leaves the customers crowded under the ceiling with half the page bare counter below them.
+  const stageHeight = wide && pageHeight > 0
+    ? Math.round(Math.max(260, pageHeight * 0.58))
+    : Math.round(Math.min(360, Math.max(240, windowHeight * 0.44)));
 
   // Both of these are read by memoized children, and the day's clock runs through here ten times
   // a second: rebuilt on every one of those, they told the effects layer and the order panel that
@@ -227,10 +238,12 @@ export function GameScreen({ state, dispatch }: GameScreenProps) {
           scrollEventThrottle={16}
           onScroll={onScroll}
           style={styles.pager}
+          onLayout={(event) => setPageHeight(event.nativeEvent.layout.height)}
         >
           <CounterPage
             width={width}
             stageHeight={stageHeight}
+            wide={wide}
             slots={state.slots}
             departures={state.departures}
             selectedSlot={state.selectedSlot}
@@ -249,6 +262,7 @@ export function GameScreen({ state, dispatch }: GameScreenProps) {
             selectedSlot={state.selectedSlot}
             selectedCustomer={selectedCustomer}
             clock={state.clock}
+            wide={wide}
             measureToken={measureToken}
             onGeometry={setPrep}
             onSelectTicket={selectTicket}
