@@ -4,6 +4,7 @@ import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-na
 
 import { timing } from '../motion';
 import { colors, fonts } from '../theme';
+import { NewBuild } from '../updates/useNewBuild';
 import { Update } from '../updates/useUpdate';
 import { Button } from './Button';
 
@@ -69,6 +70,92 @@ export function UpdateDialog({ update }: { update: Update }) {
             <>
               <Text style={styles.note}>Chưa tải được bản mới. Thử lại lần sau nhé.</Text>
               <Button label="Đóng" variant="secondary" onPress={update.dismiss} style={styles.action} />
+            </>
+          )}
+        </Animated.View>
+      </View>
+    </View>
+  );
+}
+
+/**
+ * The *other* new version: the one that has to be installed rather than downloaded into place.
+ *
+ * It is the same card as above, deliberately, because to the player it is the same question. What
+ * differs is the honest answer underneath it, and that is not the same on the two platforms:
+ *
+ * - On Android the app really can install it, and because every release is signed with the same
+ *   keystore it goes over the top as an update — so the shop is kept, and the card says so.
+ * - On iOS no app can install an `.ipa`, so the only thing on offer is the download page. The
+ *   re-signing that follows is usually a fresh install, which takes the shop with it, so this is
+ *   the one place in the game that tells the player to make a backup **first**. Saying "your shop
+ *   is kept" on both platforms would have been one sentence of comfort and a lost week.
+ */
+export function NewBuildDialog({ build }: { build: NewBuild }) {
+  const appear = useSharedValue(0);
+  useEffect(() => {
+    appear.value = withTiming(1, timing());
+  }, [appear]);
+  const dimStyle = useAnimatedStyle(() => ({ opacity: appear.value }));
+  const cardStyle = useAnimatedStyle(() => ({
+    opacity: appear.value,
+    transform: [{ scale: 0.96 + appear.value * 0.04 }],
+  }));
+  const working = build.status === 'downloading' || build.status === 'installing';
+  const size = build.megabytes > 0 ? ` (${build.megabytes} MB)` : '';
+
+  return (
+    <View style={StyleSheet.absoluteFill}>
+      <Animated.View style={[StyleSheet.absoluteFill, styles.overlay, dimStyle]} />
+      <View style={styles.center}>
+        <Animated.View style={[styles.card, cardStyle]}>
+          <Text style={styles.mark}>🧋</Text>
+          <Text style={styles.title}>{working ? 'Đang cài bản mới' : 'Cần cài lại app'}</Text>
+
+          {build.status === 'offered' && (
+            <>
+              <Text style={styles.note}>
+                Bản {build.version} đổi phần gốc của app, nên bản cập nhật trong game không mang
+                theo được — phải cài lại một lần.
+              </Text>
+              {build.canInstall ? (
+                <>
+                  <Text style={styles.note}>Cài đè lên bản cũ — tiệm của bạn vẫn được giữ nguyên.</Text>
+                  <Button label={`Tải & cài đặt${size}`} onPress={build.accept} style={styles.action} />
+                </>
+              ) : (
+                <>
+                  <Text style={styles.note}>
+                    iOS không cho app tự cài. Hãy sao lưu tiệm trong ⚙️ Cài đặt trước, rồi mở
+                    trang tải.
+                  </Text>
+                  <Button label="Mở trang tải" onPress={build.accept} style={styles.action} />
+                </>
+              )}
+              <Button label="Để sau" variant="secondary" onPress={build.dismiss} />
+            </>
+          )}
+
+          {build.status === 'downloading' && (
+            <>
+              <Text style={styles.note}>Đang tải bản {build.version}…{size}</Text>
+              <View style={styles.track}>
+                <View style={[styles.fill, { width: `${Math.round(clamp(build.progress) * 100)}%` }]} />
+              </View>
+              {/* A 95 MB download on a phone connection is the longest wait in the game, and this
+                  card takes every touch — so it keeps a way off itself throughout. */}
+              <Button label="Để sau" variant="secondary" onPress={build.dismiss} style={styles.action} />
+            </>
+          )}
+
+          {build.status === 'installing' && (
+            <Text style={styles.note}>Đang mở trình cài đặt — chọn “Cài đặt” để tiếp tục.</Text>
+          )}
+
+          {build.status === 'failed' && (
+            <>
+              <Text style={styles.note}>Chưa tải được bản mới. Thử lại lần sau nhé.</Text>
+              <Button label="Đóng" variant="secondary" onPress={build.dismiss} style={styles.action} />
             </>
           )}
         </Animated.View>

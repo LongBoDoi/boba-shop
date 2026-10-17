@@ -13,13 +13,15 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { useAudioEngine, useGameAudio } from './src/audio/useAudio';
 import { ScreenWipe } from './src/components/ScreenWipe';
-import { UpdateDialog } from './src/components/UpdateDialog';
+import { NewBuildDialog, UpdateDialog } from './src/components/UpdateDialog';
 import { gameReducer, GameState } from './src/game/reducer';
+import { decodeSaveCode, encodeSaveCode } from './src/game/saveCode';
 import { DayEndScreen } from './src/screens/DayEndScreen';
 import { GameScreen } from './src/screens/GameScreen';
 import { LoadingScreen } from './src/screens/LoadingScreen';
 import { TitleScreen } from './src/screens/TitleScreen';
 import { colors } from './src/theme';
+import { useNewBuild } from './src/updates/useNewBuild';
 import { useUpdate } from './src/updates/useUpdate';
 import { useArtwork } from './src/useArtwork';
 import { useSavedGame, useSaveGame } from './src/useSavedGame';
@@ -57,6 +59,7 @@ function Shop({ initial, writable }: { initial: GameState; writable: boolean }) 
   useGameAudio(state);
   const save = useSaveGame(state, writable);
   const update = useUpdate(save);
+  const build = useNewBuild(save);
 
   // When the phase changes, keep showing the old screen (frozen) until the wipe covers it.
   const [previous, setPrevious] = useState(state);
@@ -90,6 +93,12 @@ function Shop({ initial, writable }: { initial: GameState; writable: boolean }) 
             onChangeMode={(mode) => dispatch({ type: 'SET_MODE', mode })}
             audio={screen.audio}
             onChangeAudio={(audio) => dispatch({ type: 'SET_AUDIO', audio })}
+            onExport={() => encodeSaveCode(state)}
+            onImport={(code) => {
+              const restored = decodeSaveCode(code);
+              if (restored) dispatch({ type: 'RESTORE', state: restored });
+              return Boolean(restored);
+            }}
           />
         )}
         {screen.phase === 'playing' && <GameScreen state={screen} dispatch={dispatch} />}
@@ -101,13 +110,32 @@ function Shop({ initial, writable }: { initial: GameState; writable: boolean }) 
           />
         )}
         <ScreenWipe progress={wipe} />
-        {/* Over every screen, not only the menu — but held back while a shift is actually
-            running, so a question nobody asked for cannot drain three patience timers while it
-            is read. The check lands at launch, where the day is either not started or paused. */}
-        {update.status !== 'none' && !(update.status === 'offered' && screen.phase === 'playing' && !screen.paused) && (
+        {/* Over every screen, not only the menu — see `shown`.
+
+            A new *file* is offered ahead of a new *update*, and in practice they never compete:
+            the published updates stop matching a build whose version has moved on, so
+            `checkForUpdateAsync` goes quiet at exactly the moment `useNewBuild` speaks up. The
+            precedence is written down anyway, so that if that ever stops being true the player is
+            told about the one that can actually fix their app rather than the one that cannot
+            reach it. */}
+        {shown(build.status, screen) ? (
+          <NewBuildDialog build={build} />
+        ) : shown(update.status, screen) ? (
           <UpdateDialog update={update} />
-        )}
+        ) : null}
       </View>
     </SafeAreaProvider>
   );
+}
+
+/**
+ * Whether a version dialog should be on screen.
+ *
+ * Shared by both kinds so they cannot drift apart: anything mid-flight is shown wherever the
+ * player is, and only the opening question is held back while a shift is actually running — a
+ * card that takes every touch must not be allowed to drain three patience timers while it is read.
+ */
+function shown(status: string, screen: GameState): boolean {
+  if (status === 'none') return false;
+  return !(status === 'offered' && screen.phase === 'playing' && !screen.paused);
 }

@@ -1,5 +1,5 @@
-import { useEffect } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useEffect, useState } from 'react';
+import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 
 import { playSound } from '../audio/audio';
@@ -43,6 +43,16 @@ interface SettingsSheetProps {
   onChangeMode: (mode: GameMode) => void;
   audio: AudioSettings;
   onChangeAudio: (audio: Partial<AudioSettings>) => void;
+  /**
+   * The shop as a backup code, and a pasted one back.
+   *
+   * Passed as two closures rather than as the state and a dispatch, so this card never has to
+   * know what a `GameState` is — and so the code is only built when the player actually asks for
+   * one, which matters because building it serialises the whole shop.
+   */
+  onExport: () => string;
+  /** True if the code was a shop. False is shown as a refusal, not swallowed. */
+  onImport: (code: string) => boolean;
   onClose: () => void;
 }
 
@@ -53,7 +63,7 @@ interface SettingsSheetProps {
  * what tips it over: the card is centred in the window with no slack, and sideways on a short
  * phone the whole of the sound section — and the button out of it — fell off the bottom.
  */
-export function SettingsSheet({ mode, onChangeMode, audio, onChangeAudio, onClose }: SettingsSheetProps) {
+export function SettingsSheet({ mode, onChangeMode, audio, onChangeAudio, onExport, onImport, onClose }: SettingsSheetProps) {
   const appear = useSharedValue(0);
   useEffect(() => {
     appear.value = withTiming(1, timing());
@@ -84,6 +94,8 @@ export function SettingsSheet({ mode, onChangeMode, audio, onChangeAudio, onClos
             <Text style={styles.section}>Âm thanh</Text>
             <VolumeRow label="Nhạc nền" level={audio.music} onChange={(music) => onChangeAudio({ music })} />
             <VolumeRow label="Hiệu ứng" level={audio.sfx} onChange={(sfx) => onChangeAudio({ sfx })} />
+            <Text style={styles.section}>Sao lưu tiệm</Text>
+            <Backup onExport={onExport} onImport={onImport} />
             <Button label="Xong" onPress={onClose} style={styles.done} />
           </ScrollView>
         </Animated.View>
@@ -167,6 +179,86 @@ function VolumeRow({
           </Pressable>
         ))}
       </View>
+    </View>
+  );
+}
+
+/**
+ * The shop, as a line of text the player keeps.
+ *
+ * This is the only remedy for the one thing the game cannot fix from inside itself. An Android
+ * update installed over the top keeps its data and needs none of this; a true uninstall does not,
+ * and on iOS a build re-signed with Sideloadly is a fresh install every time. A code costs no
+ * account, no server and no paid developer programme.
+ *
+ * Two things about how it is presented:
+ *
+ * - **It is a `TextInput`, not a label.** Copying is the operating system's own job — long-press,
+ *   select all, copy — and a clipboard module would be another native dependency for a button.
+ *   The box starts collapsed because it is several kilobytes of base64 and would otherwise be the
+ *   tallest thing on the card.
+ * - **Restoring asks twice.** It replaces the whole shop, including a shift in progress, and a
+ *   mis-paste is not undoable. So the button arms, says what it is about to do, and only then
+ *   does it.
+ */
+function Backup({ onExport, onImport }: { onExport: () => string; onImport: (code: string) => boolean }) {
+  const [code, setCode] = useState<string | null>(null);
+  const [pasted, setPasted] = useState('');
+  const [arming, setArming] = useState(false);
+  const [said, setSaid] = useState<string | null>(null);
+
+  const restore = () => {
+    if (!arming) {
+      setArming(true);
+      setSaid(null);
+      return;
+    }
+    setArming(false);
+    // A refusal has to be visible: a code that lost its tail in a chat window looks exactly like
+    // a code that worked, right up until the shop that comes back is the wrong one.
+    setSaid(onImport(pasted) ? 'Đã phục hồi tiệm ✓' : 'Mã không đúng hoặc bị thiếu.');
+  };
+
+  return (
+    <View style={styles.backup}>
+      <Text style={styles.backupNote}>
+        Cài lại app có thể làm mất tiệm. Lưu mã này ra chỗ khác để phục hồi sau.
+      </Text>
+      {code === null ? (
+        <Button label="Hiện mã lưu" variant="secondary" onPress={() => setCode(onExport())} />
+      ) : (
+        <TextInput
+          style={styles.code}
+          value={code}
+          editable={false}
+          multiline
+          selectTextOnFocus
+          accessibilityLabel="Mã lưu tiệm — giữ để chọn và sao chép"
+        />
+      )}
+      <TextInput
+        style={styles.paste}
+        value={pasted}
+        onChangeText={(text) => {
+          setPasted(text);
+          setArming(false);
+          setSaid(null);
+        }}
+        placeholder="Dán mã lưu vào đây…"
+        placeholderTextColor={colors.inkSoft}
+        multiline
+        autoCapitalize="none"
+        autoCorrect={false}
+        accessibilityLabel="Dán mã lưu để phục hồi tiệm"
+      />
+      {pasted.trim().length > 0 && (
+        <Button
+          label={arming ? 'Chắc chưa? Ghi đè tiệm hiện tại' : 'Phục hồi từ mã'}
+          variant="secondary"
+          onPress={restore}
+        />
+      )}
+      {said && <Text style={styles.backupNote}>{said}</Text>}
     </View>
   );
 }
@@ -259,6 +351,43 @@ const styles = StyleSheet.create({
   },
   done: {
     marginTop: 4,
+  },
+  backup: {
+    gap: 8,
+    padding: 12,
+    borderRadius: 18,
+    backgroundColor: colors.panel,
+    borderWidth: 2,
+    borderColor: colors.line,
+  },
+  backupNote: {
+    fontSize: 13,
+    lineHeight: 17,
+    fontFamily: fonts.semi,
+    color: colors.inkSoft,
+  },
+  code: {
+    maxHeight: 90,
+    padding: 8,
+    borderRadius: 12,
+    backgroundColor: colors.paper,
+    borderWidth: 2,
+    borderColor: colors.line,
+    fontSize: 11,
+    lineHeight: 15,
+    color: colors.inkSoft,
+  },
+  paste: {
+    minHeight: 44,
+    maxHeight: 90,
+    padding: 8,
+    borderRadius: 12,
+    backgroundColor: colors.paper,
+    borderWidth: 2,
+    borderColor: colors.line,
+    fontSize: 11,
+    lineHeight: 15,
+    color: colors.ink,
   },
   volume: {
     gap: 6,

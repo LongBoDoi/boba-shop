@@ -35,6 +35,16 @@
         -webkit-user-drag: none !important;
         touch-action: manipulation;
       }
+      /* The one exception, and it has to carry `!important` to get back past the rule above:
+         the backup code in the settings card is text whose entire purpose is to be selected and
+         copied. The blanket rule made it uncopyable on the web — the only platform where the
+         player has no long-press "select all" to fall back on. Inputs are not a game surface. */
+      input,
+      textarea {
+        -webkit-touch-callout: default !important;
+        -webkit-user-select: text !important;
+        user-select: text !important;
+      }
       /* Long-pressing an image is what opens the iOS share sheet; let the taps fall through
          to the View that owns the gesture instead. */
       img {

@@ -43,9 +43,11 @@ interface TitleScreenProps {
   onChangeMode: (mode: GameMode) => void;
   audio: AudioSettings;
   onChangeAudio: (audio: Partial<AudioSettings>) => void;
+  onExport: () => string;
+  onImport: (code: string) => boolean;
 }
 
-export function TitleScreen({ onStart, mode, onChangeMode, audio, onChangeAudio }: TitleScreenProps) {
+export function TitleScreen({ onStart, mode, onChangeMode, audio, onChangeAudio, onExport, onImport }: TitleScreenProps) {
   const { width, height } = useWindowDimensions();
   const cupWidth = Math.min(130, width * 0.32);
   const [settings, setSettings] = useState(false);
@@ -101,6 +103,8 @@ export function TitleScreen({ onStart, mode, onChangeMode, audio, onChangeAudio 
           onChangeMode={onChangeMode}
           audio={audio}
           onChangeAudio={onChangeAudio}
+          onExport={onExport}
+          onImport={onImport}
           onClose={() => setSettings(false)}
         />
       )}

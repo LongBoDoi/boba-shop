@@ -129,6 +129,8 @@ src/theme.ts            colours and font family names
 src/useSavedGame.ts     Async Storage read on launch, slow write while playing
 src/useArtwork.ts       pulls the painted sprites in before the shop opens; see "Opening the shop"
 tools/check-drawing.cjs reads the SVG for the three things a phone draws differently
+tools/check-native-audio-api.cjs  reads expo-audio's Swift/Kotlin for writes a phone refuses
+tools/check-reinstall.cjs  the backup code, and when a new file is offered
 tools/check-audio.cjs   loop seams, cue wiring, and the volumes through a save
 tools/stamp-build.cjs   writes the CI run number into app.json as versionCode/buildNumber
 ```
@@ -296,7 +298,79 @@ the updates published for it.
 
 **What still needs a new file**, and there is no way around it: anything native. New native
 dependency, new Expo SDK, a config plugin that changes the manifest. That is what the version bump
-and a fresh **Build apps** run are for.
+and a fresh **Build apps** run are for — and the app now **says so itself**, which it used not to.
+
+### Offering the new file as well
+
+(Full detail, including the two things that are easy to get wrong about the install intent:
+`docs/reinstall.md`.)
+
+An update carries no native code, so the moment `expo.version` moves, every installed app at the
+old version stops matching the updates being published: `checkForUpdateAsync` answers "nothing
+new" and the player sits several versions behind an app that looks perfectly current. **That
+silence was the gap**, and `src/updates/useNewBuild.ts` closes it.
+
+It rests on an invariant this repository already keeps, rather than on any new bookkeeping:
+`expo.version` moves **if and only if** a new binary is required — which is precisely what
+`tools/check-updates.cjs` enforces further up. So comparing the version in the latest GitHub
+release against `Updates.runtimeVersion` is a complete answer, and needs no build numbers and no
+extra native module to read the installed version with. A *rebuild* at the same version is an
+update's job and is deliberately not offered.
+
+The two halves are not equal and cannot be made so:
+
+- **Android does the whole thing.** The `.apk` is downloaded (`expo-file-system`) and handed to
+  the system installer (`expo-intent-launcher`, `REQUEST_INSTALL_PACKAGES`). Because every release
+  is signed with the same EAS keystore this is an **update, not a reinstall**, so Android keeps the
+  app's data and *the shop survives untouched*. That is the one reason this route is worth a
+  sensitive permission.
+- **iOS cannot install an `.ipa` from inside an app.** No API, no entitlement, no permission —
+  this is iOS, not Expo. So iOS is told plainly and handed the release page, and because the
+  repository's `.ipa` is unsigned, re-signing it is usually a *fresh* install. That is why the
+  iOS wording is the one place in the game that tells the player to export a backup first.
+
+Three things not to undo:
+
+- **`check-updates.cjs` asserts the installer is present, and that reverses what it used to say.**
+  The APK route was once the whole update mechanism and was dropped for EAS Update; it is back for
+  the narrow job above only. The comment there says so, so that nobody "fixes" it back.
+- **The new-file offer takes precedence over the update offer** in `App.tsx`. In practice they
+  never compete, for the reason in the first paragraph; the precedence is written down so that if
+  that ever stops being true, the player hears about the one that can actually fix their app.
+- **It is checked once a launch, like the update**, and both are held back while a shift is
+  actually running (`shown` in `App.tsx`) — a card that takes every touch must not be able to
+  drain three patience timers while it is read.
+
+### Keeping the shop across a reinstall
+
+Three layers, in the order they are relied on:
+
+1. **An in-place update keeps the data** — the Android route above, and nothing for the player to
+   do. This is the normal case.
+2. **`android.allowBackup`** is written into `app.json` rather than left to Expo's default,
+   because the save now leans on it: it is what can bring a shop back after a genuine uninstall.
+   Best-effort and account-dependent, so it is a safety net and not a plan.
+3. **A backup code the player keeps** (`src/game/saveCode.ts`, offered under "Sao lưu tiệm" in the
+   settings card). The only remedy that works on iOS without a paid developer programme, and the
+   only one that survives an uninstall for certain.
+
+The code is **the same bytes `save.ts` already writes**, base64 over UTF-8 with a fingerprint on
+the end — wrapped rather than re-described, because a second serializer would be a second thing to
+keep in step with `GameState` and the first to fall behind would be the one nobody tests. Base64
+because the save is full of Vietnamese names and raw JSON is the kind of string a chat app
+helpfully "corrects"; hand-rolled because `btoa` is not reliably present in a React Native runtime.
+The fingerprint is not security — the web save sits in `localStorage` — it is there because a code
+copied by hand arrives truncated often enough to matter, and a truncated base64 blob still parses
+into *something*. `parseGame` is the same gate a stored save goes through, so a restored shift comes
+back paused and a code from a build whose ingredients are gone is refused rather than half-applied.
+`tools/check-reinstall.cjs` covers the round trip, the refusals, and pins the payload against
+Node's own base64 — a round trip alone cannot tell UTF-8 from CESU-8, because this decoder reverses
+both.
+
+On the web, the one thing that had to change for this is `public/index.html`: the blanket
+`user-select: none !important` that makes the page a game surface also made the code impossible to
+copy, so `input, textarea` get an `!important` exception. The web is the one platform with no
+long-press "select all" to fall back on.
 
 The menu **scrolls** (`flexGrow` keeps the spread-out layout wherever there is room). It has no
 vertical slack — on a 375x667 phone the logo was already sliding under the awning before anything
@@ -406,11 +480,36 @@ node tools/audio/build-foley.cjs (offline ffmpeg required). The two original mus
 byte-identical and are built by tools/make-music.cjs. The old effect synthesizer is retired.
 Open tools/audio/audition.html to audition shipped clips. Full details: docs/audio.md.
 
-Keep these behaviors: silent switch respected, mix with other audio, no recording/background
-playback, web gesture unlock, no stale sounds after pause/background/teardown, and music outside
-effect warmup. Serve cues read departures rather than feedback; saved volumes migrate and clamp
-without increasing SAVE_VERSION. Cue delays share the visual motion constants in
-src/game/effectTiming.ts. Audio arithmetic checks do not replace listening on a phone.
+Keep these behaviors: mix with other audio, no recording/background playback, web gesture unlock,
+no stale sounds after pause/background/teardown, and music outside effect warmup. Serve cues read
+departures rather than feedback; saved volumes migrate and clamp without increasing SAVE_VERSION.
+Cue delays share the visual motion constants in src/game/effectTiming.ts. Audio arithmetic checks
+do not replace listening on a phone.
+
+**Two things about `expo-audio` that a browser will never show you.** Both of these shipped a
+game whose effects were silent on a real phone while every check was green, which puts them in
+the same class as the `react-native-svg` gaps under Conventions — and `tools/check-native-audio-api.cjs`
+reads the SDK's own Swift and Kotlin for the first of them, because nothing else will.
+
+- **The rate is a method, never a property.** `playbackRate` is documented as a property and the
+  *web* player gives it a real setter, so assigning to it works perfectly in a browser. On both
+  iOS and Android it is declared `Property("playbackRate")` with no `.set` — getter-only — so the
+  assignment throws a TypeError in the bundle's strict mode. In `foley.ts` it sat between the
+  volume and the `play()` inside one `try`, so the throw was caught, logged to a console nobody
+  reads on a device, and **the `play()` never ran**: every one-shot in the game was silent, while
+  the music and the pour loop carried on because neither touches the rate on its way to playing.
+  Use `setPlaybackRate(rate)`, which exists on all three platforms, and call it before `play()` —
+  iOS starts playback at `currentRate`, and that is the only thing that sets it.
+- **"Silent mode" is not one concept.** On iOS the switch exists to silence exactly this kind of
+  app, so `playsInSilentMode` is **false** there. Android has no such switch: what the flag
+  consults is `ringerMode == RINGER_MODE_NORMAL`, which governs calls and notifications and has
+  nothing to do with the media stream a game plays on — and the check sits at the top of the
+  native `play()` and returns early, so a phone left on vibrate got no sound at all and nothing on
+  screen to explain why. It is `Platform.OS !== 'ios'`, and the test asserts both halves.
+
+The test stub in `check-audio-engine.cjs` is faithful to the **native** player and not the web one
+for this reason: `playbackRate` is an accessor with no setter there, so it throws in the harness
+exactly as it throws on a device. A stub that flatters the code is worse than no stub.
 
 ### Game modes
 
@@ -625,7 +724,13 @@ the cup's curved inner floor. `cupToppingPosition` fits the entire rotated sprit
 narrower inner-floor opening, with 2.5 sprite pixels of clearance from its walls and curved base.
 The pile is packed towards the center so the clipping mask remains a containment safeguard,
 not a way to crop oversized pieces. Contact shadows and a liquid-clipped colour wash make submerged
-pieces belong to the tea; milk adds a stronger creamy wash. Each additional ingredient adds its
+pieces belong to the tea; milk adds a stronger creamy wash. **The wash is drawn once per band of
+the pile, not once per piece.** It is the live tea boundary, so it is rewritten and re-rasterised
+as the drink moves, and a piece at a time was seventeen of those a portion — fifty-one for a
+finished drink, every frame of every pour and every settle. The three rows of `BED` are the depth
+bands the wash's strength is a function of, and their pieces are spaced wider than they are round,
+so a row is the grain that keeps the picture: the gradient from the back of the pile to the front
+survives, and a near piece still covers a far one's wash. Each additional ingredient adds its
 own portion behind the existing pile, preserving the first ingredient's positions. Deterministic
 variation keeps pieces stable on clock ticks. A short `withTiming` fall settles a new portion;
 ice, foam, the front glass reflections and the cat decal remain in front of the pile.
@@ -714,7 +819,11 @@ keeps the painted ticks, highlights and the cat decal on top of it:
   faint cool glass backing, then `TeaLiquid` inside the traced `CUP_WELL`, followed by clipped
   ice/toppings and foam, glass reflections, edge highlights and the cat decal.
   Its surface is an elliptical plane whose width follows the tapered glass. The stream and foam
-  use the same fill coordinates. Nothing can escape the glass because it stays inside the clip;
+  use the same fill coordinates. Nothing can escape the glass because it stays inside the clip.
+  **Each of those sheets is its own `Svg`** (`CupLayer`), stacked in the order above, because an
+  `Svg` is one bitmap on Android and anything that moves inside it redraws all of it — see "What a
+  group costs". A cube settling redraws the ice; a portion of topping landing redraws the pile;
+  the painted glass and the front reflections, which nothing touched, are blitted;
 - a **scoop of topping** is one whole painted sprite, `SCOOPFUL[id]`, heap and all. It used to be
   the bare `SCOOP` with pieces laid into its bowl by hand, which was the same mistake the teas
   were — the design draws what a scoop of this looks like, so take its word for it. The six are
@@ -924,10 +1033,11 @@ stands plainly inside the shelf; divided across the board it laps over the ends 
     the shape where it is needed, even when that means repeating it.
   None of them shows up in a browser, in `tsc`, or in the lint, and there is no emulator here: the
   only honest check on anything new is a build on a real phone.
-- **What a group costs.** The four gaps above are things a phone draws *wrong*. These two it draws
-  correctly and ruinously slowly, which is the same bug with a longer fuse — and a desktop browser
-  will never show you either, because it has a GPU compositor where `react-native-svg` has
-  `android.graphics.Canvas`. Read `GroupView.java` and `RenderableView.java` before arguing:
+- **What a group costs.** The four gaps above are things a phone draws *wrong*. These three it
+  draws correctly and ruinously slowly, which is the same bug with a longer fuse — and a desktop
+  browser will never show you any of them, because it has a GPU compositor where `react-native-svg`
+  has `android.graphics.Canvas`. Read `SvgView.java`, `GroupView.java` and `RenderableView.java`
+  before arguing:
   - **A `<G>` whose opacity is not 1 allocates a bitmap the size of the whole canvas, throws it
     away, and allocates it again — on every draw.** That is `GroupView.drawGroup`, and nothing
     caches it. The fade belongs on the leaves instead, which cost nothing; that is only a different
@@ -941,8 +1051,18 @@ stands plainly inside the shelf; divided across the board it laps over the ends 
     picture allows. Where a moving boundary can be turned inside out — drawing the boundary and
     clipping it to the static shape, rather than drawing the shape and masking it to the boundary —
     that is the same picture for a canvas clip instead of four layers, and it is what `CupToppings`
-    does for the tea wash on each piece.
-  Nothing checks either of these; `check-drawing.cjs` is about pictures that come out wrong. The
+    does for the tea wash over each band of the pile.
+  - **An `<Svg>` is one bitmap, and *any* animated prop under it throws that bitmap away.**
+    `SvgView` renders its whole tree into a `Bitmap` it keeps and blits (`drawOutput`), and
+    `invalidate` — which every prop change of every descendant bubbles up to — recycles it and
+    allocates a new one, then redraws every child into it. There is no partial invalidation. So a
+    picture where one thing moves and the rest is still should be **stacked as several `Svg`s**,
+    not drawn as one: the sheets nothing touched are blitted as they are and their children are
+    never drawn at all. Source-over compositing is associative, so splitting along the z-order is
+    the same picture — see `CupLayer` in `KitchenCup`, where a cube settling or a portion of
+    topping falling used to redraw the painted glass, the ice and the pile together, fifteen
+    frames running, for a quarter of a second.
+  Nothing checks any of these; `check-drawing.cjs` is about pictures that come out wrong. The
   honest measurement is still a phone, and what a browser *can* prove is that a change made for a
   phone left the web alone — export before and after and diff the cup, as "Verifying changes" says.
 - Reanimated 4 + `react-native-worklets`; the Babel plugin is configured automatically by
@@ -964,6 +1084,12 @@ stands plainly inside the shelf; divided across the board it laps over the ends 
   `localStorage.getItem('boba-shop.save.v1')` in the console shows the shop as it stands, and
   removing it is how a first launch is tested. Reload mid-shift and you should come back to the
   same minute of the same day behind the pause card, with the opening sign *not* replayed.
+- Reinstall updates and the backup code: `tools/check-reinstall.cjs` covers the code's round trip
+  and refusals and the version comparison, all of which are pure. What it cannot cover is the
+  install: the package installer, the "allow from this source" prompt, and whether the data really
+  survived can only be tried on a phone, with two builds signed by the same keystore. Say so in
+  the report. On the web both offers are inert — `Updates.isEnabled` is false there — so a browser
+  cannot show either dialog without faking the hook.
 - Updates: `expo-updates` is a stub on the web that always answers "no update", and the API
   rejects outright in Expo Go and dev builds, so none of it runs locally. To see the dialog, fake
   the hook's return in `src/updates/useUpdate.ts` and export — and revert it before committing

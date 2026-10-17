@@ -27,14 +27,16 @@ const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'))
  * the apps again (Build apps) before pushing — the push publishes an update.
  */
 const BUILT = {
-  version: '1.1.0',
+  version: '1.2.0',
   native: [
     '@react-native-async-storage/async-storage',
     'expo',
     'expo-asset',
     'expo-audio',
+    'expo-file-system',
     'expo-font',
     'expo-haptics',
+    'expo-intent-launcher',
     'expo-status-bar',
     'expo-updates',
     'react-native',
@@ -80,15 +82,46 @@ assert.equal(
 );
 assert.ok(pkg.dependencies['expo-updates'], 'expo-updates is what does the updating');
 
-// ------------------------------------------------------------------ what used to do the updating
+// ------------------------------------------------------------------ the update an update cannot carry
+/**
+ * **These two assertions used to say the opposite**, and the reversal is deliberate rather than a
+ * regression — read this before "fixing" it back.
+ *
+ * Handing an `.apk` to Android's package installer was once the *whole* update mechanism, and it
+ * was dropped for EAS Update: a 95 MB download and a scary permission for something a few hundred
+ * kilobytes over the air does better. What that left behind was a gap nobody was told about. An
+ * update carries no native code, so the moment `expo.version` moves, every installed app at the
+ * old version stops matching the published updates — `checkForUpdateAsync` answers "nothing new"
+ * and the player sits several versions behind an app that looks perfectly current.
+ *
+ * So the installer is back, for that gap only: `src/updates/useNewBuild.ts` offers it when the
+ * latest release's version is ahead of this build's, which — because of the rule enforced further
+ * down this very file — is exactly when a new binary is genuinely required. Ordinary changes still
+ * go over the air and never raise this dialog.
+ *
+ * It is Android-only, and not for want of trying: no iOS app can install an `.ipa`, so that half
+ * is a link to the release page and a reminder to export a backup code first.
+ */
 assert.ok(
-  !pkg.dependencies['expo-intent-launcher'],
-  'Nothing hands an APK to the package installer any more',
+  pkg.dependencies['expo-intent-launcher'],
+  'The new-build offer hands the .apk to the system installer, which needs expo-intent-launcher',
 );
 assert.ok(
-  !(app.android?.permissions ?? []).includes('android.permission.REQUEST_INSTALL_PACKAGES'),
-  'Installing an APK from inside the app is gone, and so is the permission for it',
+  pkg.dependencies['expo-file-system'],
+  'Downloading the .apk and turning it into a content:// URI needs expo-file-system',
 );
+assert.ok(
+  (app.android?.permissions ?? []).includes('android.permission.REQUEST_INSTALL_PACKAGES'),
+  'Installing the .apk from inside the app needs REQUEST_INSTALL_PACKAGES in app.json',
+);
+/**
+ * The one thing that makes an in-place install safe for the player's shop. Android keeps an app's
+ * data across an update signed with the same key, and every release is signed with the project's
+ * EAS keystore — so the `.apk` route above *keeps the shop*, and the dialog says so. `allowBackup`
+ * is the second line for the case the first cannot cover (a true uninstall), and it is written
+ * down here rather than left to Expo's default because the save now leans on it.
+ */
+assert.notEqual(app.android?.allowBackup, false, 'The shop has to survive a reinstall where it can');
 assert.equal(app.extra?.build, undefined, 'The stamped build number was only read to compare against a release');
 
 // ------------------------------------------------------------------ native code and the runtime version

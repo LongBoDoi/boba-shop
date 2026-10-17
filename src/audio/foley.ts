@@ -5,8 +5,22 @@ import { BUS_GAIN, POUR_LOOP, SOUNDS, SoundId, WARM_CLIPS } from './sounds';
 export interface FoleyPlayer {
   volume: number;
   loop: boolean;
-  playbackRate: number;
   shouldCorrectPitch: boolean;
+  /**
+   * The rate, as a **method**, and it has to stay one.
+   *
+   * `expo-audio` documents `playbackRate` as a property, and its *web* player is a plain class
+   * where that property has a real setter — so assigning to it worked perfectly in a browser. On
+   * both iOS and Android the property is declared getter-only (`Property("playbackRate")` with no
+   * `.set`, unlike `volume`, `loop` and `shouldCorrectPitch` beside it), so the assignment threw a
+   * TypeError in the bundle's strict mode — and because it sat between the volume and the
+   * `play()` in `begin` below, **every one-shot in the game was silent on a real phone** while the
+   * pour loop and the music carried on, because neither of those touches the rate on its way to
+   * playing. `setPlaybackRate` exists on all three platforms and is the only way to set it.
+   *
+   * `tools/check-native-audio-api.cjs` reads the native modules and holds this.
+   */
+  setPlaybackRate(rate: number): void;
   play(): void;
   pause(): void;
   seekTo(seconds: number): Promise<void>;
@@ -154,7 +168,9 @@ export class FoleyEngine {
       if (!this.enabled || this.disposed || selected.token !== token) return;
       try {
         selected.player.volume = this.master * gain;
-        selected.player.playbackRate = rate;
+        // Before `play()`, which is what iOS reads the rate off: `play` starts at `currentRate`,
+        // and `setPlaybackRate` is what sets it while the player is stopped.
+        selected.player.setPlaybackRate(rate);
         selected.player.play();
       } catch (error) { this.silence(selected); this.report(`play ${id}`, error); }
     };
@@ -203,7 +219,7 @@ export class FoleyEngine {
 
   private updatePour() {
     if (!this.loopPlayer) return;
-    try { this.loopPlayer.playbackRate = 0.96 + this.fill * 0.08; }
+    try { this.loopPlayer.setPlaybackRate(0.96 + this.fill * 0.08); }
     catch (error) { this.report('pour resonance', error); }
     this.fadePour(this.master * POUR_LOOP.gain * (0.8 + this.fill * 0.2));
   }

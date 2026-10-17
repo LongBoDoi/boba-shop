@@ -40,8 +40,36 @@ Serving cues follow `state.departures`, not feedback tone: taking an order also 
 feedback. Arrivals and overflow are seeded from current state when restoring a saved shop.
 
 The two original music loops remain separate and byte-identical. Music loads on demand and
-crossfades with phase changes. Silent-switch, mixing with other audio, and existing saved-volume
+crossfades with phase changes. Mixing with other audio and existing saved-volume
 migration/clamping behavior are preserved. Recording and background audio remain disabled.
+
+## Two `expo-audio` traps a browser cannot show you
+
+Both of these shipped a game whose effects were **silent on a real phone** while the whole suite
+was green. `tools/check-native-audio-api.cjs` reads the SDK's own Swift and Kotlin to hold them.
+
+**The playback rate is a method, never a property.** `playbackRate` is documented as a property,
+and `AudioPlayer.web.js` is a plain class that gives it a real setter — so assigning to it is
+flawless in a browser. On iOS and Android it is declared `Property("playbackRate")` with no
+`.set`, i.e. getter-only (unlike `volume`, `loop` and `shouldCorrectPitch` beside it), so the
+assignment throws a `TypeError` under the bundle's strict mode. In `foley.ts` it sat between the
+volume and the `play()` inside a single `try`: the throw was caught, logged to a console nobody
+reads on a device, and the `play()` never ran. Every one-shot was silent; the music and the pour
+loop kept working because neither touches the rate on the way to `play()`, which is what made it
+look like only *some* sounds were broken. Use `setPlaybackRate(rate)` — present on all three
+platforms — and call it **before** `play()`, because iOS starts playback at `currentRate` and that
+is the only thing that sets it.
+
+**"Silent mode" means two different things.** iOS has a switch meant to silence exactly this kind
+of app, so `playsInSilentMode` is `false` there. Android has no such switch: the flag consults
+`ringerMode == RINGER_MODE_NORMAL`, which governs calls and notifications, not the media stream a
+game plays on — and the check is at the top of the native `play()` and returns early, so a phone
+on vibrate produced no sound at all with nothing on screen to explain it. The setting is
+`Platform.OS !== 'ios'`.
+
+The engine test's player stub is modelled on the **native** player, not the web one: `playbackRate`
+is an accessor with no setter, so it throws in the harness exactly as on a device. A stub that
+flatters the code is worse than no stub — this one went green through the whole outage.
 
 ## Rebuild or audition
 
@@ -64,7 +92,10 @@ bundle. Listening on phone speakers and headphones is still needed.
 
 ## Verification
 
-Run `npm run lint`, `npm run typecheck` and `npm test`. Audio checks validate source/output hashes,
+Run `npm run lint`, `npm run typecheck` and `npm test`. `check-native-audio-api.cjs` additionally
+reads `expo-audio`'s iOS and Android module declarations and fails if the game assigns any player
+member that one of them declares getter-only — it re-checks itself against every SDK upgrade for
+free. Audio checks validate source/output hashes,
 catalogue coverage, no orphaned synth files, the sub-1 MB effect budget, PCM format, levels,
 one-shot edges and loop seams. Scheduler checks cover alternate takes, layers, voice limits,
 priority, cooldowns, live fill, browser/native startup, mute/pause/background cancellation,

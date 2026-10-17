@@ -151,6 +151,12 @@ export type GameAction =
   | { type: 'SET_MODE'; mode: GameMode }
   /** Change one or both volumes. An out-of-range value is clamped, not refused. */
   | { type: 'SET_AUDIO'; audio: Partial<AudioSettings> }
+  /**
+   * Put a whole shop back, from a backup code the player pasted in. `state` has already been
+   * through `parseGame`, which is the only thing that is allowed to build one out of text — so
+   * this takes it as it stands rather than validating it a second time in a second place.
+   */
+  | { type: 'RESTORE'; state: GameState }
   | { type: 'TICK'; dt: number }
   | { type: 'TAKE_ORDER'; slot: number }
   | { type: 'SELECT_SLOT'; slot: number }
@@ -217,6 +223,11 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       return setMode(state, action.mode);
     case 'SET_AUDIO':
       return { ...state, audio: clampAudio({ ...state.audio, ...action.audio }) };
+    case 'RESTORE':
+      // Everything, including the phase: a code holding a half-built cup comes back to that cup.
+      // `parseGame` has already made a restored shift paused, so this cannot drop the player into
+      // three patience timers they did not ask for.
+      return action.state;
     case 'TICK':
       return tick(state, action.dt);
     case 'TAKE_ORDER':

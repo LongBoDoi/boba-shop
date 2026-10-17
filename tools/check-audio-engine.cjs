@@ -30,12 +30,25 @@ async function advance(ms) {
   await flush();
 }
 let players = [], appHandlers = [], listeners = [], audioMode;
+/**
+ * The stub is faithful to the **native** player, not to the web one, because the web one is the
+ * forgiving of the two and a stub that flatters the code is worse than no stub at all.
+ *
+ * `playbackRate` is the case in point: `expo-audio` declares it getter-only on both iOS and
+ * Android (only its web player gives it a setter), so assigning to it throws in the bundle's
+ * strict mode. This stub used to carry it as an ordinary writable field — so the whole suite went
+ * green while every one-shot in the game was silent on a real phone. It is now an accessor with
+ * no setter, which throws here exactly as it throws on a device, and `setPlaybackRate` is the one
+ * way through. See `tools/check-native-audio-api.cjs`, which holds the same rule against the SDK.
+ */
 class Player {
   constructor(source) {
-    Object.assign(this, { source, volume: 0, loop: false, playbackRate: 1, shouldCorrectPitch: true,
-      playing: false, removed: false, starts: 0, seeks: 0 });
+    Object.assign(this, { source, volume: 0, loop: false, shouldCorrectPitch: true,
+      playing: false, removed: false, starts: 0, seeks: 0, rate: 1 });
     players.push(this);
   }
+  get playbackRate() { return this.rate; }
+  setPlaybackRate(rate) { assert.ok(!this.removed); this.rate = rate; }
   play() { assert.ok(!this.removed); this.playing = true; this.starts++; }
   pause() { assert.ok(!this.removed); this.playing = false; }
   seekTo() { assert.ok(!this.removed); this.seeks++; return Promise.resolve(); }
@@ -73,7 +86,8 @@ async function main() {
     const stop = engine.initAudio();
     const { WARM_CLIPS } = require('../src/audio/sounds.ts');
     assert.equal(players.length, WARM_CLIPS.length + 1, 'Only common contacts plus the pour are warmed');
-    assert.deepEqual(audioMode, { playsInSilentMode: false, interruptionMode: 'mixWithOthers', shouldPlayInBackground: false });
+    assert.deepEqual(audioMode, { playsInSilentMode: true, interruptionMode: 'mixWithOthers', shouldPlayInBackground: false },
+      'Off iOS there is no silent switch to respect, only a ringer that has nothing to do with media');
     engine.setMusic('menu'); engine.playSound('order'); engine.setPouring(true, 0.2);
     assert.equal(starts(), 0, 'No audio before browser gesture');
     assert.ok(listeners.every((l) => l.capture));
@@ -213,7 +227,18 @@ async function main() {
     const engine = fresh('ios');
     const stop = engine.initAudio();
     assert.equal(listeners.length, 0, 'Native has no browser gate');
+    // The one platform with a switch meant for silencing games.
+    assert.equal(audioMode.playsInSilentMode, false, 'iOS respects the silent switch');
     engine.playSound('order'); await flush(); assert.ok(starts() > 0);
+    stop();
+  }
+
+  {
+    // Android's ringer is not that switch, and gating on it muted the game for anyone on vibrate.
+    const engine = fresh('android');
+    const stop = engine.initAudio();
+    assert.equal(audioMode.playsInSilentMode, true, 'Android does not gate media on the ringer');
+    engine.playSound('order'); await flush(); assert.ok(starts() > 0, 'A cue sounds on Android');
     stop();
   }
   assert.equal(timers.size, 0, 'No timer leaks');

@@ -23,6 +23,7 @@ import { Ticket } from '../components/TicketRail';
 import { describeUnlocks } from '../game/levels';
 import { CupSize } from '../game/ingredients';
 import { GameAction, GameState, Outcome } from '../game/reducer';
+import { decodeSaveCode, encodeSaveCode } from '../game/saveCode';
 import { COIN_FLIGHT_MS, COIN_START_MS, TOSS_MS } from '../game/effectTiming';
 import { timing } from '../motion';
 import { colors, fonts } from '../theme';
@@ -368,6 +369,12 @@ export function GameScreen({ state, dispatch }: GameScreenProps) {
             onChangeMode={(mode) => dispatch({ type: 'SET_MODE', mode })}
             audio={state.audio}
             onChangeAudio={(audio) => dispatch({ type: 'SET_AUDIO', audio })}
+            onExport={() => encodeSaveCode(state)}
+            onImport={(code) => {
+              const restored = decodeSaveCode(code);
+              if (restored) dispatch({ type: 'RESTORE', state: restored });
+              return Boolean(restored);
+            }}
             onClose={() => setSettings(false)}
           />
         )}

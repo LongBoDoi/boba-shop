@@ -106,12 +106,22 @@ export function initAudio(): () => void {
   if (ready) return () => {};
   ready = true;
 
-  // The silent switch is the player's, not ours. `playsInSilentMode` defaults to *true*, which for
-  // a game means a phone flipped to silent in a meeting starts playing music box; a game is
-  // exactly the kind of app that switch is for. `mixWithOthers` is the other half of the same
-  // manners: whatever the player already had on keeps playing, and they can turn our music off.
+  // The silent switch is the player's, not ours — but **"silent" is not the same thing on the two
+  // platforms**, and treating it as though it were made the game mute for anyone whose phone was
+  // on vibrate.
+  //
+  // On iOS the switch exists to silence exactly this kind of app, so it is respected there.
+  //
+  // Android has no such switch. What `playsInSilentMode: false` consults there is the **ringer**
+  // mode — `playsInSilentMode || ringerMode == RINGER_MODE_NORMAL` — which governs calls and
+  // notifications and has nothing to do with the media stream a game plays on. Worse, the check
+  // sits at the top of the native `play()` and returns early, so a phone left on vibrate got no
+  // sound at all and nothing on screen to explain why. Media has its own volume on Android, and
+  // that is the control the player already has.
+  //
+  // `mixWithOthers` is the other half of the manners: whatever they already had on keeps playing.
   setAudioModeAsync({
-    playsInSilentMode: false,
+    playsInSilentMode: Platform.OS !== 'ios',
     interruptionMode: 'mixWithOthers',
     shouldPlayInBackground: false,
   }).catch((error: unknown) => warn('the audio session could not be configured', error));
