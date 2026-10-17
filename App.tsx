@@ -11,6 +11,7 @@ import { View } from 'react-native';
 import { useSharedValue, withDelay, withTiming, Easing } from 'react-native-reanimated';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
+import { useAudioEngine, useGameAudio } from './src/audio/useAudio';
 import { ScreenWipe } from './src/components/ScreenWipe';
 import { UpdateDialog } from './src/components/UpdateDialog';
 import { gameReducer, GameState } from './src/game/reducer';
@@ -46,6 +47,14 @@ export default function App() {
 
 function Shop({ initial, writable }: { initial: GameState; writable: boolean }) {
   const [state, dispatch] = useReducer(gameReducer, initial);
+  // Built here rather than up in `App`, which is to say **after** the loading screen rather than
+  // behind it. The cues are a twentieth of what the artwork weighs, but a browser will only hold
+  // six connections to a host, so twenty of them opened during the preload do not arrive sooner —
+  // they push the artwork, which is the only thing the bar is actually waiting for, back behind
+  // them. There is nothing to gain by being early: nothing may sound until the first gesture, and
+  // on this screen that is the press of "Bắt đầu", which is a title screen away.
+  useAudioEngine();
+  useGameAudio(state);
   const save = useSaveGame(state, writable);
   const update = useUpdate(save);
 
@@ -79,6 +88,8 @@ function Shop({ initial, writable }: { initial: GameState; writable: boolean }) 
             onStart={() => dispatch({ type: 'START_DAY', day: 1 })}
             mode={screen.mode}
             onChangeMode={(mode) => dispatch({ type: 'SET_MODE', mode })}
+            audio={screen.audio}
+            onChangeAudio={(audio) => dispatch({ type: 'SET_AUDIO', audio })}
           />
         )}
         {screen.phase === 'playing' && <GameScreen state={screen} dispatch={dispatch} />}

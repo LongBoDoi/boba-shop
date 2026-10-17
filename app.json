@@ -2,7 +2,7 @@
   "expo": {
     "name": "Tiệm Trà Sữa",
     "slug": "boba-shop",
-    "version": "1.0.0",
+    "version": "1.1.0",
     "runtimeVersion": {
       "policy": "appVersion"
     },
@@ -43,7 +43,15 @@
     "owner": "manhlong",
     "plugins": [
       "expo-font",
-      "expo-asset"
+      "expo-asset",
+      [
+        "expo-audio",
+        {
+          "microphonePermission": false,
+          "recordAudioAndroid": false,
+          "enableBackgroundPlayback": false
+        }
+      ]
     ]
   }
 }

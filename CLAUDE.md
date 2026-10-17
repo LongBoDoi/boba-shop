@@ -22,7 +22,8 @@ npx expo install <package>  # add a dependency at an SDK-compatible version
 
 Run `npm run typecheck`, `npm run lint`, and `npm test` before calling a change done.
 Lint treats warnings as failures. The regression scripts check serving behavior, saving and
-restoring, reading releases, and the scoped UUID dependency override; see "Verifying changes" below and `docs/dependency-health.md`.
+restoring, reading releases, sound and music, and the scoped UUID dependency override; see
+"Verifying changes" below and `docs/dependency-health.md`.
 
 ### Deploying the web build (EAS Hosting)
 
@@ -99,6 +100,9 @@ src/game/               pure game logic, no React
   save.ts               serialize/validate a GameState for storage; see "Saving the shop"
 src/updates/            useUpdate.ts: ask EAS Update once a launch, download and restart into it;
                         see "Updating itself"
+src/audio/              sounds.ts (the cue catalogue and the mix), audio.ts (the engine — players,
+                        voices, fades), useAudio.ts (the only two places React touches it);
+                        see "The shop's sound" and docs/audio.md
 src/screens/            LoadingScreen (the wait while the artwork comes in), TitleScreen,
                         DayEndScreen, and the in-play screens:
   GameScreen.tsx        orchestrator: HUD, the two-page swipe pager + tab indicator, effects/opening/pause overlays
@@ -113,7 +117,9 @@ src/components/art/     SVG illustrations: Character, IngredientIcon, ShopBackdr
                         kitchenArt.ts (the painted kitchen sprites + their geometry),
                         Counter, CounterTop, Tiles, ToppingShelf
 src/assets/kitchen/     the painted sprites themselves — generated, see "The kitchen's artwork"
-tools/                  cut-sheets.py: cuts the asset sheets into those sprites
+src/assets/audio/       the sounds and the two music loops — generated, see "The shop's sound"
+tools/                  make-music.cjs: music only; audio/build-foley.cjs: recorded effects
+                        cut-sheets.py: cuts the asset sheets into those sprites
                         cut-tea-jars.ps1: a whole dispenser per tea, off the kitchen sheet
                         cut-cup-design.ps1: the cup and its drink, off the cup design
                         cut-tea-front.ps1: the tea window's greenery, back out of its own plate
@@ -123,6 +129,7 @@ src/theme.ts            colours and font family names
 src/useSavedGame.ts     Async Storage read on launch, slow write while playing
 src/useArtwork.ts       pulls the painted sprites in before the shop opens; see "Opening the shop"
 tools/check-drawing.cjs reads the SVG for the three things a phone draws differently
+tools/check-audio.cjs   loop seams, cue wiring, and the volumes through a save
 tools/stamp-build.cjs   writes the CI run number into app.json as versionCode/buildNumber
 ```
 
@@ -386,10 +393,30 @@ Three decisions worth not re-litigating:
   may not carry. A drink costs eight units and a tip is one, so nothing used to reach four digits;
   a till that keeps everything does so within a week.
 
+### The shop's sound
+
+Effects are recorded Foley: 29 edited WAV clips from 14 CC0 sources. src/audio/clips.ts names
+assets; sounds.ts defines action layers, alternate takes, buses, priorities and cooldowns;
+foley.ts schedules a bounded player pool, live fill for pours and cancellation. audio.ts
+handles Expo/browser lifecycle and the separate music crossfades. No audio props or context
+should be threaded through the memoized kitchen.
+
+The originals and license/checksum manifest live in tools/audio/. Rebuild effects with
+node tools/audio/build-foley.cjs (offline ffmpeg required). The two original music loops stay
+byte-identical and are built by tools/make-music.cjs. The old effect synthesizer is retired.
+Open tools/audio/audition.html to audition shipped clips. Full details: docs/audio.md.
+
+Keep these behaviors: silent switch respected, mix with other audio, no recording/background
+playback, web gesture unlock, no stale sounds after pause/background/teardown, and music outside
+effect warmup. Serve cues read departures rather than feedback; saved volumes migrate and clamp
+without increasing SAVE_VERSION. Cue delays share the visual motion constants in
+src/game/effectTiming.ts. Audio arithmetic checks do not replace listening on a phone.
+
 ### Game modes
 
-`GameState.mode` (`standard` | `relaxed`) says how the shop is run, and it is the one setting the game
-has. **Standard** is the whole job as described above. **Relaxed** ("Tự động nhận order") does two
+`GameState.mode` (`standard` | `relaxed`) says how the shop is run, and it is one of the two
+settings the game has — the other is how loud it is, above. **Standard** is the whole job as
+described above. **Relaxed** ("Tự động nhận order") does two
 things in `tick()`: a customer arrives already `ordered` (`orderedAt: clock`, so the serve timer starts
 at once and the order-taking patience never applies), and `nextSpawnAt` is left at `clock`, so the next
 customer walks in as soon as a spot is free rather than after `spawnMin/MaxMs`. The only gap left is
@@ -401,9 +428,12 @@ anyone still `requesting` (nobody is coming to take it by hand any more) and pul
 forward. It rides along in the save, so the mode a shop was last run in is the one it reopens in
 (see "Saving the shop").
 
-`SettingsSheet` is the card that sets it, opened from the title screen's "⚙️ Cài đặt" button and from
-the pause menu, so it can be changed between days or in the middle of one. The day-1 instructions on
-both the title screen and the opening sign change their first line to match the mode.
+`SettingsSheet` is the card that sets it — and the two volumes — opened from the title screen's
+"⚙️ Cài đặt" button and from the pause menu, so either can be changed between days or in the
+middle of one. **It scrolls**, which it did not need to while the mode was the only setting: the
+card is centred with no slack, and sideways on a short phone the sound section and the button out
+of it fell off the bottom. The day-1 instructions on both the title screen and the opening sign
+change their first line to match the mode.
 
 The two pages share one shop's palette — warm wood, cream tile and the shop's pink — so swiping feels
 like turning around inside it. The Counter uses `ShopBackdrop`; the kitchen is `KitchenRoom`, drawn by
@@ -714,6 +744,55 @@ swiping it, which is the same gesture everything else in the room is worked with
 that jumped the view to the tea, milk and topping ends of it were a second way to do one thing,
 and they cost the room a band the height of a dispenser.
 
+### Turning it on its side
+
+The game is drawn upright, and the painting is what decides what happens when it is not.
+`ROOM_BG_KEEP` is the band of the plate the room cannot do without — the crown of a tank on the
+upper shelf (y 113) down to the front of the cup's holder (y 909), with the taps, the toppings,
+the ice machine, the work top and the cup between them. `fitBackground` draws the plate `cover`
+and centred, so **a kitchen wider than 1.93 times its own height starts losing that band from
+both ends at once**: the dispensers lose their lids and the counter falls off the bottom. That
+one ratio, `ROOM_KEEP_ASPECT`, is the whole of the sideways problem.
+
+There is a second, narrower line as well. `ROOM_BG_REACH` is what the room needs to still be
+*workable* rather than whole — a tank's name tag down to the line the cup's foot stands on. What
+lies between the two bands is the crowns of the tanks' lids and the front lip of the cup's mat:
+paint, not furniture. A layout can be worth having at the price of a lid.
+
+`src/responsive.ts` is the only place that answers it, and `prepLayoutFor` gives one of three:
+
+- **`stacked`** — upright. HUD, tabs, the order band, the kitchen, the buttons, down the screen.
+- **`band`** — the same arrangement sideways, with every spare pixel taken out of it. The order
+  stays across the top and the buttons stay along the bottom, both where the player already looks
+  for them; the card is shorter to match (`ORDER_BAND_HEIGHT`, tiles moved up beside the name)
+  and the buttons give back a few pixels of height. **This one is measured against
+  `ROOM_REACH_ASPECT`, not `ROOM_KEEP_ASPECT`, and that is the trade it is**: two bands cost
+  about 180px, which only a 12.9" tablet can give up whole, so below that the tanks are cropped
+  to the top of their name tags. Keeping the whole painting would mean moving the buttons, and
+  they were wanted where they are.
+- **`column`** — sideways and short with it. The order and the buttons stand *beside* the
+  kitchen, which spends width instead of height. A phone on its side gets this, and so does an
+  iPad mini: there the two bands leave the room a strip no deeper than a dispenser.
+
+Two things not to undo:
+
+- **The three layouts are keyed** (`key={layout}` on each branch's root). They are all a `<View>`
+  of `<View>`s, so React will otherwise reconcile the band's strip *into* the kitchen's box and
+  the kitchen into whatever stood beside it: the host views survive, their `onLayout` never
+  fires, and `KitchenStation` goes on laying the room out for the box it had under the other
+  layout — a room at the wrong scale with its hint pill below the bottom of the screen.
+- **`PREP_BAND_HEIGHT` and `PREP_ACTIONS_HEIGHT` count their own rules and padding, exactly.**
+  Every pixel of both comes off the room, and the room is already down to its reach band on an
+  11" tablet; a couple of pixels of border unaccounted for is another row of the painting gone.
+  If the crop ever needs buying back, the levers in order of how much they return are: the HUD
+  and the tab indicator sharing one row sideways (~26px, and the tabs are a navigation
+  affordance, so that is a design call), the card's progress track (18px, but it is the only
+  thing that shows progress at a glance), and the card's two-line tile captions (12px, and they
+  become unreadable at one line).
+
+The counter page has its own sideways form, which is a different question — `isWideLayout` alone,
+since `CustomerStage` has no painting to crop, only customers to make bigger and to centre.
+
 ### The order, spoken back
 [OrderBubble.tsx](src/components/OrderBubble.tsx) is the **panel docked across the top of the
 prep page** (it was a paper note clipped to a rail inside the room, then a bubble floating over
@@ -729,9 +808,11 @@ Five things about it are deliberate:
   which runs bottom of the cup upwards. The card is read, not built;
 - the tiles stand together at one size and the row runs out from the left. Sharing the card's whole
   width between them leaves a two-thing order as two tiles marooned at either end;
-- **its height is fixed** (`ORDER_PANEL_HEIGHT`). The kitchen is laid out from whatever height is
-  left under it, so a panel that grew a row when an order was picked would move every dispenser,
-  every topping box and the cup with it;
+- **its height is fixed** (`ORDER_PANEL_HEIGHT`, and `ORDER_BAND_HEIGHT` laid out sideways). The
+  kitchen is laid out from whatever height is left under it, so a panel that grew a row when an
+  order was picked would move every dispenser, every topping box and the cup with it. Sideways it
+  is shorter rather than taller, because there the card has width it cannot use and height it
+  cannot spare — the tiles move up beside the name. See "Turning it on its side";
 - **the other taken orders stand inside it**, in a queue to the right of the heart — tap one to
   make it next. They used to hang off the card's bottom-right corner, over the room, where a
   seven-thing order had its last two ingredients covered by them;
@@ -902,6 +983,14 @@ stands plainly inside the shelf; divided across the board it laps over the ends 
   load the game and dismiss the pause card.
 - The loading screen: it is over in a flash on a warm cache, so throttle the network to see it
   (`Network.emulateNetworkConditions` over CDP, or the browser's own throttle).
+- Sound and music: `tools/check-audio.cjs` is arithmetic on sample values — it proves the loops
+  join, the one-shots do not click, every cue is wired to something and the volumes survive a save,
+  and it proves **nothing about whether any of it sounds good**. A browser can show that the web
+  build plays: export, serve `dist/`, press "Bắt đầu" and the menu theme should come up under it.
+  Nothing may play before that first gesture, which is the browser's rule and not a bug. The
+  silent switch, mixing with the player's own music, and the real latency of a cue fired from a
+  drag are all phone-only — say plainly in the report when a change has not been heard on one.
+  To hear a single cue in isolation, play its file from `src/assets/audio/` directly.
 - Performance: a desktop browser absorbs anything this game does, so measuring it there says
   nothing until the CPU is slowed to roughly phone class (`Emulation.setCPUThrottlingRate`, rate 8
   over CDP). Then `Performance.getMetrics`' `ScriptDuration` over a fixed window of play — idle on

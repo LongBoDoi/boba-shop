@@ -1,6 +1,7 @@
 import { Image, ImageSourcePropType, Pressable, StyleSheet, Text, ViewStyle } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 
+import { playSound } from '../audio/audio';
 import { DURATION, timing } from '../motion';
 import { colors, fonts } from '../theme';
 
@@ -18,12 +19,26 @@ interface ButtonProps {
 
 export function Button({ label, onPress, variant = 'primary', disabled, style, icon }: ButtonProps) {
   const primary = variant === 'primary';
+  /**
+   * Every button in the game sounds the same, and it is done here rather than at the call sites
+   * for the obvious reason: this one line covers the menu, the pause card, the settings sheet, the
+   * day's sign, the day-end screen and the update dialog, and no future screen can forget it.
+   *
+   * It is also what buys the web its first sound. A browser will not play anything until the page
+   * has been interacted with, and on the title screen the first interaction is somebody pressing
+   * "Bắt đầu" — the unlock listener in `initAudio` is on the capture phase, so it has already run
+   * by the time this handler does, and the press that starts the game is audible.
+   */
+  const sound = () => {
+    playSound('button');
+    onPress();
+  };
   const press = useSharedValue(1);
   const animatedStyle = useAnimatedStyle(() => ({ transform: [{ scale: press.value }] }));
 
   return (
     <AnimatedPressable
-      onPress={onPress}
+      onPress={sound}
       onPressIn={() => press.set(withTiming(0.96, { duration: 80 }))}
       onPressOut={() => press.set(withTiming(1, timing(DURATION.fast)))}
       disabled={disabled}

@@ -186,31 +186,72 @@ export const BIN_HEAD = 0.1713;
 
 // ------------------------------------------------------------------ the room around it
 /** Warm watercolor room; interactive equipment is anchored in this plate's coordinates. */
-export const ROOM_BG = require('../../assets/kitchen/kitchen-warm-clear.png');
+export const ROOM_BG = require('../../assets/kitchen/kitchen-warm-extended.png');
 /**
  * The painted holder, lifted off the original room so the wall can pan behind it. It is cut to
- * twice the box below and nothing else, so it is drawn straight into that box — see
+ * twice its original room box and displayed at the extended counter's scale below — see
  * `tools/cut-cup-holder.py` for why a sprite this small is not shipped at the size imagegen
  * returned it.
  */
 export const CUP_HOLDER = require('../../assets/kitchen/cup-holder.png');
-export const ROOM_BG_SIZE = { width: 1536, height: 1024 };
-export const ROOM_BG_TABLE = { top: 736, base: 950 };
+export const ROOM_BG_SIZE = { width: 1933, height: 814 };
+export const ROOM_BG_TABLE = { top: 585, base: 752 };
 export const ROOM_BG_TEA_SHELF = {
-  x0: 16, x1: 636, tankWidth: 198,
+  x0: 397, x1: 875, tankWidth: 153,
   // The feet sit on the lit wooden faces; the tap hangs over the front edge.
-  bases: [308, 523],
+  bases: [251, 416],
   // The catalogue's own order, so the week fills the rack left to right and then down a shelf.
   slots: ['black', 'green', 'thai', 'oolong', 'taro', 'matcha'],
 };
-export const ROOM_BG_ICE_MACHINE = { x: 230, y: 585, width: 265, height: 116 };
+/** Painted stations share the room's scrolling coordinates and counter surface. */
+export const ROOM_BG_CUP_STATION = { x: 20, y: 214, width: 345, height: 272 };
+export const ROOM_BG_ICE_MACHINE = { x: 1526, y: 308, width: 402, height: 216 };
+export const ROOM_BG_EXTRAS = {
+  bottleCenter: 1040, bottleBase: 414, bottleSlot: 54, bottleWidth: 46, bottleHeight: 115,
+  foamCenters: [938, 1168], foamBase: 539, foamWidth: 64,
+};
 /**
- * Where the painting itself draws the cup holder. The holder is the one thing measured here that
- * does *not* pan with the room — the cup stands on it and the cup stays put — so only its size
- * and its height on the counter come from these pixels; it is centred on the screen, which is
- * where the painting puts it anyway.
+ * Where the lifted cup holder fits on the extended work top. It does not pan with the room:
+ * the cup stays on it, centred on screen. Its size and height follow the painted counter.
  */
-export const ROOM_BG_CUP_HOLDER = { x: 553, y: 782, width: 424, height: 127 };
+export const ROOM_BG_CUP_HOLDER = { x: 798, y: 622, width: 337, height: 101 };
+/**
+ * The rows of the plate that have to stay on screen whatever shape the room is given: the crown
+ * of a tank standing on the upper shelf, down to the front edge of the cup's holder. Between them
+ * are the taps, the toppings, the ice machine, the work top and the cup — everything the player
+ * actually reaches for.
+ *
+ * `fitBackground` draws the plate `cover` and centred, so a room wider than `width / (bottom -
+ * top)` starts losing these from both ends at once. That ratio is what decides whether the order
+ * can stand across the top of the prep page or has to move beside it; see `src/responsive.ts`.
+ * It is measured here, off the same anchors the equipment is placed by, so re-cutting the plate
+ * moves it rather than leaving a number behind that used to be true.
+ */
+export const ROOM_BG_KEEP = {
+  top: ROOM_BG_TEA_SHELF.bases[0]
+    - ROOM_BG_TEA_SHELF.tankWidth * (TEA_DISPENSER_ART.height / TEA_DISPENSER_ART.width) * TEA_DISPENSER_ART.foot,
+  bottom: ROOM_BG_CUP_HOLDER.y + ROOM_BG_CUP_HOLDER.height,
+};
+
+/**
+ * The narrower band the room has to keep to still be *workable*, as opposed to whole.
+ *
+ * Between this and `ROOM_BG_KEEP` lie the crowns of the tanks' lids and the front lip of the mat
+ * the cup stands on: paint, not furniture. What is inside it is what the shift needs — a tank's
+ * name tag, so you can tell the teas apart, down to the line the cup's foot rests on, so you can
+ * see what you are dropping things into. The taps are lower than the tags and the toppings, the
+ * ice and the bench are lower still, so all of those come with it.
+ *
+ * It exists because a layout can be worth having at the price of a lid. See `prepLayoutFor`.
+ */
+const TANK_HEIGHT = ROOM_BG_TEA_SHELF.tankWidth
+  * (TEA_DISPENSER_ART.height / TEA_DISPENSER_ART.width);
+export const ROOM_BG_REACH = {
+  // One tag's height of headroom above the tag itself, so it is never flush with the ceiling.
+  top: ROOM_BG_KEEP.top + TANK_HEIGHT * (TEA_DISPENSER_ART.label.top - TEA_DISPENSER_ART.label.height),
+  bottom: ROOM_BG_CUP_HOLDER.y + ROOM_BG_CUP_HOLDER.height / 2,
+};
+
 export const ROOM_BG_TOPPING_SHELF = {
   // Shared boundaries project the whole grid into the basin's perspective.
   edges: TOPPING_TRAY_EDGES,

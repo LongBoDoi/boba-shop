@@ -8,10 +8,10 @@ import { cupSizeFor, KitchenStation } from '../components/KitchenStation';
 import { OrderBubble } from '../components/OrderBubble';
 import { PourMeter, PourMeterState } from '../components/PourFeedback';
 import { Ticket } from '../components/TicketRail';
-import { Drink } from '../game/ingredients';
+import { CupSize, Drink } from '../game/ingredients';
 import { DayConfig } from '../game/levels';
 import { Customer, CupBuild, patienceLeft } from '../game/reducer';
-import { panelWidthFor } from '../responsive';
+import { panelWidthFor, PrepLayout } from '../responsive';
 import { fonts } from '../theme';
 import { pointerEventsStyles } from '../pointerEvents';
 
@@ -33,8 +33,8 @@ interface PrepPageProps {
   selectedSlot: number | null;
   selectedCustomer: Customer | null;
   clock: number;
-  /** Sideways: the order panel and the buttons stand beside the kitchen. See `isWideLayout`. */
-  wide: boolean;
+  /** Where the order and the buttons go: above the kitchen or beside it. See `prepLayoutFor`. */
+  layout: PrepLayout;
   /** Bumped by the parent when this page scrolls into view, to re-measure on-screen positions. */
   measureToken: number;
   onGeometry: (geometry: PrepGeometry) => void;
@@ -43,6 +43,7 @@ interface PrepPageProps {
   onScoop: (category: 'toppings' | 'foam', optionId: string) => void;
   onIce: () => void;
   onSugar: () => void;
+  onPickCup: (size: CupSize) => void;
   onDragging: (dragging: boolean) => void;
   onClear: () => void;
   onServe: () => void;
@@ -61,7 +62,7 @@ export function PrepPage({
   selectedSlot,
   selectedCustomer,
   clock,
-  wide,
+  layout,
   measureToken,
   onGeometry,
   onSelectTicket,
@@ -69,6 +70,7 @@ export function PrepPage({
   onScoop,
   onIce,
   onSugar,
+  onPickCup,
   onDragging,
   onClear,
   onServe,
@@ -80,14 +82,29 @@ export function PrepPage({
   /** What the side column has left for the order once the buttons have taken theirs. */
   const [orderSpace, setOrderSpace] = useState(0);
   const insets = useSafeAreaInsets();
-  const canServe = Boolean(selectedCustomer && cup.tea);
+  const canServe = Boolean(selectedCustomer && cup.size && cup.tea);
   const serveLabel = !selectedCustomer
     ? 'Chọn order để pha'
+    : !cup.size
+      ? 'Lấy ly đúng cỡ từ kệ'
     : !cup.tea
       ? 'Rót trà vào ly'
       : `Phục vụ ${selectedCustomer.name} ➜`;
+  /*
+   * Each of the three layouts below is its own tree, and `key` is what stops React reconciling
+   * one against another. They are all a `<View>` holding `<View>`s, so without it the band's own
+   * strip is updated *into* the kitchen's box and the kitchen into whatever stood next to it —
+   * the host views survive, their `onLayout` never fires, and `KitchenStation` goes on laying the
+   * room out for the box it had under the other layout. That is a room drawn at the wrong scale
+   * with its hint pill somewhere below the bottom of the screen, and nothing about it looks like
+   * a keying problem.
+   */
   const cupWidth = scene.width > 0 ? cupSizeFor(scene.width, scene.height).width : 56;
   const panelWidth = panelWidthFor(width);
+  const column = layout === 'column';
+  const band = layout === 'band';
+  // Sideways the card spans the band, inside whatever the notch leaves of it.
+  const bandOrderWidth = width - insets.left - insets.right - GUTTER * 2;
 
   // Report where the cup and bin sit (window coordinates) whenever the layout or page changes,
   // so the effects overlay can aim coins and the toss. Re-measured when measureToken bumps.
@@ -100,14 +117,15 @@ export function PrepPage({
       });
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [scene.width, scene.height, cupWidth, measureToken, wide]);
+  }, [scene.width, scene.height, cupWidth, measureToken, layout, cup.size, cupId]);
 
   const order = (
     <OrderBubble
       customer={selectedCustomer} cup={cup} config={config}
       patience={selectedCustomer ? patienceLeft(selectedCustomer, clock) : 1}
       tickets={tickets} selectedSlot={selectedSlot} onSelectTicket={onSelectTicket}
-      width={(wide ? panelWidth : width) - GUTTER * 2} tall={wide} maxHeight={orderSpace}
+      width={column ? panelWidth - GUTTER * 2 : band ? bandOrderWidth : width - GUTTER * 2}
+      form={layout} maxHeight={orderSpace}
     />
   );
 
@@ -119,6 +137,7 @@ export function PrepPage({
       {scene.height > 0 && <KitchenStation
         width={scene.width} height={scene.height} config={config} cup={cup} build={build} cupId={cupId}
         onPour={onPour} onScoop={onScoop} onIce={onIce} onSugar={onSugar} onDragging={onDragging}
+        onPickCup={onPickCup}
         onMeterChange={setPourMeter} cupRef={machineRef}
       />}
       {pourMeter && <View style={[styles.floatingMeter, pointerEventsStyles.none]}><PourMeter {...pourMeter} /></View>}
@@ -127,9 +146,10 @@ export function PrepPage({
 
   // The bin is also the toss's target, so its ref is on the box around the button either way.
   const clearButton = (
-    <View ref={trashRef} style={wide ? undefined : styles.clear}>
-      <Pressable onPress={onClear} accessibilityRole="button" accessibilityLabel="Đổ bỏ"
-        style={({ pressed }) => [styles.clearButton, pressed && styles.pressed]}>
+    <View ref={trashRef} style={column ? undefined : styles.clear}>
+      <Pressable onPress={onClear} disabled={!cup.size} accessibilityRole="button" accessibilityLabel="Đổ bỏ"
+        accessibilityState={{ disabled: !cup.size }}
+        style={({ pressed }) => [styles.clearButton, band && styles.buttonBand, !cup.size && { opacity: 0.55 }, pressed && styles.pressed]}>
         <KitchenActionIcon kind="trash" />
         <Text style={styles.clearText}>Đổ bỏ</Text>
       </Pressable>
@@ -138,17 +158,18 @@ export function PrepPage({
   const serveButton = (
     <Pressable onPress={onServe} disabled={!canServe} accessibilityRole="button"
       accessibilityLabel={serveLabel} accessibilityState={{ disabled: !canServe }}
-      style={({ pressed }) => [styles.serve, wide && styles.serveWide, !canServe && styles.disabled, pressed && styles.pressed]}>
+      style={({ pressed }) => [styles.serve, column && styles.serveWide, band && styles.buttonBand,
+        !canServe && styles.disabled, pressed && styles.pressed]}>
       <KitchenActionIcon kind="cup" />
       <Text style={styles.serveText} numberOfLines={1} adjustsFontSizeToFit>{serveLabel}</Text>
     </Pressable>
   );
 
-  if (wide) {
-    // Sideways the kitchen keeps the whole height of the page, and the order — the thing that is
-    // read rather than handled — stands in a column beside it with the buttons under it.
+  if (column) {
+    // Sideways and short with it: the kitchen keeps the whole height of the page, and the order —
+    // the thing that is read rather than handled — stands beside it with the buttons under it.
     return (
-      <View style={[styles.page, styles.pageWide, { width, paddingLeft: insets.left }]}>
+      <View key={layout} style={[styles.page, styles.pageWide, { width, paddingLeft: insets.left }]}>
         {kitchen}
         <View style={[styles.column, { width: panelWidth, paddingBottom: 10 + insets.bottom, paddingRight: GUTTER + insets.right }]}>
           {/* The card stands in whatever the buttons leave, and is told how much that is: a
@@ -166,11 +187,20 @@ export function PrepPage({
     );
   }
 
+  // Upright and sideways are the same arrangement — the order across the top, the kitchen, the
+  // two buttons along the bottom — and sideways is that arrangement with every spare pixel taken
+  // out of it. The card's tiles move up beside its name and the buttons give back a few pixels of
+  // height, because all of it comes off the room. See "Turning it on its side" in CLAUDE.md.
   return (
-    <View style={[styles.page, { width }]}>
-      <View style={styles.orderHeader}>{order}</View>
+    <View key={layout} style={[styles.page, { width }]}>
+      <View style={[styles.orderHeader, band && styles.orderHeaderBand,
+        band && { paddingLeft: GUTTER + insets.left, paddingRight: GUTTER + insets.right }]}>
+        {order}
+      </View>
       {kitchen}
-      <View style={[styles.actions, { paddingBottom: 10 + insets.bottom }]}>
+      <View style={[styles.actions, band && styles.actionsBand,
+        { paddingBottom: (band ? ACTIONS_PAD : 10) + insets.bottom },
+        band && { paddingLeft: 12 + insets.left, paddingRight: 12 + insets.right }]}>
         {clearButton}
         {serveButton}
       </View>
@@ -180,11 +210,17 @@ export function PrepPage({
 
 /** The band of shop either side of the order panel. */
 const GUTTER = 10;
+/** The sideways button bar: shorter buttons and less air, since the room pays for both. */
+const ACTIONS_PAD = 6;
+const ACTIONS_BUTTON = 48;
 
 const styles = StyleSheet.create({
   page: { flex: 1, backgroundColor: '#FFF4DE' },
   pageWide: { flexDirection: 'row', alignItems: 'stretch' },
   orderHeader: { paddingHorizontal: GUTTER, paddingTop: 8, paddingBottom: 9, backgroundColor: '#FBF0DA', borderBottomWidth: 2, borderBottomColor: '#D7B384' },
+  /** Sideways the card is shorter, so the air around it is trimmed to match. */
+  orderHeaderBand: { paddingTop: 7, paddingBottom: 8 },
+  actionsBand: { paddingTop: ACTIONS_PAD },
   column: {
     gap: 10,
     paddingLeft: GUTTER,
@@ -205,6 +241,8 @@ const styles = StyleSheet.create({
   serve: { flex: 2.1, minHeight: 52, paddingHorizontal: 10, flexDirection: 'row', gap: 6, alignItems: 'center', justifyContent: 'center', backgroundColor: '#7B874B', borderRadius: 13, borderWidth: 1.5, borderColor: '#66703C', borderBottomWidth: 4 },
   /** In the side column the buttons are stacked, so neither of them shares out a row's width. */
   serveWide: { flex: 0, minHeight: 56 },
+  /** Sideways both buttons are a little shorter; the pixels go to the room. */
+  buttonBand: { minHeight: ACTIONS_BUTTON },
   serveText: { fontFamily: fonts.bold, fontSize: 16, color: '#FFF7DF', flexShrink: 1 },
   disabled: { backgroundColor: '#B1AE83', borderColor: '#9B9771' },
   pressed: { opacity: 0.8, transform: [{ translateY: 2 }] },

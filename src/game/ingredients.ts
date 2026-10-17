@@ -1,5 +1,14 @@
 export type CategoryId = 'toppings' | 'sweetness' | 'ice' | 'tea' | 'milk' | 'foam';
 
+export const CUP_SIZES = ['S', 'M', 'L'] as const;
+export type CupSize = typeof CUP_SIZES[number];
+/** The same painted glass, sized relative to the counter's medium cup. */
+export const CUP_SIZE_SCALE: Record<CupSize, number> = { S: 0.84, M: 1, L: 1.16 };
+
+export function isCupSize(value: unknown): value is CupSize {
+  return CUP_SIZES.some((size) => size === value);
+}
+
 export interface Ingredient {
   id: string;
   name: string;
@@ -23,6 +32,8 @@ export interface IceLevel extends Ingredient {
 
 /** A cup of boba: what the customer ordered, or what the player is building. */
 export interface Drink {
+  /** Null means there is no cup on the preparation mat yet. Orders always name a size. */
+  size: CupSize | null;
   toppings: string[];
   sweetness: string | null;
   ice: string | null;
@@ -32,6 +43,7 @@ export interface Drink {
 }
 
 export const EMPTY_DRINK: Drink = {
+  size: null,
   toppings: [],
   sweetness: null,
   ice: null,

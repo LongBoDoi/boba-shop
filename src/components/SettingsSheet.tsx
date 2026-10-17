@@ -1,8 +1,9 @@
 import { useEffect } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 
-import { GameMode } from '../game/reducer';
+import { playSound } from '../audio/audio';
+import { AudioSettings, GameMode } from '../game/reducer';
 import { timing } from '../motion';
 import { colors, fonts } from '../theme';
 import { Button } from './Button';
@@ -21,14 +22,38 @@ export const MODES: { id: GameMode; label: string; note: string }[] = [
   },
 ];
 
+/**
+ * The volumes this card offers, as four labelled steps rather than a slider.
+ *
+ * A slider would be a new gesture built out of `PanResponder`, in a game where every other
+ * gesture is a drag of something painted; four steps are read at a glance, hit reliably with a
+ * thumb, and cannot be left at an awkward 3%. The game itself takes any level between 0 and 1
+ * (`clampAudio`), so these are this card's offer and not a rule — a save holding something in
+ * between is shown as the nearest one rather than being rounded off behind the player's back.
+ */
+const LEVELS: { level: number; label: string }[] = [
+  { level: 0, label: 'Tắt' },
+  { level: 0.35, label: 'Nhỏ' },
+  { level: 0.7, label: 'Vừa' },
+  { level: 1, label: 'Lớn' },
+];
+
 interface SettingsSheetProps {
   mode: GameMode;
   onChangeMode: (mode: GameMode) => void;
+  audio: AudioSettings;
+  onChangeAudio: (audio: Partial<AudioSettings>) => void;
   onClose: () => void;
 }
 
-/** A card over whatever screen opened it: the game mode, and a way back. */
-export function SettingsSheet({ mode, onChangeMode, onClose }: SettingsSheetProps) {
+/**
+ * A card over whatever screen opened it: the game mode, how loud the shop is, and a way back.
+ *
+ * **It scrolls.** It did not need to while the mode was the only setting, and two volume rows is
+ * what tips it over: the card is centred in the window with no slack, and sideways on a short
+ * phone the whole of the sound section — and the button out of it — fell off the bottom.
+ */
+export function SettingsSheet({ mode, onChangeMode, audio, onChangeAudio, onClose }: SettingsSheetProps) {
   const appear = useSharedValue(0);
   useEffect(() => {
     appear.value = withTiming(1, timing());
@@ -44,18 +69,23 @@ export function SettingsSheet({ mode, onChangeMode, onClose }: SettingsSheetProp
       <Animated.View style={[StyleSheet.absoluteFill, styles.overlay, dimStyle]} />
       <View style={styles.center}>
         <Animated.View style={[styles.card, cardStyle]}>
-          <Text style={styles.title}>Cài đặt</Text>
-          <Text style={styles.section}>Chế độ chơi</Text>
-          {MODES.map((option) => (
-            <ModeRow
-              key={option.id}
-              label={option.label}
-              note={option.note}
-              chosen={option.id === mode}
-              onPress={() => onChangeMode(option.id)}
-            />
-          ))}
-          <Button label="Xong" onPress={onClose} style={styles.done} />
+          <ScrollView contentContainerStyle={styles.inner} showsVerticalScrollIndicator={false} bounces={false}>
+            <Text style={styles.title}>Cài đặt</Text>
+            <Text style={styles.section}>Chế độ chơi</Text>
+            {MODES.map((option) => (
+              <ModeRow
+                key={option.id}
+                label={option.label}
+                note={option.note}
+                chosen={option.id === mode}
+                onPress={() => onChangeMode(option.id)}
+              />
+            ))}
+            <Text style={styles.section}>Âm thanh</Text>
+            <VolumeRow label="Nhạc nền" level={audio.music} onChange={(music) => onChangeAudio({ music })} />
+            <VolumeRow label="Hiệu ứng" level={audio.sfx} onChange={(sfx) => onChangeAudio({ sfx })} />
+            <Button label="Xong" onPress={onClose} style={styles.done} />
+          </ScrollView>
         </Animated.View>
       </View>
     </View>
@@ -90,6 +120,57 @@ function ModeRow({
   );
 }
 
+/**
+ * One volume, as four steps rather than a slider.
+ *
+ * Each step previews itself on the way past: changing the effects volume plays a tap at the new
+ * level, so the player hears what they are choosing instead of setting a number and going back to
+ * the game to find out. The music needs no preview — it is already playing, and `setAudioSettings`
+ * follows the finger straight away rather than fading, for exactly this reason.
+ */
+function VolumeRow({
+  label,
+  level,
+  onChange,
+}: {
+  label: string;
+  level: number;
+  onChange: (level: number) => void;
+}) {
+  // Whichever step is nearest: a save, or an older build, can hold a level between two of them.
+  const chosen = LEVELS.reduce(
+    (best, step, index) => {
+      const gap = Math.abs(step.level - level);
+      return gap < best.gap ? { index, gap } : best;
+    },
+    { index: 0, gap: Number.POSITIVE_INFINITY },
+  ).index;
+  return (
+    <View style={styles.volume}>
+      <Text style={styles.volumeLabel}>{label}</Text>
+      <View style={styles.steps}>
+        {LEVELS.map((step, index) => (
+          <Pressable
+            key={step.label}
+            onPress={() => {
+              onChange(step.level);
+              // After the change, so it is heard at the level just chosen rather than the old one.
+              if (step.level > 0) playSound('tap');
+            }}
+            style={[styles.step, index === chosen && styles.stepChosen]}
+            accessibilityRole="radio"
+            accessibilityState={{ selected: index === chosen }}
+            accessibilityLabel={`${label}: ${step.label}`}
+            hitSlop={4}
+          >
+            <Text style={[styles.stepLabel, index === chosen && styles.stepLabelChosen]}>{step.label}</Text>
+          </Pressable>
+        ))}
+      </View>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   overlay: {
     backgroundColor: 'rgba(43,27,23,0.45)',
@@ -103,12 +184,15 @@ const styles = StyleSheet.create({
   card: {
     width: '100%',
     maxWidth: 320,
-    gap: 10,
-    padding: 20,
+    maxHeight: '100%',
     borderRadius: 24,
     backgroundColor: colors.floor,
     borderBottomWidth: 6,
     borderBottomColor: colors.line,
+  },
+  inner: {
+    gap: 10,
+    padding: 20,
   },
   title: {
     fontSize: 28,
@@ -175,5 +259,46 @@ const styles = StyleSheet.create({
   },
   done: {
     marginTop: 4,
+  },
+  volume: {
+    gap: 6,
+    padding: 12,
+    borderRadius: 18,
+    backgroundColor: colors.panel,
+    borderWidth: 2,
+    borderColor: colors.line,
+  },
+  volumeLabel: {
+    fontSize: 15,
+    lineHeight: 20,
+    fontFamily: fonts.display,
+    color: colors.ink,
+  },
+  steps: {
+    flexDirection: 'row',
+    gap: 6,
+  },
+  step: {
+    flex: 1,
+    paddingVertical: 7,
+    borderRadius: 12,
+    alignItems: 'center',
+    backgroundColor: colors.paper,
+    borderWidth: 2,
+    borderColor: colors.line,
+  },
+  stepChosen: {
+    borderColor: colors.primary,
+    backgroundColor: colors.primaryTint,
+  },
+  stepLabel: {
+    fontSize: 13,
+    lineHeight: 17,
+    fontFamily: fonts.semi,
+    color: colors.inkSoft,
+  },
+  stepLabelChosen: {
+    fontFamily: fonts.bold,
+    color: colors.primaryDark,
   },
 });

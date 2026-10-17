@@ -1,11 +1,11 @@
-import { BUILD_ORDER, CategoryId, Drink, effectiveId, EMPTY_DRINK, getIngredient, selectedIds } from './ingredients';
+import { BUILD_ORDER, CategoryId, CUP_SIZES, Drink, effectiveId, EMPTY_DRINK, getIngredient, selectedIds } from './ingredients';
 import { DayConfig } from './levels';
 import { Rng } from './random';
 
 export type ServeQuality = 'perfect' | 'close' | 'wrong';
 
 export function generateOrder(config: DayConfig, rng: Rng): Drink {
-  const order: Drink = { ...EMPTY_DRINK, toppings: [] };
+  const order: Drink = { ...EMPTY_DRINK, size: rng.pick([...CUP_SIZES]), toppings: [] };
   for (const category of config.categories) {
     const ids = config.options[category];
     switch (category) {
@@ -57,9 +57,10 @@ export function categoryMatches(cup: Drink, order: Drink, category: CategoryId):
   return effectiveId(cup, category) === effectiveId(order, category);
 }
 
-/** One wrong category is "close" (half price); two or more is refused. */
+/** Size is a recipe requirement, with the same penalty as an incorrect ingredient. */
 export function evaluateDrink(cup: Drink, order: Drink, categories: CategoryId[]) {
-  const mistakes = categories.filter((category) => !categoryMatches(cup, order, category));
+  const mistakes: (CategoryId | 'size')[] = categories.filter((category) => !categoryMatches(cup, order, category));
+  if (!cup.size || cup.size !== order.size) mistakes.unshift('size');
   const quality: ServeQuality =
     mistakes.length === 0 ? 'perfect' : mistakes.length === 1 ? 'close' : 'wrong';
   return { quality, mistakes };

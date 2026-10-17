@@ -27,11 +27,12 @@ const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'))
  * the apps again (Build apps) before pushing — the push publishes an update.
  */
 const BUILT = {
-  version: '1.0.0',
+  version: '1.1.0',
   native: [
     '@react-native-async-storage/async-storage',
     'expo',
     'expo-asset',
+    'expo-audio',
     'expo-font',
     'expo-haptics',
     'expo-status-bar',

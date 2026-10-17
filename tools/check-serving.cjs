@@ -69,7 +69,8 @@ try {
   const recipe = ordered.slots[slot].order;
 
   function makeCup(amount) {
-    let state = gameReducer(ordered, { type: 'POUR', category: 'tea', optionId: recipe.tea, amount });
+    let state = gameReducer(ordered, { type: 'PICK_CUP', size: recipe.size });
+    state = gameReducer(state, { type: 'POUR', category: 'tea', optionId: recipe.tea, amount });
     for (const optionId of recipe.toppings) {
       state = gameReducer(state, { type: 'SCOOP', category: 'toppings', optionId });
     }
@@ -82,6 +83,7 @@ try {
   for (const [level, scoops] of [['none', 0], ['less', 1], ['regular', 2]]) {
     let state = { ...ordered, slots: ordered.slots.map((customer, i) =>
       i === slot ? { ...customer, order: { ...recipe, ice: level } } : customer) };
+    state = gameReducer(state, { type: 'PICK_CUP', size: recipe.size });
     state = gameReducer(state, { type: 'POUR', category: 'tea', optionId: recipe.tea, amount: 0.5 });
     for (const optionId of recipe.toppings) state = gameReducer(state, { type: 'SCOOP', category: 'toppings', optionId });
     for (let i = 0; i < scoops; i++) state = gameReducer(state, { type: 'ICE_SCOOP' });
@@ -101,7 +103,8 @@ try {
     assert.equal(served.stats.served, 1, `A ${amount * 100}% cup can be served`);
     assert.equal(served.stats.perfect, 1, 'Recipe quality is independent of fill');
     assert.equal(served.slots[slot], null, 'Customer receives the drink');
-    assert.equal(served.cupId, before.cupId + 1, 'Serving supplies a fresh cup');
+    assert.equal(served.cupId, before.cupId + 1, 'Serving retires the current cup');
+    assert.equal(served.cup.size, null, 'Serving leaves the mat empty');
     assert.equal(served.coins, full.coins, 'Payment has no hidden fill threshold');
     assert.equal(served.stats.tips, full.stats.tips, 'Tips have no hidden fill threshold');
   }
@@ -120,7 +123,8 @@ try {
     state = gameReducer(state, { type: 'TICK', dt: 5000 });
     const slot = state.slots.findIndex(Boolean);
     state = gameReducer(state, { type: 'TAKE_ORDER', slot });
-    state.slots[slot].order = { tea: 'black', toppings: [optionId, 'pearls'], milk: null, ice: null, sweetness: null, foam: null };
+    state.slots[slot].order = { size: 'M', tea: 'black', toppings: [optionId, 'pearls'], milk: null, ice: null, sweetness: null, foam: null };
+    state = gameReducer(state, { type: 'PICK_CUP', size: 'M' });
     state = gameReducer(state, { type: 'POUR', category: 'tea', optionId: 'black', amount: 0.5 });
     state = gameReducer(state, { type: 'SCOOP', category: 'toppings', optionId });
     assert.equal(gameReducer(state, { type: 'SCOOP', category: 'toppings', optionId }), state, 'A new topping cannot be added twice');

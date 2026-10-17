@@ -6,7 +6,7 @@ import { colors } from '../theme';
 import { Cup } from './Cup';
 import { pointerEventsStyles } from '../pointerEvents';
 
-const BADGE_DRINK: Drink = { toppings: ['pearls'], sweetness: null, ice: null, tea: 'black', milk: 'whole', foam: null };
+const BADGE_DRINK: Drink = { size: 'M', toppings: ['pearls'], sweetness: null, ice: null, tea: 'black', milk: 'whole', foam: null };
 
 /** Fades the screen to pink (with a small cup in the middle) between phases, then back. */
 export function ScreenWipe({ progress }: { progress: SharedValue<number> }) {

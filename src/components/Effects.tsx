@@ -9,8 +9,9 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 
-import { Drink } from '../game/ingredients';
+import { CUP_SIZE_SCALE, Drink } from '../game/ingredients';
 import { Departure } from '../game/reducer';
+import { COIN_FLIGHT_MS, COIN_START_MS, COIN_STAGGER_MS, TOSS_MS } from '../game/effectTiming';
 import { easeInOut } from '../motion';
 import { colors, fonts } from '../theme';
 import { Cup } from './Cup';
@@ -56,10 +57,11 @@ export const EffectsLayer = memo(function EffectsLayer({ departures, discarded, 
   );
 });
 
-function TossedCup({ drink, from, to, cupWidth }: { drink: Drink; from: Point; to: Point; cupWidth: number }) {
+function TossedCup({ drink, from, to, cupWidth: mediumWidth }: { drink: Drink; from: Point; to: Point; cupWidth: number }) {
+  const cupWidth = Math.round(mediumWidth * CUP_SIZE_SCALE[drink.size ?? 'M']);
   const progress = useSharedValue(0);
   useEffect(() => {
-    progress.value = withTiming(1, { duration: 550, easing: easeInOut });
+    progress.value = withTiming(1, { duration: TOSS_MS, easing: easeInOut });
   }, [progress]);
   const cupHeight = cupWidth * 1.3;
   const style = useAnimatedStyle(() => {
@@ -85,7 +87,7 @@ function CoinFlight({ from, to, count }: { from: Point; to: Point; count: number
   return (
     <>
       {Array.from({ length: count }, (_, i) => (
-        <FlyingCoin key={i} from={from} to={to} delay={450 + i * 110} />
+        <FlyingCoin key={i} from={from} to={to} delay={COIN_START_MS + i * COIN_STAGGER_MS} />
       ))}
     </>
   );
@@ -94,7 +96,7 @@ function CoinFlight({ from, to, count }: { from: Point; to: Point; count: number
 function FlyingCoin({ from, to, delay }: { from: Point; to: Point; delay: number }) {
   const progress = useSharedValue(0);
   useEffect(() => {
-    progress.value = withDelay(delay, withTiming(1, { duration: 650, easing: easeInOut }));
+    progress.value = withDelay(delay, withTiming(1, { duration: COIN_FLIGHT_MS, easing: easeInOut }));
   }, [delay, progress]);
   const style = useAnimatedStyle(() => {
     const p = progress.value;

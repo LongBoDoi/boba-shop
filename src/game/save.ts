@@ -5,12 +5,23 @@ import {
   EMPTY_DRINK,
   getIngredient,
   iceLevelForScoops,
+  isCupSize,
   MAX_ICE_SCOOPS,
   SUGAR_STEPS,
   sweetnessForPumps,
 } from './ingredients';
 import { getDayConfig } from './levels';
-import { Customer, CupBuild, DayStats, GameMode, GameState, Phase } from './reducer';
+import {
+  AudioSettings,
+  clampAudio,
+  Customer,
+  CupBuild,
+  DayStats,
+  DEFAULT_AUDIO,
+  GameMode,
+  GameState,
+  Phase,
+} from './reducer';
 
 /**
  * The shop, written down between sessions.
@@ -44,6 +55,8 @@ interface SavedGame {
   v: number;
   phase: Phase;
   mode: GameMode;
+  /** Added after launch, like `money`: a save without it opens at the defaults. */
+  audio?: AudioSettings;
   day: number;
   clock: number;
   coins: number;
@@ -68,6 +81,7 @@ export function serializeGame(state: GameState): string {
     v: SAVE_VERSION,
     phase: state.phase,
     mode: state.mode,
+    audio: state.audio,
     day: state.day,
     clock: state.clock,
     coins: state.coins,
@@ -107,6 +121,7 @@ export function parseGame(json: string | null | undefined): GameState | null {
 
   const phase = pick<Phase>(save.phase, ['title', 'playing', 'dayEnd']);
   const mode = pick<GameMode>(save.mode, ['standard', 'relaxed']);
+  const audio = parseAudio(save.audio);
   const day = int(save.day, 1, 9_999);
   const clock = num(save.clock, 0);
   const coins = int(save.coins, 0);
@@ -132,6 +147,14 @@ export function parseGame(json: string | null | undefined): GameState | null {
   const cup = parseDrink(save.cup);
   const stats = parseStats(save.stats);
   if (!slots || !build || !cup || !stats) return null;
+  // Older saves had an automatically supplied medium cup. Keep a drink in progress, but let
+  // an untouched bench adopt the new pick-a-cup flow. An explicit null is the new empty bench.
+  const contents = cup.toppings.length > 0 || SINGLE.some((category) => cup[category] !== null)
+    || build.fill > 0 || build.spilled || build.iceScoops > 0 || build.sugarPumps > 0;
+  if (!cup.size && contents) {
+    if (asObject(save.cup)?.size !== undefined) return null;
+    cup.size = 'M';
+  }
 
   // Only a customer whose order has been taken can be the selected one. If that customer has since
   // gone, the next tick picks whoever has been waiting longest for their drink.
@@ -144,6 +167,7 @@ export function parseGame(json: string | null | undefined): GameState | null {
     // ticking, in which case its opening sign is the gate and there is nothing to pause.
     paused: phase === 'playing' && clock > 0,
     mode,
+    audio,
     day,
     config,
     clock,
@@ -168,6 +192,23 @@ export function parseGame(json: string | null | undefined): GameState | null {
     departures: [],
     seed,
   };
+}
+
+/**
+ * How loud the shop was last played. Added after the game shipped, so a save from before it
+ * opens at the defaults rather than being thrown away — and unlike an ingredient name, a volume
+ * that does not check out is *clamped* rather than refused: the loudness of a shop is not worth
+ * losing a week of that shop over, and `clampAudio` can always produce a usable answer.
+ */
+function parseAudio(raw: unknown): AudioSettings {
+  const value = asObject(raw);
+  if (!value) return DEFAULT_AUDIO;
+  const level = (candidate: unknown, fallback: number) =>
+    typeof candidate === 'number' && Number.isFinite(candidate) ? candidate : fallback;
+  return clampAudio({
+    music: level(value.music, DEFAULT_AUDIO.music),
+    sfx: level(value.sfx, DEFAULT_AUDIO.sfx),
+  });
 }
 
 function asObject(value: unknown): Record<string, unknown> | null {
@@ -225,7 +266,7 @@ function parseCustomer(raw: unknown): Customer | null {
   if (id === null || arrivedAt === null || orderPatienceMs === null || patienceMs === null) return null;
   if (!status || !look || !order || typeof value.name !== 'string' || value.name === '') return null;
   // A cup nobody ordered can't be served, so an order has to name a tea.
-  if (!order.tea) return null;
+  if (!order.tea || !order.size) return null;
   return {
     id,
     look,
@@ -256,11 +297,16 @@ function parseDrink(raw: unknown): Drink | null {
   if (!value || !Array.isArray(value.toppings)) return null;
   if (value.toppings.some((id) => typeof id !== 'string' || !getIngredient('toppings', id))) return null;
   const drink: Drink = { ...EMPTY_DRINK, toppings: value.toppings as string[] };
+  if (value.size !== undefined && value.size !== null && !isCupSize(value.size)) return null;
+  drink.size = isCupSize(value.size) ? value.size : null;
   for (const category of SINGLE) {
     const id = value[category];
     if (id === null || id === undefined) continue;
     if (typeof id !== 'string' || !getIngredient(category, id)) return null;
     drink[category] = id;
+  }
+  if (value.size === undefined && (drink.toppings.length > 0 || SINGLE.some((category) => drink[category] !== null))) {
+    drink.size = 'M';
   }
   return drink;
 }

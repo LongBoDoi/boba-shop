@@ -13,6 +13,7 @@ import {
 import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import { playSound } from '../audio/audio';
 import { Button } from '../components/Button';
 import { EffectsGeometry, EffectsLayer, Point } from '../components/Effects';
 import { Hud } from '../components/Hud';
@@ -20,11 +21,13 @@ import { OpeningSign } from '../components/OpeningSign';
 import { SettingsSheet } from '../components/SettingsSheet';
 import { Ticket } from '../components/TicketRail';
 import { describeUnlocks } from '../game/levels';
-import { GameAction, GameState } from '../game/reducer';
+import { CupSize } from '../game/ingredients';
+import { GameAction, GameState, Outcome } from '../game/reducer';
+import { COIN_FLIGHT_MS, COIN_START_MS, TOSS_MS } from '../game/effectTiming';
 import { timing } from '../motion';
 import { colors, fonts } from '../theme';
 import { tapHaptic, toneHaptic } from '../utils/haptics';
-import { isWideLayout } from '../responsive';
+import { isWideLayout, prepLayoutFor } from '../responsive';
 import { CounterPage } from './CounterPage';
 import { PrepGeometry, PrepPage } from './PrepPage';
 
@@ -89,12 +92,56 @@ export function GameScreen({ state, dispatch }: GameScreenProps) {
     }
   }, [state.feedback]);
 
+  /**
+   * Sound for a customer leaving, off the departures and not off the feedback.
+   *
+   * The feedback list is the wrong source: taking an order posts a message with tone `good`, and
+   * reading cues off the tone would answer a tap on a waiting customer with the serve fanfare. A
+   * departure is created only by a serve or by somebody giving up, which is exactly the set of
+   * moments that deserve one.
+   *
+   * It is keyed off `outcome` so that it agrees with `EffectsLayer`, which already decides on the
+   * confetti the same way — a spilled perfect drink gets both, or neither, and never one of them.
+   * The coins are the same bargain: the cue fires on the condition the coin flight fires on.
+   */
+  const lastDepartureId = useRef(0);
+  useEffect(() => {
+    const latest = state.departures[state.departures.length - 1];
+    if (!latest || latest.id <= lastDepartureId.current) return;
+    lastDepartureId.current = latest.id;
+    playSound(DEPARTURE_CUE[latest.outcome]);
+    if (latest.earned > 0) playSound('coin', COIN_START_MS + COIN_FLIGHT_MS);
+  }, [state.departures]);
+
+  // Somebody new at the counter. Seeded on the first run rather than from zero, so reopening a
+  // save with three people already waiting does not announce them as having just walked in.
+  const highestCustomer = useRef<number | null>(null);
+  useEffect(() => {
+    const highest = state.slots.reduce((max, customer) => Math.max(max, customer?.id ?? 0), 0);
+    const previous = highestCustomer.current;
+    highestCustomer.current = highest;
+    if (previous !== null && highest > previous) playSound('customer');
+  }, [state.slots]);
+
+  // Over the brim. Watched rather than fired from the pour, because the pour that spills is the
+  // one still being held: `build.spilled` is the moment it goes over, and it latches until the
+  // cup is emptied, so this is one cue per ruined drink.
+  // Seeded on the first run like the arrival above, so reopening a save of a cup that is already
+  // over the brim does not announce a spill that happened last week.
+  const spilled = useRef<boolean | null>(null);
+  useEffect(() => {
+    const previous = spilled.current;
+    spilled.current = state.build.spilled;
+    if (previous === false && state.build.spilled) playSound('spill');
+  }, [state.build.spilled]);
+
   // Pager
   const pagerRef = useRef<ScrollView>(null);
   const pageRef = useRef(0);
   const goToPage = useCallback(
     (p: number) => {
       tapHaptic();
+      playSound('tap');
       pagerRef.current?.scrollTo({ x: p * width, animated: true });
     },
     [width],
@@ -117,6 +164,7 @@ export function GameScreen({ state, dispatch }: GameScreenProps) {
   const takeOrder = useCallback(
     (slot: number) => {
       tapHaptic();
+      playSound('order');
       dispatch({ type: 'TAKE_ORDER', slot });
     },
     [dispatch],
@@ -131,6 +179,7 @@ export function GameScreen({ state, dispatch }: GameScreenProps) {
   const selectTicket = useCallback(
     (slot: number) => {
       tapHaptic();
+      playSound('tap');
       dispatch({ type: 'SELECT_SLOT', slot });
     },
     [dispatch],
@@ -138,6 +187,7 @@ export function GameScreen({ state, dispatch }: GameScreenProps) {
   const pour = useCallback(
     (category: 'tea' | 'milk', optionId: string, amount: number) => {
       tapHaptic();
+      if (category === 'milk') playSound('milk');
       dispatch({ type: 'POUR', category, optionId, amount });
     },
     [dispatch],
@@ -145,17 +195,24 @@ export function GameScreen({ state, dispatch }: GameScreenProps) {
   const scoop = useCallback(
     (category: 'toppings' | 'foam', optionId: string) => {
       tapHaptic();
+      playSound(category === 'foam' ? 'foam' : 'scoop');
       dispatch({ type: 'SCOOP', category, optionId });
     },
     [dispatch],
   );
   const iceScoop = useCallback(() => {
     tapHaptic();
+    playSound('ice');
     dispatch({ type: 'ICE_SCOOP' });
   }, [dispatch]);
   const sugarPump = useCallback(() => {
     tapHaptic();
+    playSound('sugar');
     dispatch({ type: 'SUGAR_PUMP' });
+  }, [dispatch]);
+  const pickCup = useCallback((size: CupSize) => {
+    tapHaptic();
+    dispatch({ type: 'PICK_CUP', size });
   }, [dispatch]);
   const finishOpening = useCallback(() => setOpening(false), []);
 
@@ -178,6 +235,9 @@ export function GameScreen({ state, dispatch }: GameScreenProps) {
   const wide = isWideLayout(width, windowHeight);
   // The pager's own box: what is left of the window once the HUD and the tabs have had theirs.
   const [pageHeight, setPageHeight] = useState(0);
+  // Which of the two sideways answers the prep page gets — the order across the top, or beside
+  // the kitchen — which depends on how much of that box the painting needs. See `prepLayoutFor`.
+  const prepLayout = prepLayoutFor(width, windowHeight, pageHeight);
 
   // The counter owns a whole page now, so the stage can be taller and the customers larger. Laid
   // sideways it is measured off the page rather than the window: a fixed share of a short window
@@ -207,9 +267,9 @@ export function GameScreen({ state, dispatch }: GameScreenProps) {
           state.mode === 'relaxed'
             ? 'Order tự được nhận — xem ở Pha chế.'
             : 'Chạm vào khách ở Quầy để nhận order.',
-          'Chạm Pha chế ➜, kéo ly xuống dưới bình trà.',
-          'Giữ vòi để rót — xem lượng trà ở thanh phía trên bếp.',
-          'Kéo đá từ khay dưới kệ trà vào ly: 1 muỗng ít đá, 2 muỗng đá thường.',
+          'Chạm Pha chế ➜, kéo ly S / M / L đúng order từ kệ lên thảm.',
+          'Kéo ly dưới bình trà, giữ vòi để rót — xem lượng trà ở thanh phía trên bếp.',
+          'Kéo đá từ hộp cạnh topping vào ly: 1 muỗng ít đá, 2 muỗng đá thường.',
         ]
       : describeUnlocks(state.day);
 
@@ -262,7 +322,7 @@ export function GameScreen({ state, dispatch }: GameScreenProps) {
             selectedSlot={state.selectedSlot}
             selectedCustomer={selectedCustomer}
             clock={state.clock}
-            wide={wide}
+            layout={prepLayout}
             measureToken={measureToken}
             onGeometry={setPrep}
             onSelectTicket={selectTicket}
@@ -270,8 +330,12 @@ export function GameScreen({ state, dispatch }: GameScreenProps) {
             onScoop={scoop}
             onIce={iceScoop}
             onSugar={sugarPump}
+            onPickCup={pickCup}
             onDragging={setDragging}
-            onClear={() => dispatch({ type: 'CLEAR_CUP' })}
+            onClear={() => {
+              playSound('trash', TOSS_MS);
+              dispatch({ type: 'CLEAR_CUP' });
+            }}
             onServe={() => dispatch({ type: 'SERVE' })}
             machineRef={machineRef}
             trashRef={trashRef}
@@ -302,6 +366,8 @@ export function GameScreen({ state, dispatch }: GameScreenProps) {
           <SettingsSheet
             mode={state.mode}
             onChangeMode={(mode) => dispatch({ type: 'SET_MODE', mode })}
+            audio={state.audio}
+            onChangeAudio={(audio) => dispatch({ type: 'SET_AUDIO', audio })}
             onClose={() => setSettings(false)}
           />
         )}
@@ -309,6 +375,14 @@ export function GameScreen({ state, dispatch }: GameScreenProps) {
     </SafeAreaView>
   );
 }
+
+/** What each way of leaving the counter sounds like. See the departures effect above. */
+const DEPARTURE_CUE: Record<Outcome, 'serveGood' | 'serveOk' | 'serveBad' | 'leave'> = {
+  perfect: 'serveGood',
+  close: 'serveOk',
+  wrong: 'serveBad',
+  timeout: 'leave',
+};
 
 /** The two-page indicator under the HUD: tap a label to switch screens. */
 function PageTabs({ page, counterBadge, prepBadge, onGo }: { page: number; counterBadge: number; prepBadge: number; onGo: (p: number) => void }) {

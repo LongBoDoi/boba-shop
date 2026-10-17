@@ -1,11 +1,11 @@
 import { memo, useEffect, useMemo, useState } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import Animated, { interpolate, useAnimatedStyle, useSharedValue, withDelay, withTiming } from 'react-native-reanimated';
 import Svg, { Circle, Path } from 'react-native-svg';
 
 import { Customer, Departure, Feedback, patienceLeft } from '../game/reducer';
 import { ease, easeInOut, timing } from '../motion';
-import { colors } from '../theme';
+import { colors, fonts } from '../theme';
 import { Character, Mood } from './art/Character';
 import { Counter } from './art/Counter';
 import { ShopBackdrop } from './art/ShopBackdrop';
@@ -81,7 +81,7 @@ export function CustomerStage({ width, height, slots, departures, selectedSlot, 
               customer
                 ? customer.status === 'requesting'
                   ? `Nhận order của ${customer.name}`
-                  : `Xem order của ${customer.name}`
+                  : `Xem order của ${customer.name} — ly ${customer.order.size}`
                 : 'Chỗ trống'
             }
           >
@@ -184,7 +184,10 @@ const ActiveCustomer = memo(function ActiveCustomer({ customer, selected, patien
           {requesting ? (
             <OrderPad />
           ) : (
-            <Cup drink={customer.order} width={BUBBLE_CUP} backgroundColor="#FFFFFF" straw />
+            <View>
+              <Cup drink={customer.order} width={BUBBLE_CUP} backgroundColor="#FFFFFF" straw />
+              <Text style={styles.orderSize}>{customer.order.size}</Text>
+            </View>
           )}
           <View style={styles.ring}>
             <PatienceRing fraction={patience} color={ringColor} />
@@ -286,6 +289,9 @@ function Rising({ top, kind }: { top: number; kind: 'heart' | 'steam' }) {
 }
 
 const styles = StyleSheet.create({
+  orderSize: { position: 'absolute', left: -13, bottom: -6, minWidth: 19, textAlign: 'center',
+    backgroundColor: '#FFF4DC', color: '#795331', borderRadius: 5, borderWidth: 1,
+    borderColor: '#C99F6A', fontFamily: fonts.bold, fontSize: 12 },
   row: {
     ...StyleSheet.absoluteFill,
     flexDirection: 'row',

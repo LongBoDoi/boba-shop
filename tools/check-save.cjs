@@ -26,6 +26,7 @@ try {
   assert.ok(slot >= 0, 'A customer arrives');
   state = gameReducer(state, { type: 'TAKE_ORDER', slot });
   const recipe = state.slots[slot].order;
+  state = gameReducer(state, { type: 'PICK_CUP', size: recipe.size });
   state = gameReducer(state, { type: 'POUR', category: 'tea', optionId: recipe.tea, amount: 0.6 });
   state = gameReducer(state, { type: 'ICE_SCOOP' });
   state = gameReducer(state, { type: 'SUGAR_PUMP' });

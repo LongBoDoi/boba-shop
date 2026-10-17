@@ -10,12 +10,13 @@ import { Cup } from '../components/Cup';
 import { SettingsSheet } from '../components/SettingsSheet';
 import { CustomerLook } from '../game/customers';
 import { Drink } from '../game/ingredients';
-import { GameMode } from '../game/reducer';
+import { AudioSettings, GameMode } from '../game/reducer';
 import { DURATION, timing } from '../motion';
 import { colors, fonts } from '../theme';
 import { pointerEventsStyles } from '../pointerEvents';
 
 const SHOWCASE_DRINK: Drink = {
+  size: 'M',
   toppings: ['pearls'],
   sweetness: null,
   ice: 'regular',
@@ -31,7 +32,7 @@ const RIGHT_FAN: CustomerLook = { skin: '#E9B48E', hair: '#6B4423', hairStyle: '
 function stepsFor(mode: GameMode) {
   return [
     mode === 'relaxed' ? '⚡ Order tự được nhận, khách tới liên tục' : '🧍 Chạm vào khách để nhận order',
-    '🧋 Cho từng nguyên liệu vào ly',
+    '🧋 Kéo ly đúng cỡ S / M / L rồi thêm nguyên liệu',
     '💰 Phục vụ nhanh để được tip và dành tiền cho tiệm!',
   ];
 }
@@ -40,9 +41,11 @@ interface TitleScreenProps {
   onStart: () => void;
   mode: GameMode;
   onChangeMode: (mode: GameMode) => void;
+  audio: AudioSettings;
+  onChangeAudio: (audio: Partial<AudioSettings>) => void;
 }
 
-export function TitleScreen({ onStart, mode, onChangeMode }: TitleScreenProps) {
+export function TitleScreen({ onStart, mode, onChangeMode, audio, onChangeAudio }: TitleScreenProps) {
   const { width, height } = useWindowDimensions();
   const cupWidth = Math.min(130, width * 0.32);
   const [settings, setSettings] = useState(false);
@@ -93,7 +96,13 @@ export function TitleScreen({ onStart, mode, onChangeMode }: TitleScreenProps) {
       </SafeAreaView>
 
       {settings && (
-        <SettingsSheet mode={mode} onChangeMode={onChangeMode} onClose={() => setSettings(false)} />
+        <SettingsSheet
+          mode={mode}
+          onChangeMode={onChangeMode}
+          audio={audio}
+          onChangeAudio={onChangeAudio}
+          onClose={() => setSettings(false)}
+        />
       )}
     </View>
   );

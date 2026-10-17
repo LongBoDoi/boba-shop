@@ -39,11 +39,26 @@ const HEART =
  */
 export const ORDER_PANEL_HEIGHT = 132;
 
+/**
+ * The same panel's height when it is laid out sideways across the top of a landscape screen.
+ *
+ * It is shorter because it is wider: the tiles move up beside the name instead of standing in a
+ * row under it, so the card costs one line of card rather than two. Those thirty-two pixels are
+ * the whole reason the order can stay on top at all — see `prepLayoutFor`, which spends what is
+ * left on the kitchen and will not choose this layout unless the painting still fits under it.
+ */
+export const ORDER_BAND_HEIGHT = 100;
+
+/** Which of the three shapes the card is in. See `form` on `OrderBubbleProps`. */
+export type OrderForm = 'stacked' | 'band' | 'column';
+
 /** The card's own frame, which its width is measured inside of. */
 const CARD_BORDER = 2;
 /** The progress bar and its margins, and the line the other taken orders stand on. */
 const TRACK_HEIGHT = 18;
 const QUEUE_HEIGHT = 44;
+/** What the face, the name and the heart keep of the head row before the tiles join it. */
+const HEAD_RESERVE = 232;
 
 /**
  * How wide a tile's column is in a card standing on its end, where the row wraps.
@@ -72,7 +87,7 @@ function fitTiles(count: number, room: number, budget: number) {
 
 interface Chip {
   key: string;
-  category: CategoryId;
+  category: CategoryId | 'size';
   /** The ingredient the icon draws; null when the order asks for none of this category. */
   id: string | null;
   label: string;
@@ -81,7 +96,7 @@ interface Chip {
 
 /** What the order asks for, one tile per thing — a cup with two toppings gets two. */
 function chipsFor(order: Drink, cup: Drink, config: DayConfig): Chip[] {
-  return SPOKEN.filter((category) => config.categories.includes(category)).flatMap<Chip>((category) => {
+  const ingredients = SPOKEN.filter((category) => config.categories.includes(category)).flatMap<Chip>((category) => {
     const done = categoryMatches(cup, order, category);
     if (category === 'toppings') {
       const ids = selectedIds(order, category);
@@ -104,6 +119,8 @@ function chipsFor(order: Drink, cup: Drink, config: DayConfig): Chip[] {
       },
     ];
   });
+  return [{ key: 'size', category: 'size', id: order.size, label: `Ly ${order.size}`,
+    done: Boolean(cup.size && cup.size === order.size) }, ...ingredients];
 }
 
 interface OrderBubbleProps {
@@ -117,12 +134,17 @@ interface OrderBubbleProps {
   selectedSlot: number | null;
   width: number;
   /**
-   * The card stands in a column beside the kitchen rather than in a band above it (see
-   * `isWideLayout`): it takes the column's height, and the tiles wrap down it instead of running
-   * out along one row.
+   * Which shape the card is in — `prepLayoutFor` decides, and the three are:
+   *
+   * - **`stacked`**: the band across the top of an upright screen. Tiles in a row under the name.
+   * - **`band`**: the same band on a landscape screen, where the card is far wider than it needs
+   *   to be and far shorter than it would like. The tiles move up beside the name, which buys
+   *   back the row they were standing in.
+   * - **`column`**: standing on its end beside the kitchen. It takes the column's height, and the
+   *   tiles wrap down it instead of running out along one row.
    */
-  tall?: boolean;
-  /** Tall: the height the column has for it, so a short column gets smaller tiles. */
+  form?: OrderForm;
+  /** Column: the height it has to fit in, so a short column gets smaller tiles. */
   maxHeight?: number;
   onSelectTicket: (slot: number) => void;
 }
@@ -145,11 +167,13 @@ export const OrderBubble = memo(function OrderBubble({
   tickets,
   selectedSlot,
   width: W,
-  tall = false,
+  form = 'stacked',
   maxHeight = 0,
   onSelectTicket,
 }: OrderBubbleProps) {
   const pad = 10;
+  const tall = form === 'column';
+  const inline = form === 'band';
   const avatar = tall ? 44 : 40;
   const others = tickets.filter((ticket) => ticket.slot !== selectedSlot);
 
@@ -165,7 +189,11 @@ export const OrderBubble = memo(function OrderBubble({
   // The card's border is inside its width, so a row laid out on `W - pad * 2` is two pixels a
   // side too wide — enough, in the column, to drop the last tile of a row onto the next one.
   const room = W - pad * 2 - CARD_BORDER * 2;
-  const band = { column: chips.length > 0 ? Math.min(room / chips.length, 56) : 0 };
+  // Laid out sideways the tiles share the head row with the name, so they are measured against
+  // what is left of it rather than against the whole card: the name, the face it is for and the
+  // heart keep `HEAD_RESERVE`, and the orders still waiting keep a pin's width each.
+  const headRoom = Math.max(140, room - HEAD_RESERVE - (others.length > 0 ? 24 + others.length * 37 : 0));
+  const band = { column: chips.length > 0 ? Math.min((inline ? headRoom : room) / chips.length, 56) : 0 };
   const grid = tall
     ? fitTiles(chips.length, room, (maxHeight || 0) - pad * 2 - CARD_BORDER * 2
       - Math.max(avatar, 30) - TRACK_HEIGHT - (others.length > 0 ? QUEUE_HEIGHT : 0))
@@ -173,6 +201,10 @@ export const OrderBubble = memo(function OrderBubble({
   const column = grid.column;
   const tile = Math.round(Math.max(24, Math.min(column - 16, tall ? 44 : 32)));
   const caption = Math.round(Math.max(9, Math.min(column * 0.2, tall ? 12 : 10.5)) * 2) / 2;
+
+  const tiles = chips.map((chip) => (
+    <ChipTile key={chip.key} chip={chip} width={column} tile={tile} caption={caption} />
+  ));
 
   const queue = others.map(({ slot, customer: waiting }) => (
     <OrderPin
@@ -190,7 +222,7 @@ export const OrderBubble = memo(function OrderBubble({
       style={[
         styles.card,
         { width: W, padding: pad },
-        tall ? styles.cardTall : { height: ORDER_PANEL_HEIGHT },
+        tall ? styles.cardTall : { height: inline ? ORDER_BAND_HEIGHT : ORDER_PANEL_HEIGHT },
         pointerEventsStyles.boxNone,
       ]}
     >
@@ -212,6 +244,14 @@ export const OrderBubble = memo(function OrderBubble({
           </Text>
         </View>
         {customer && <Patience size={26} left={patience} />}
+        {/* Sideways there is width here and no height anywhere else, so the tiles come up into
+            the head row rather than standing in one of their own underneath it. */}
+        {inline && customer && (
+          <>
+            <View style={styles.split} />
+            <View style={styles.chipsInline}>{tiles}</View>
+          </>
+        )}
         {/* Side by side the head has the width for the queue; stacked it would crush the name. */}
         {!tall && queue.length > 0 && (
           <>
@@ -233,12 +273,8 @@ export const OrderBubble = memo(function OrderBubble({
         </View>
       )}
 
-      {customer ? (
-        <View style={[styles.chips, tall && styles.chipsWrap]}>
-          {chips.map((chip) => (
-            <ChipTile key={chip.key} chip={chip} width={column} tile={tile} caption={caption} />
-          ))}
-        </View>
+      {inline ? null : customer ? (
+        <View style={[styles.chips, tall && styles.chipsWrap]}>{tiles}</View>
       ) : (
         <View style={styles.hintBox}>
           <Text style={styles.hint}>Mỗi order hiện ở đây, kèm từng thứ cần cho vào ly.</Text>
@@ -289,7 +325,9 @@ function Patience({ size, left }: { size: number; left: number }) {
 
 function ChipTile({ chip, width, tile, caption }: { chip: Chip; width: number; tile: number; caption: number }) {
   return (
-    <View style={{ width, alignItems: 'center' }}>
+    <View accessible accessibilityLabel={`${chip.label} — ${chip.done ? 'đã đúng' : 'chưa đúng'}`}
+      testID={chip.category === 'size' ? 'order-cup-size' : undefined}
+      style={{ width, alignItems: 'center' }}>
       <View
         style={[
           styles.tile,
@@ -297,7 +335,9 @@ function ChipTile({ chip, width, tile, caption }: { chip: Chip; width: number; t
           chip.done && styles.tileDone,
         ]}
       >
-        {chip.id ? (
+        {chip.category === 'size' ? (
+          <Text style={{ fontFamily: fonts.display, fontSize: tile * 0.57, color: '#795331' }}>{chip.id}</Text>
+        ) : chip.id ? (
           <IngredientIcon category={chip.category} id={chip.id} size={tile * 0.74} />
         ) : (
           // nothing of this kind was asked for: the thing, faded, with a line through it
@@ -341,7 +381,7 @@ function OrderPin({
     <Pressable
       onPress={onPress}
       accessibilityRole="button"
-      accessibilityLabel={`Order của ${customer.name}`}
+      accessibilityLabel={`Order của ${customer.name} — ly ${customer.order.size}`}
       hitSlop={5}
       style={[styles.pin, { width: size, height: size, borderRadius: size / 2 }]}
     >
@@ -431,6 +471,15 @@ const styles = StyleSheet.create({
     flex: 1,
     flexDirection: 'row',
     justifyContent: 'flex-start',
+  },
+  /**
+   * Standing in the head row, the tiles are as wide as the tiles are — no `flex`, or they would
+   * split the leftover width with the name instead of taking what they need and leaving the rest.
+   */
+  chipsInline: {
+    flexDirection: 'row',
+    justifyContent: 'flex-start',
+    flexShrink: 1,
   },
   /** A tall card's tiles fill out from the top left, a row at a time. */
   chipsWrap: {

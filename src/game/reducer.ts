@@ -1,8 +1,10 @@
 import { CustomerLook, generateLook, NAMES } from './customers';
 import {
   Drink,
+  CupSize,
   EMPTY_DRINK,
   iceLevelForScoops,
+  isCupSize,
   MAX_ICE_SCOOPS,
   SUGAR_STEPS,
   sweetnessForPumps,
@@ -23,6 +25,31 @@ export type CustomerStatus = 'requesting' | 'ordered';
  * standing in every free spot, so the day is nothing but preparation.
  */
 export type GameMode = 'standard' | 'relaxed';
+
+/**
+ * How loud the shop is, as two independent halves of the mix, each 0–1.
+ *
+ * This lives in game state for the same reasons `mode` does: `SET_AUDIO` can be sent from any
+ * screen, `START_DAY` carries it to the next day, and it rides along in the save, so the volume a
+ * shop was last played at is the one it reopens at. It is kept here rather than in
+ * `src/audio/` because this file must stay free of native imports — `tools/check-save.cjs` and
+ * `check-serving.cjs` load the reducer in plain Node, and an `expo-audio` import would end that.
+ */
+export interface AudioSettings {
+  /** The looping music under the screen. */
+  music: number;
+  /** Everything else: taps, the kitchen, the till. */
+  sfx: number;
+}
+
+/** Music a little under the effects: it plays continuously, and they do not. */
+export const DEFAULT_AUDIO: AudioSettings = { music: 0.7, sfx: 1 };
+
+/** Volumes arrive from a save that can be hand-edited, so this is the one gate on them. */
+export function clampAudio(audio: AudioSettings): AudioSettings {
+  const level = (value: number) => (Number.isFinite(value) ? Math.min(1, Math.max(0, value)) : 0);
+  return { music: level(audio.music), sfx: level(audio.sfx) };
+}
 
 export interface Customer {
   id: number;
@@ -86,6 +113,8 @@ export interface GameState {
   phase: Phase;
   paused: boolean;
   mode: GameMode;
+  /** How loud the shop is. Set from the settings card, carried across days, saved. */
+  audio: AudioSettings;
   day: number;
   config: DayConfig;
   /** Game time in ms since the day started; only advances while playing. */
@@ -103,7 +132,7 @@ export interface GameState {
   cup: Drink;
   /** The physical state of that cup: how full it is, scoops, pumps, spills. */
   build: CupBuild;
-  /** Changes whenever the cup leaves the station (served or thrown away), so the UI can bring in a fresh one. */
+  /** Changes when a cup is picked, served or discarded, resetting transient gestures. */
   cupId: number;
   /** The last cup thrown in the bin, for the toss animation. */
   discarded: { id: number; drink: Drink } | null;
@@ -120,9 +149,12 @@ export type GameAction =
   | { type: 'GO_TO_TITLE' }
   | { type: 'SET_PAUSED'; paused: boolean }
   | { type: 'SET_MODE'; mode: GameMode }
+  /** Change one or both volumes. An out-of-range value is clamped, not refused. */
+  | { type: 'SET_AUDIO'; audio: Partial<AudioSettings> }
   | { type: 'TICK'; dt: number }
   | { type: 'TAKE_ORDER'; slot: number }
   | { type: 'SELECT_SLOT'; slot: number }
+  | { type: 'PICK_CUP'; size: CupSize }
   /** Held a spigot open over the cup: `amount` is the fraction of the cup that ran in. */
   | { type: 'POUR'; category: 'tea' | 'milk'; optionId: string; amount: number }
   /** One scoop/spoon of a solid straight into the cup. */
@@ -142,15 +174,16 @@ const MAX_TIP = 3;
 const DEPARTURE_MS = 1_300;
 
 export function createInitialState(seed: number): GameState {
-  return { ...buildDay(1, seed, 'standard', 0), phase: 'title' };
+  return { ...buildDay(1, seed, 'standard', 0, DEFAULT_AUDIO), phase: 'title' };
 }
 
-function buildDay(day: number, seed: number, mode: GameMode, money: number): GameState {
+function buildDay(day: number, seed: number, mode: GameMode, money: number, audio: AudioSettings): GameState {
   const config = getDayConfig(day);
   return {
     phase: 'playing',
     paused: false,
     mode,
+    audio,
     day,
     config,
     clock: 0,
@@ -175,13 +208,15 @@ function buildDay(day: number, seed: number, mode: GameMode, money: number): Gam
 export function gameReducer(state: GameState, action: GameAction): GameState {
   switch (action.type) {
     case 'START_DAY':
-      return buildDay(action.day, state.seed, state.mode, state.money);
+      return buildDay(action.day, state.seed, state.mode, state.money, state.audio);
     case 'GO_TO_TITLE':
       return { ...state, phase: 'title', paused: false };
     case 'SET_PAUSED':
       return state.phase === 'playing' ? { ...state, paused: action.paused } : state;
     case 'SET_MODE':
       return setMode(state, action.mode);
+    case 'SET_AUDIO':
+      return { ...state, audio: clampAudio({ ...state.audio, ...action.audio }) };
     case 'TICK':
       return tick(state, action.dt);
     case 'TAKE_ORDER':
@@ -190,14 +225,18 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       return isActive(state) && state.slots[action.slot]?.status === 'ordered'
         ? { ...state, selectedSlot: action.slot }
         : state;
+    case 'PICK_CUP':
+      return isActive(state) && !state.cup.size && isCupSize(action.size)
+        ? { ...state, cup: { ...EMPTY_DRINK, size: action.size, toppings: [] }, build: EMPTY_BUILD, cupId: state.cupId + 1 }
+        : state;
     case 'POUR':
-      return isActive(state) ? pour(state, action.category, action.optionId, action.amount) : state;
+      return isActive(state) && state.cup.size ? pour(state, action.category, action.optionId, action.amount) : state;
     case 'SCOOP':
-      return isActive(state) ? scoop(state, action.category, action.optionId) : state;
+      return isActive(state) && state.cup.size ? scoop(state, action.category, action.optionId) : state;
     case 'ICE_SCOOP':
-      return isActive(state) ? iceScoop(state) : state;
+      return isActive(state) && state.cup.size ? iceScoop(state) : state;
     case 'SUGAR_PUMP':
-      return isActive(state) ? sugarPump(state) : state;
+      return isActive(state) && state.cup.size ? sugarPump(state) : state;
     case 'CLEAR_CUP':
       return isActive(state) ? clearCup(state) : state;
     case 'SERVE':
@@ -435,17 +474,8 @@ function sugarPump(state: GameState): GameState {
   };
 }
 
-function isCupEmpty(state: GameState) {
-  const { cup } = state;
-  return (
-    state.build.fill === 0 &&
-    cup.toppings.length === 0 &&
-    Object.values(cup).every((value) => !value || Array.isArray(value))
-  );
-}
-
 function clearCup(state: GameState): GameState {
-  if (isCupEmpty(state)) return state;
+  if (!state.cup.size) return state;
   return {
     ...state,
     cup: EMPTY_DRINK,
@@ -459,7 +489,7 @@ function clearCup(state: GameState): GameState {
 function serve(state: GameState): GameState {
   const slot = state.selectedSlot;
   const customer = slot === null ? null : state.slots[slot];
-  if (slot === null || !customer || !state.cup.tea) return state;
+  if (slot === null || !customer || !state.cup.size || !state.cup.tea) return state;
 
   const { quality } = evaluateDrink(state.cup, customer.order, state.config.categories);
   const price = drinkPrice(customer.order);
