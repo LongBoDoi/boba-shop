@@ -1,0 +1,20 @@
+{
+  "name": "Tiệm Trà Sữa",
+  "short_name": "Tiệm Trà Sữa",
+  "description": "Pha trà sữa cho khách: nhận order ở quầy, tự tay làm từng ly và phục vụ trước khi khách hết kiên nhẫn.",
+  "lang": "vi",
+  "dir": "ltr",
+  "id": "/",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#FFE3EC",
+  "theme_color": "#FFE3EC",
+  "categories": ["games"],
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

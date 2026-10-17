@@ -3,8 +3,23 @@
   <head>
     <meta charset="utf-8" />
     <meta httpEquiv="X-UA-Compatible" content="IE=edge" />
-    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, shrink-to-fit=no" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, shrink-to-fit=no, viewport-fit=cover" />
     <title>%WEB_TITLE%</title>
+
+    <!-- This page is also the phone app: added to the home screen it opens without browser chrome,
+         keeps its own storage, and (see sw.js) opens with no signal. The native builds draw the
+         same game through react-native-svg, where every shape is an Android View and a loaded cup
+         is six hundred of them; here it is a browser's own compositor. -->
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <meta name="theme-color" content="#FFE3EC" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <!-- iOS reads none of the manifest: standalone mode, the title under the icon and the icon
+         itself are all taken from these instead. -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="Tiệm Trà Sữa" />
+    <link rel="apple-touch-icon" href="/icons/icon-192.png" />
+    <link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png" />
     <!-- The `react-native-web` recommended style reset: https://necolas.github.io/react-native-web/docs/setup/#root-element -->
     <style id="expo-reset">
       /* These styles make the body full-height */
@@ -87,6 +102,28 @@
           document.addEventListener(name, refuse, { passive: false });
         });
       })();
+    </script>
+    <script>
+      // The shop is kept on the phone: see public/sw.js. Registered after load so that fetching
+      // and starting the worker never competes with the artwork the loading screen is waiting on,
+      // and wrapped because a browser with service workers switched off must still play the game.
+      (function () {
+        if (!("serviceWorker" in navigator)) return;
+        window.addEventListener("load", function () {
+          navigator.serviceWorker.register("/sw.js").catch(function (error) {
+            console.warn("Không đăng ký được service worker:", error);
+          });
+        });
+      })();
+      // Ask for the save to be kept rather than evicted. A browser may clear "temporary" storage
+      // when the device is short of room, and the shop — days, takings, the cup on the coaster —
+      // lives in localStorage. Granted without a prompt for an installed app; refused silently
+      // elsewhere, which costs nothing. See "Saving the shop" in CLAUDE.md.
+      if (navigator.storage && navigator.storage.persist) {
+        navigator.storage.persisted().then(function (already) {
+          if (!already) navigator.storage.persist();
+        });
+      }
     </script>
   </body>
 </html>
