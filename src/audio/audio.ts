@@ -1,10 +1,11 @@
-import { AudioPlayer, createAudioPlayer, setAudioModeAsync } from 'expo-audio';
+import { createAudioPlayer, setAudioModeAsync } from 'expo-audio';
 import { AppState, Platform } from 'react-native';
 
 import { AudioSettings, DEFAULT_AUDIO } from '../game/reducer';
 import { POUR_RATE } from '../game/ingredients';
 import { MUSIC, MUSIC_GAIN, MusicId, SOUNDS, SoundId } from './sounds';
-import { FoleyEngine } from './foley';
+import { FoleyEngine, FoleyPlayer } from './foley';
+import { resumeWebAudio, WebAudioPlayer, webAudioAvailable } from './webAudio';
 
 /**
  * The shop's ears. `sounds.ts` says what the cues are; this plays them.
@@ -30,7 +31,7 @@ const FADE_STEP_MS = 50;
 let settings: AudioSettings = DEFAULT_AUDIO;
 /** The track the game wants, regardless of whether anything can be heard right now. */
 let wanted: MusicId | null = null;
-let current: { id: MusicId; player: AudioPlayer } | null = null;
+let current: { id: MusicId; player: GamePlayer } | null = null;
 let gamePaused = false;
 let active = true;
 let ready = false;
@@ -53,10 +54,34 @@ function warn(what: string, error: unknown) {
   console.warn(`[audio] ${what}:`, error);
 }
 
+// ------------------------------------------------------------------ players
+/** What this module and `FoleyEngine` touch on a player — all either kind has to offer. */
+type GamePlayer = FoleyPlayer & { readonly playing: boolean };
+
+/**
+ * On the web the players are Web Audio, everywhere else `expo-audio`.
+ *
+ * A browser's `expo-audio` player is an `<audio>` element, and a game that plays a cue on every
+ * grab and drop drove dozens of them through pause, seek and play — which is what made the web
+ * build stutter once there was sound, on a desktop as much as a phone. See `webAudio.ts`. It is
+ * chosen by what the runtime *has* rather than by `Platform.OS` alone, so a browser without Web
+ * Audio still gets sound the old way, and so do the tests, which have no audio device.
+ */
+const webAudio = Platform.OS === 'web' && webAudioAvailable();
+
+function effectPlayer(source: number): GamePlayer {
+  return webAudio ? new WebAudioPlayer(source)
+    : createAudioPlayer(source, { downloadFirst: true, updateInterval: 250 });
+}
+
+function musicPlayer(source: number): GamePlayer {
+  return webAudio ? new WebAudioPlayer(source) : createAudioPlayer(source);
+}
+
 // ------------------------------------------------------------------ fades
-const fades = new Map<AudioPlayer, ReturnType<typeof setInterval>>();
+const fades = new Map<GamePlayer, ReturnType<typeof setInterval>>();
 /** Timers removing a faded-out track, so a teardown mid-fade does not leave them firing. */
-const stopping = new Map<ReturnType<typeof setTimeout>, AudioPlayer>();
+const stopping = new Map<ReturnType<typeof setTimeout>, GamePlayer>();
 
 /**
  * Walk a player's volume to `to` over `FADE_MS`, then optionally stop it.
@@ -65,7 +90,7 @@ const stopping = new Map<ReturnType<typeof setTimeout>, AudioPlayer>();
  * runs while a fade is actually in flight. One fade per player: starting a second cancels the
  * first, or the two would fight over the same volume and the loser would win half the time.
  */
-function fadeTo(player: AudioPlayer, to: number, thenStop = false) {
+function fadeTo(player: GamePlayer, to: number, thenStop = false) {
   const existing = fades.get(player);
   if (existing) clearInterval(existing);
   const from = player.volume;
@@ -128,7 +153,7 @@ export function initAudio(): () => void {
 
   active = AppState.currentState !== 'background' && AppState.currentState !== 'inactive';
   effects = new FoleyEngine(
-    (source) => createAudioPlayer(source, { downloadFirst: true, updateInterval: 250 }), warn,
+    effectPlayer, warn,
   );
   effects.prepare();
   reconcile();
@@ -144,6 +169,7 @@ export function initAudio(): () => void {
   const page = Platform.OS === 'web' && typeof window !== 'undefined' ? window : null;
   const unlock = () => {
     unlocked = true;
+    if (webAudio) resumeWebAudio();
     for (const event of UNLOCKING) page?.removeEventListener(event, unlock, true);
     reconcile();
   };
@@ -173,7 +199,7 @@ function teardown() {
 }
 
 /** `createAudioPlayer` does not clean up after itself, so every player made here is removed. */
-function remove(player: AudioPlayer) {
+function remove(player: GamePlayer) {
   const fade = fades.get(player);
   if (fade) clearInterval(fade);
   fades.delete(player);
@@ -292,7 +318,7 @@ function reconcile() {
   // asked for. `loop` is the library's own, so the file is handed to the platform whole and the
   // join is the seamless one `make-music` wrote.
   try {
-    const player = createAudioPlayer(MUSIC[wanted]);
+    const player = musicPlayer(MUSIC[wanted]);
     player.loop = true;
     player.volume = 0;
     player.play();

@@ -11,6 +11,8 @@ cup contacts, spoon scrapes, paper, a door bell, coins, splashes, a bag, footste
 - `src/audio/sounds.ts`: actions, alternate takes, layers, timing, levels, variation and priorities.
 - `src/audio/foley.ts`: effects scheduling, player pool, cancellation and held-pour envelopes.
 - `src/audio/audio.ts`: Expo lifecycle, browser unlock, foreground state, settings and music.
+- `src/audio/webAudio.ts`: the web build's players — Web Audio, not `<audio>` elements. See
+  "The web plays through Web Audio" below.
 - `src/audio/useAudio.ts`: syncs settings, phase and pause without audio props or context.
 
 Six common contacts and one stream player are warmed. Alternate takes load on demand. There
@@ -42,6 +44,40 @@ feedback. Arrivals and overflow are seeded from current state when restoring a s
 The two original music loops remain separate and byte-identical. Music loads on demand and
 crossfades with phase changes. Mixing with other audio and existing saved-volume
 migration/clamping behavior are preserved. Recording and background audio remain disabled.
+
+## The web plays through Web Audio
+
+On the web, `audio.ts` hands `FoleyEngine` and the music `WebAudioPlayer`s instead of
+`expo-audio` players. Native is unchanged.
+
+`expo-audio`'s web player is one `HTMLAudioElement` per player, and this engine keeps a player per
+voice: twenty-one at launch, past fifty over a shift. Each is a full media pipeline, and every cue
+on a recycled voice drove one through pause, an asynchronous seek and a play, while the pour
+envelope rewrote an element's volume every 16 ms. That is what made the web build stutter once
+sound arrived — on a desktop and on a phone, and **with both volumes at 0 the lag went away**,
+which is how it was found. No benchmark here showed it: a headless browser plays into a null
+audio device, where all of that is free. The commit that added sound looked identical to the one
+before it in every trace; only a real device could tell them apart.
+
+`WebAudioPlayer` implements the slice of `AudioPlayer` the engine uses — `volume`, `loop`,
+`playing`, `play`, `pause`, `seekTo`, `setPlaybackRate`, `remove` — with the same meaning:
+
+- each clip is fetched and decoded **once** into an `AudioBuffer`, however many voices share it,
+  and a clip that fails to load is silent for the session rather than refetched on every cue;
+- a cue is a throwaway `AudioBufferSourceNode` on that buffer, through the voice's own gain node;
+- a loop is sample-accurate (the buffer's own), which a media element's `loop` is not;
+- rate moves pitch with speed; `shouldCorrectPitch` is accepted and ignored, because every
+  caller sets it false.
+
+The context starts suspended, as browsers require, and **which gesture unsuspends it is narrower
+than it looks** — on a phone `touchstart` does not count, the `touchend` after it does. So it
+listens for every candidate until the context is actually running, rather than trusting the first
+event `audio.ts` sees. A hidden page suspends the context, so a background tab lets go of the
+audio device.
+
+It is chosen by what the runtime *has* (`AudioContext`), not by `Platform.OS` alone, so a browser
+without Web Audio still gets sound the old way — and so do the tests, which have no audio device.
+`check-audio-engine.cjs` drives the Web Audio path separately against a fake context.
 
 ## Two `expo-audio` traps a browser cannot show you
 

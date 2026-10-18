@@ -56,6 +56,8 @@ class Player {
 }
 let os = 'web';
 Module._load = function(request, ...rest) {
+  // The web player resolves a clip to its URL through expo-asset; a .wav here is its own name.
+  if (request === 'expo-asset') return { Asset: { fromModule: (module) => ({ uri: String(module) }) } };
   if (request === 'expo-audio') return { createAudioPlayer: (source) => new Player(source), setAudioModeAsync: (mode) => { audioMode = mode; return Promise.resolve(); } };
   if (request === 'react-native') return {
     Platform: { OS: os },
@@ -223,6 +225,112 @@ async function main() {
     assert.ok(starts() > 0, 'Other materials survive a failed player');
     foley.dispose();
   }
+  // The web build plays through Web Audio, not <audio> elements: one decoded buffer per clip and a
+  // throwaway source per cue. A dozen media elements cycled through pause, seek and play were what
+  // made the web build stutter once it had sound, and a headless browser — audio into a null
+  // device — never showed it. This is the browser's side of the same lifecycle as above.
+  {
+    let fetched = [], decodes = 0, failing = null;
+    class Param { constructor(value) { this.value = value; } }
+    class FakeContext {
+      constructor() {
+        Object.assign(this, { state: 'suspended', currentTime: 0, destination: {}, gains: [], sources: [] });
+        contexts.push(this);
+      }
+      resume() { this.state = 'running'; return Promise.resolve(); }
+      suspend() { this.state = 'suspended'; return Promise.resolve(); }
+      createGain() {
+        const node = { gain: new Param(1), connected: false,
+          connect() { this.connected = true; }, disconnect() { this.connected = false; } };
+        this.gains.push(node);
+        return node;
+      }
+      createBufferSource() {
+        const node = { buffer: null, loop: false, playbackRate: new Param(1), started: false, stopped: false,
+          onended: null, out: null, connect(to) { this.out = to; }, disconnect() { this.out = null; },
+          start(_, offset) { this.started = true; this.offset = offset; }, stop() { this.stopped = true; } };
+        this.sources.push(node);
+        return node;
+      }
+      decodeAudioData(bytes, ok) { decodes++; const buffer = { duration: 0.5, file: bytes.file }; ok(buffer); return Promise.resolve(buffer); }
+    }
+    const contexts = [];
+    const docListeners = [];
+    global.AudioContext = FakeContext;
+    global.fetch = async (uri) => {
+      fetched.push(uri);
+      // Each buffer remembers which file it was, so a source can be told by what it plays.
+      return uri === failing ? { ok: false, status: 404 }
+        : { ok: true, arrayBuffer: async () => Object.assign(new ArrayBuffer(4), { file: uri }) };
+    };
+    global.document = {
+      visibilityState: 'visible',
+      addEventListener: (type, fn) => docListeners.push({ type, fn }),
+      removeEventListener: (type, fn) => { const i = docListeners.findIndex((l) => l.type === type && l.fn === fn); if (i >= 0) docListeners.splice(i, 1); },
+    };
+    const settle = async () => { for (let i = 0; i < 12; i++) await Promise.resolve(); };
+    const sounding = () => contexts.flatMap((c) => c.sources).filter((n) => n.started && !n.stopped);
+
+    const engine = fresh('web');
+    const stop = engine.initAudio();
+    await settle();
+    const { WARM_CLIPS } = require('../src/audio/sounds.ts');
+    assert.equal(players.length, 0, 'No <audio>-backed expo-audio player is made on a browser with Web Audio');
+    assert.equal(contexts.length, 1, 'One audio context for the whole game');
+    const ctx = contexts[0];
+    assert.equal(ctx.gains.length, WARM_CLIPS.length + 1, 'The same voices are warmed: common contacts plus the pour');
+    assert.equal(new Set(fetched).size, fetched.length, 'Each clip is fetched once, however many voices share it');
+    assert.equal(decodes, fetched.length, 'And decoded once');
+
+    engine.setMusic('menu'); engine.playSound('order'); engine.setPouring(true, 0.2);
+    await settle();
+    assert.equal(sounding().length, 0, 'Nothing sounds before the page has been interacted with');
+    listeners[0].fn();
+    assert.equal(ctx.state, 'running', 'The first gesture resumes the context');
+    await advance(1000); await settle();
+    const playing = (file) => sounding().find((n) => n.buffer && n.buffer.file === file);
+    const music = playing('music-menu.wav');
+    assert.ok(music && music.loop, 'The menu theme loops on its own buffer');
+    const pour = playing('pourLoop.wav');
+    assert.ok(pour && pour.loop, 'The held pour loops');
+    assert.ok(pour.playbackRate.value > 0.976, 'And its resonance still follows the fill');
+    engine.setPouring(false);
+    await advance(80); await settle();
+    assert.ok(pour.stopped, 'Releasing the tap ends the pour');
+    assert.ok(!music.stopped, 'And leaves the music alone');
+
+    const before = ctx.sources.length;
+    engine.playSound('ice'); await settle();
+    const cue = ctx.sources.slice(before).find((n) => n.started && !n.loop);
+    assert.ok(cue, 'A cue is a fresh source on an already-decoded buffer');
+    assert.ok(cue.out && cue.out.gain.value > 0, 'Played through its voice, at its volume');
+    assert.equal(fetched.filter((u) => u.startsWith('ice')).length, new Set(fetched.filter((u) => u.startsWith('ice'))).size,
+      'Playing it again fetches nothing');
+
+    const hide = docListeners.find((l) => l.type === 'visibilitychange');
+    global.document.visibilityState = 'hidden'; hide.fn(); await settle();
+    assert.equal(ctx.state, 'suspended', 'A hidden page lets go of the audio device');
+    global.document.visibilityState = 'visible'; hide.fn(); await settle();
+    assert.equal(ctx.state, 'running', 'And takes it back on return');
+
+    appHandlers.forEach((h) => h('background')); await settle();
+    assert.equal(sounding().length, 0, 'Backgrounding still stops effects, pour and music');
+    appHandlers.forEach((h) => h('active')); await advance(1200); await settle();
+
+    // A clip that cannot be fetched is silent, not an exception, and is not fetched again per cue.
+    const warns = []; const warn = console.warn; console.warn = (...a) => warns.push(a);
+    failing = 'bell1.wav';
+    engine.playSound('order'); await advance(300); await settle();
+    engine.playSound('order'); await advance(300); await settle();
+    console.warn = warn;
+    assert.ok(fetched.filter((u) => u === 'bell1.wav').length <= 1, 'A failed clip is not refetched on every cue');
+
+    stop();
+    await advance(1500); await settle();
+    assert.ok(ctx.gains.every((g) => !g.connected), 'Every voice is disconnected on teardown');
+    assert.equal(sounding().length, 0);
+    delete global.AudioContext; delete global.fetch; delete global.document;
+  }
   {
     const engine = fresh('ios');
     const stop = engine.initAudio();
@@ -242,7 +350,7 @@ async function main() {
     stop();
   }
   assert.equal(timers.size, 0, 'No timer leaks');
-  console.log('check-audio-engine: recorded variation, layers, voice cap, cancellation, fill, browser/native lifecycle, rejected seeks and teardown.');
+  console.log('check-audio-engine: recorded variation, layers, voice cap, cancellation, fill, browser/native lifecycle, rejected seeks, the Web Audio path and teardown.');
 }
 main().then(() => {
   global.setTimeout = original.timeout; global.setInterval = original.interval;

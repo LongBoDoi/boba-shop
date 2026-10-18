@@ -526,6 +526,13 @@ foley.ts schedules a bounded player pool, live fill for pours and cancellation. 
 handles Expo/browser lifecycle and the separate music crossfades. No audio props or context
 should be threaded through the memoized kitchen.
 
+**On the web, sound is Web Audio, not `expo-audio`** (`src/audio/webAudio.ts`). `expo-audio`'s
+web player is an `<audio>` element per player — over fifty in a shift — and cycling them through
+pause, seek and play on every grab and drop is what made the web build lag once sound arrived,
+on desktop and phone alike. Headless benchmarks cannot see it (their audio goes to a null device);
+turning both volumes to 0 on a real device is what found it. Decoded buffers and a throwaway source
+per cue cost almost nothing. Native keeps `expo-audio`. See docs/audio.md.
+
 The originals and license/checksum manifest live in tools/audio/. Rebuild effects with
 node tools/audio/build-foley.cjs (offline ffmpeg required). The two original music loops stay
 byte-identical and are built by tools/make-music.cjs. The old effect synthesizer is retired.
