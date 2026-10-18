@@ -130,6 +130,78 @@ Two details make it work:
 `touch-action` stays at `manipulation` rather than `none`: `none` would kill the page pager's swipe
 along with the zoom.
 
+## The Phaser rebuild (`phaser/`)
+
+The game is being rebuilt as a web game in **Phaser 4 + Vite + TypeScript**, beside the Expo app,
+because React Native draws this game as one element per shape and no amount of trimming made a
+loaded cup smooth on a phone (see "What a group costs" and "What a browser repaints" below). It is
+**not deployed yet**: production is still the Expo export until the rebuild has been played on a
+phone and is at least as good. It is web-only — the installed page is the phone app (see "The page
+as the app"); the native `.apk`/`.ipa` stay on the Expo code.
+
+```bash
+cd phaser
+npm install
+npm run dev        # Vite on the LAN (--host); open it on a phone on the same Wi-Fi
+npm run build      # typecheck + production build into phaser/dist
+```
+
+**What is shared, not copied.** The rules (`src/game/`: reducer, orders, levels, save format,
+backup codes), the sound engine (`src/audio/`), and every measurement of the painted artwork
+(`kitchenArt.ts`, `toppingArt.ts`, `toppingGeometry.ts`, `cupGeometry.ts`, `iceLayout.ts`) are
+imported from `../src` as they stand. Two Vite tricks make that work: the `metroAssets` plugin turns
+Metro's `require('…png')` into imported URLs, and `phaser/src/shims/` stands in for the slivers of
+`expo-asset`, `expo-audio` and `react-native` the audio engine touches. **Saves carry over** — same
+`localStorage` key, same `parseGame` — so a shop started in the Expo build opens here unchanged. The
+manifest, icons and `sw.js` are served from `../public` by the `sharedPublic` plugin.
+
+**Who draws what.** One Phaser canvas sits over the pager; the counter (`scenes/CounterScene.ts`,
+`counter/`) and the kitchen (`scenes/KitchenScene.ts`, `kitchen/`) are two scenes side by side,
+each through its own camera, laid out in CSS pixels with the camera zoomed by `DPR`. Everything with
+words on it — HUD, tabs, order card, pour meter, menus, settings, day end, coin/confetti effects — is
+Preact HTML over it (`ui/`). They meet in `store.ts` (the shared reducer), `ui-state.ts` (screen
+state: page, sign, meter, hint, the kitchen's rectangle, where the cup is) and `game/host.ts` (the
+UI tells the canvas where the pager and the kitchen are). The vector art is SVG strings in `art/`,
+rasterised once into textures.
+
+**The cup** (`kitchen/cupPainter.ts`) is painted with Canvas 2D into one texture, using the same
+geometry functions as `KitchenCup`/`TeaLiquid`/`CupIce`/`CupToppings`, and only repainted while
+something in it moves (a pour, a portion settling, ice settling). The moving boundaries that had to
+be masks in react-native-svg are canvas clips. One deliberate difference: the glass is **not** laid
+over the tea at 22% — the web build players knew never drew that veil, and its saturated tea is the
+look kept (`GLASS_FILLED_ALPHA`).
+
+**Rules learned building it — each one cost a measured frame budget or a bug:**
+
+- **No `Graphics` left on screen.** Phaser 4 re-tessellates and re-uploads a `Graphics` every frame
+  it is drawn, changed or not; a few plaques and shadows were 70% of the kitchen's frame time on a
+  slowed CPU. Bake static shapes with `bakeCanvas` (`game/view.ts`) or `svgTexture`.
+- **The room is one atlas** (`kitchen/atlas.ts`): every tank, pan, card, bottle, plaque and the
+  syrup's four labels are frames of one texture, so the wall draws in one batch. A station's state
+  is a frame swap or an alpha, never a redraw.
+- **One texture per batch** (`setMaxParallelTextureUnits(1)` in `game.ts`). Phaser compiles a shader
+  per number of textures a batch mixes, the first time it meets it — a third of a second on the GPU
+  the first time a scoop was lifted. Phones get one per batch anyway; desktop now matches them, so
+  what a desktop measures is what a phone draws.
+- **Tell Phaser when the canvas moves** (`scale.updateBounds()` in `setGameArea`). It maps touches
+  through bounds measured at the last resize; a canvas moved but not resized took every touch at an
+  offset — near enough for a big target, a miss for the cup.
+- **A finger owns the cup.** Lifting the cup starts an ease back to full size; the first move must
+  stop its position half, or a quick drag is pulled back to where it started (`owned` in the cup
+  gesture).
+- **Never read layout from the DOM per frame** — `gameArea()` holds where the canvas is.
+- **Text in a rasterised SVG falls back to a system font** (an SVG drawn through an `Image` cannot
+  use page fonts): lettering that matters is drawn on top with Phaser text or Canvas 2D.
+
+**Testing it.** In development (and in a build opened with `?test`) `window.__shop` exposes
+`{ store, uiState, goToPage, load(json), game }`: `load` puts a saved shop on screen exactly as a
+launch would read it, which is how a test reaches a particular cup. Don't write the save from a page
+on the same origin and reload — any page on the Vite server is the game, and it flushes its own save
+as it unloads. The comparison numbers used in development: the same scripted play (carry a scoop
+over a loaded cup, carry the cup, idle, add a topping, add ice) at an 8x CPU slowdown — the Expo
+build averaged ~17 ms a frame with 70–200 ms stalls on every grab and drop; this one averages
+7–11 ms with its worst frame around 50–120 ms.
+
 ## Architecture
 
 ```

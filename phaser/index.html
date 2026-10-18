@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="vi">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+    <title>Tiệm Trà Sữa</title>
+    <meta name="theme-color" content="#FFE3EC" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="Tiệm Trà Sữa" />
+    <!-- Added to the home screen, this page is the app: no browser chrome, its own storage, and
+         (see sw.js) it opens with no signal. -->
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="apple-touch-icon" href="/icons/icon-192.png" />
+    <link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png" />
+  </head>
+  <body>
+    <noscript>Bạn cần bật JavaScript để chơi trò chơi này.</noscript>
+    <div id="app">
+      <!-- The game world is one canvas; everything with words on it is HTML laid over it. -->
+      <div id="game"></div>
+      <div id="ui"></div>
+    </div>
+    <script>
+      // The browser gestures that survive CSS have to be refused by hand: the context menu an
+      // Android long-press raises, a drag started on artwork, and the iOS pinch-zoom gestures.
+      (function () {
+        var refuse = function (event) { event.preventDefault(); };
+        ['contextmenu', 'dragstart'].forEach(function (name) { document.addEventListener(name, refuse); });
+        ['gesturestart', 'gesturechange', 'gestureend'].forEach(function (name) {
+          document.addEventListener(name, refuse, { passive: false });
+        });
+        // Ask for the save to be kept rather than evicted when the device is short of room.
+        if (navigator.storage && navigator.storage.persist) {
+          navigator.storage.persisted().then(function (already) { if (!already) navigator.storage.persist(); });
+        }
+      })();
+    </script>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

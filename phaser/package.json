@@ -1,0 +1,29 @@
+{
+  "name": "boba-shop-phaser",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview --host",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@capacitor/android": "^8.5.3",
+    "@capacitor/core": "^8.5.3",
+    "@capacitor/ios": "^8.5.3",
+    "phaser": "^4.2.1",
+    "preact": "^11.0.1"
+  },
+  "devDependencies": {
+    "@capacitor/assets": "^3.0.5",
+    "@capacitor/cli": "^8.5.3",
+    "@preact/preset-vite": "^2.10.6",
+    "typescript": "~6.0.3",
+    "vite": "^8.3.4"
+  },
+  "allowScripts": {
+    "sharp@0.32.6": true
+  }
+}

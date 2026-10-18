@@ -1,0 +1,4 @@
+/build/*
+!/build/.npmkeep
+# The preview signing key is committed on purpose; see signingConfigs in build.gradle.
+!preview-signing.p12

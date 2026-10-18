@@ -1,0 +1,218 @@
+name: Build Phaser preview apps
+
+# The Phaser rebuild (phaser/) as phone apps: its web build in a Capacitor shell. A preview, built
+# from the `phaser` branch, published as a GitHub pre-release. It has its own app id
+# (com.manhlong.bobashop.phaser), so it installs beside the Expo app rather than over it, and it
+# touches nothing the production site or the Expo apps are built from.
+
+on:
+  push:
+    branches: [phaser]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build-phaser-apps
+  cancel-in-progress: true
+
+jobs:
+  web:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            phaser/package-lock.json
+
+      # The rebuild shares the game's rules, sounds and artwork with ../src, and its fonts with the
+      # Expo app's own dependencies, so both installs are needed.
+      - name: Install dependencies
+        run: |
+          npm ci
+          npm ci --prefix phaser --ignore-scripts
+
+      - name: Build the web game
+        run: npm run build --prefix phaser
+
+      - name: Keep the build
+        uses: actions/upload-artifact@v7
+        with:
+          name: web
+          path: phaser/dist
+          if-no-files-found: error
+
+  android:
+    needs: web
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      BUILD_NUMBER: ${{ github.run_number }}
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: phaser/package-lock.json
+
+      - name: Set up Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Install Capacitor
+        run: npm ci --prefix phaser --ignore-scripts
+
+      - name: Fetch the web build
+        uses: actions/download-artifact@v8
+        with:
+          name: web
+          path: phaser/dist
+
+      - name: Copy the game into the Android project
+        working-directory: phaser
+        run: npx cap sync android
+
+      - name: Build the APK
+        working-directory: phaser/android
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleRelease --no-daemon
+          mv app/build/outputs/apk/release/app-release.apk "$GITHUB_WORKSPACE/tra-sua-moi-${BUILD_NUMBER}.apk"
+          ls -lh "$GITHUB_WORKSPACE"/*.apk
+
+      - name: Upload the APK
+        uses: actions/upload-artifact@v7
+        with:
+          name: apk
+          path: ./*.apk
+          if-no-files-found: error
+
+  ios:
+    needs: web
+    runs-on: macos-26
+    timeout-minutes: 40
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: phaser/package-lock.json
+
+      - name: Install Capacitor
+        run: npm ci --prefix phaser --ignore-scripts
+
+      - name: Fetch the web build
+        uses: actions/download-artifact@v8
+        with:
+          name: web
+          path: phaser/dist
+
+      - name: Select the newest Xcode
+        run: |
+          latest="$(ls -d /Applications/Xcode_*.app 2>/dev/null | sort -V | tail -1)"
+          if [ -n "$latest" ]; then
+            sudo xcode-select -s "$latest/Contents/Developer"
+          fi
+          xcodebuild -version
+
+      - name: Copy the game into the iOS project
+        working-directory: phaser
+        run: npx cap sync ios
+
+      - name: Archive without signing
+        working-directory: phaser/ios/App
+        run: |
+          set -o pipefail
+          xcodebuild archive \
+            -project App.xcodeproj \
+            -scheme App \
+            -configuration Release \
+            -destination 'generic/platform=iOS' \
+            -archivePath "$RUNNER_TEMP/tra-sua-moi.xcarchive" \
+            CURRENT_PROJECT_VERSION="${{ github.run_number }}" \
+            MARKETING_VERSION="0.1.${{ github.run_number }}" \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGN_ENTITLEMENTS="" \
+            2>&1 | tee "$RUNNER_TEMP/xcodebuild.log" | { xcbeautify --quieter || cat; }
+
+      - name: Show what failed
+        if: failure()
+        run: |
+          grep -nE '(^|[[:space:]])error:|\*\* ARCHIVE FAILED' "$RUNNER_TEMP/xcodebuild.log" | head -60 || true
+          tail -80 "$RUNNER_TEMP/xcodebuild.log" || true
+
+      - name: Package the .ipa
+        run: |
+          mkdir -p "$RUNNER_TEMP/Payload"
+          cp -R "$RUNNER_TEMP/tra-sua-moi.xcarchive/Products/Applications/"*.app "$RUNNER_TEMP/Payload/"
+          (cd "$RUNNER_TEMP" && zip -qry "tra-sua-moi-${{ github.run_number }}-unsigned.ipa" Payload)
+          mv "$RUNNER_TEMP/tra-sua-moi-${{ github.run_number }}-unsigned.ipa" .
+          ls -lh ./*.ipa
+
+      - name: Upload the .ipa
+        uses: actions/upload-artifact@v7
+        with:
+          name: ipa
+          path: ./*.ipa
+          if-no-files-found: error
+
+  release:
+    needs: [android, ios]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Download the built apps
+        uses: actions/download-artifact@v8
+        with:
+          pattern: '{apk,ipa}'
+          path: out
+          merge-multiple: true
+
+      - name: Publish the pre-release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: phaser-preview-${{ github.run_number }}
+        run: |
+          cat > notes.md <<'NOTES'
+          **Preview** of the Phaser rebuild of Tiệm Trà Sữa, from the `phaser` branch.
+
+          It installs **beside** the current app (its own app id, named "Trà Sữa (mới)"), so nothing
+          you have now is replaced. Its shop is separate: to bring yours across, open ⚙️ Cài đặt in
+          the current app, copy the backup code, and paste it into the same card in this one.
+
+          | File | Platform | Notes |
+          | --- | --- | --- |
+          | `.apk` | Android | Copy it to the phone and open it; allow installs from that source. Later previews install over this one and keep its shop. |
+          | `.ipa` | iOS | **Unsigned.** Re-sign it with Sideloadly or AltStore using a free Apple ID (it then runs for 7 days per install), or with a paid developer certificate. |
+
+          The same build is in the browser at https://boba-shop--phaser.expo.app
+          NOTES
+          gh release create "$TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --prerelease \
+            --title "Phaser preview (build ${{ github.run_number }})" \
+            --notes-file notes.md \
+            out/*.apk out/*.ipa
+          echo "Released [$TAG]($(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json url -q .url))" >> "$GITHUB_STEP_SUMMARY"
