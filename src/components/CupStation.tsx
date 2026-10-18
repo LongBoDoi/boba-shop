@@ -6,6 +6,7 @@ import { playSound } from '../audio/audio';
 import { CUP_SIZES, CupSize, EMPTY_DRINK } from '../game/ingredients';
 import { timing } from '../motion';
 import { pointerEventsStyles } from '../pointerEvents';
+import { ownLayer } from '../ownLayer';
 import { fonts } from '../theme';
 import { kitchenHolderFor } from './art/KitchenRoom';
 import { ROOM_BG_CUP_STATION, ROOM_BG_SIZE } from './art/kitchenArt';
@@ -70,7 +71,7 @@ export function useCupStation(options: CupStationOptions) {
     return (
       <View key={size} testID={`cup-stack-${size}`} {...GRABBY}
         accessible accessibilityRole="button" accessibilityLabel={`Lấy ly cỡ ${size}`}
-        accessibilityHint="Kéo ly từ chồng ly lên thảm pha chế"
+        accessibilityHint="Chạm để đặt ly lên thảm pha chế, hoặc kéo ly tới thảm"
         accessibilityState={{ disabled: options.occupied }}
         onAccessibilityTap={takeCup}
         onResponderGrant={(event: GestureResponderEvent) => {
@@ -103,6 +104,13 @@ export function useCupStation(options: CupStationOptions) {
           if (!drag.current.active) return;
           drag.current.active = false;
           onDragging(false);
+          // A tap is the quick way: the cup goes straight onto the mat, as if it had been carried.
+          if (drag.current.distance < 8) {
+            opacity.set(0);
+            setHeld(null);
+            takeCup();
+            return;
+          }
           const cup = latest.current.cupSizeFor(size);
           /*
            * Anywhere on the mat counts, not the middle of it. Two things make that more than a
@@ -120,7 +128,7 @@ export function useCupStation(options: CupStationOptions) {
           const padY = 24 + cup.height * 0.45;
           const overMat = footX >= holder.left - padX && footX <= holder.left + holder.width + padX
             && footY >= holder.top - padY && footY <= holder.top + holder.height + padY;
-          if (drag.current.distance >= 8 && overMat && !latest.current.occupied) {
+          if (overMat && !latest.current.occupied) {
             opacity.set(0);
             setHeld(null);
             takeCup();
@@ -128,7 +136,7 @@ export function useCupStation(options: CupStationOptions) {
             x.set(withTiming(drag.current.x, timing()));
             y.set(withTiming(drag.current.y, timing()));
             opacity.set(withDelay(220, withTiming(0, timing(100))));
-            latest.current.onNudge('Kéo ly đúng cỡ lên thảm để bắt đầu pha');
+            latest.current.onNudge('Thả ly lên thảm — hoặc chỉ cần chạm vào ly trên kệ');
           }
         }}
         onResponderTerminate={cancel}
@@ -143,7 +151,7 @@ export function useCupStation(options: CupStationOptions) {
   const cup = options.cupSizeFor(held ?? 'M');
   const carriedCup = held && (
     <Animated.View testID="carried-empty-cup"
-      style={[styles.carried, { width: cup.width, height: cup.height }, carriedStyle, pointerEventsStyles.none]}>
+      style={[styles.carried, ownLayer, { width: cup.width, height: cup.height }, carriedStyle, pointerEventsStyles.none]}>
       <KitchenCup drink={{ ...EMPTY_DRINK, size: held }} width={cup.width} height={cup.height} level={emptyLevel} />
       <Text style={styles.size}>{held}</Text>
     </Animated.View>

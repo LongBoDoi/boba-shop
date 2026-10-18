@@ -453,6 +453,23 @@ keep it out:
   written against the measured `dt`, so this number is free to be as slow as the slowest thing on
   screen can stand — and after the two rules above, nothing clock-driven can show the difference.
 
+The same reasoning governs a **grab and a drop**, which are the other renders a player feels:
+
+- **Equipment is handed the one fact about the cup it uses, never the drink.** `cupTea`, `full`,
+  `iceScoops`, `sugarPumps`… With `cup` and `build` in the `shared` object, every scoop of
+  anything re-rendered every station in the room on the frame the scoop landed.
+- **A grab tells the room, not the game screen.** `interacting` lives in `KitchenStation` and
+  holds the panorama still. The pager is already locked on the prep page (`scrollEnabled={page ===
+  0}`), so there is nothing above it to tell; it used to be told anyway, and re-rendered the whole
+  screen — customers and all — twice per scoop.
+- **Whatever goes into the cup is dispatched in a `startTransition`** (`GameScreen`'s `pour`,
+  `scoop`, `iceScoop`, `sugarPump`, `pickCup`). The sound and the buzz are immediate; the render
+  of the new drink is sliced, so the scoop's tip and the pieces' fall keep their frames. The
+  reducer is the judge of what may go in, which is what makes a deferred commit safe.
+- **The window's clouds stop while the prep page is up** (`drifting`). The counter is still
+  mounted, off screen, and a moving cloud nobody can see still has the browser restyle and
+  re-layer the page every frame.
+
 ### Hands are emptied when the game is put down
 
 A gesture here ends when the finger lifts (see `GRABBY`), and backgrounding the app takes the
@@ -599,7 +616,9 @@ palette it exports.
 
 **The drink is made by hand, not picked from a list.** `KitchenStation`
 (`src/components/KitchenStation.tsx`) is a room, not a menu, and **the cup is a physical object you drag
-around it** (`PanResponder`; the pager is frozen via `onDragging` while you hold it).
+around it** (`PanResponder`; the room stops panning while you hold it).
+A cup comes off the rack by **tapping** its size — it goes straight onto the mat — or by dragging
+it there (`CupStation`); a drop anywhere on the mat counts.
 `layoutKitchen(config, w, h)` places everything absolutely, **on the surfaces the painting already
 has** (`LEVELS`): the tea dispensers in the open shelf across the top, the toppings in their stand
 in the tiled alcove, the ice/sugar/milk/foam on the bench nearer the viewer, and the cup on its
@@ -751,7 +770,7 @@ the gesture becomes a swipe; row offsets are clamped when a new day changes the 
 
 **All of this is the raw responder API (`GRABBY`), not `Pressable`**: a `Pressable` cancels its press when
 the finger drifts or the browser decides it was a long-press, which cut pours short. These gestures end
-only when the finger actually lifts, and the pager is frozen (`onDragging`) for the duration. Equipment
+only when the finger actually lifts, and the room is held still (`interacting`) for the duration. Equipment
 shows no "added ✓" badges — the order slip is the checklist; machines only dim when they're locked out.
 
 A drink can be served once tea has been chosen by pouring any positive amount. Serving and tips
@@ -1123,6 +1142,18 @@ stands plainly inside the shelf; divided across the board it laps over the ends 
   Nothing checks any of these; `check-drawing.cjs` is about pictures that come out wrong. The
   honest measurement is still a phone, and what a browser *can* prove is that a change made for a
   phone left the web alone — export before and after and diff the cup, as "Verifying changes" says.
+- **What a browser repaints.** The browser has its own version of the `Svg`-is-one-bitmap rule:
+  the page is a few big rasterised layers, and anything moving *inside* one re-rasters every
+  pixel it passes over, whatever is drawn underneath. The cup is the most expensive picture in the
+  game — five masks of glass, twelve gradient cubes, fifty-one clipped sprites — so a scoop carried
+  over it, or the cup itself carried, re-rastered all of that every frame: a finished drink tripled
+  the page's raster work and made every action after it stutter on a phone. `ownLayer`
+  (`src/ownLayer.ts`, `will-change: transform`, web only) puts a view on a compositor layer of its
+  own, where moving it is the compositor sliding a picture already drawn. It is on what moves every
+  frame (the cup, the carried tool, the carried empty cup, the clouds) and on each `CupLayer`, so a
+  settling cube re-rasters the ice and not the glass. Each layer is GPU memory, so it is not a
+  blanket style. With it, a loaded cup's raster work went from 143 ms to 13 ms over the same
+  scripted play at an 8x CPU slowdown, and the per-frame re-layering from 2 s to 0.2 s.
 - Reanimated 4 + `react-native-worklets`; the Babel plugin is configured automatically by
   `babel-preset-expo` (no babel config file).
 - Custom fonts: set `fontFamily: fonts.*` and don't also set `fontWeight`.

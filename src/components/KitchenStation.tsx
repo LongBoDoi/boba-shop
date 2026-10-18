@@ -51,6 +51,7 @@ import { TOPPING_TAG } from './art/toppingArt';
 import { toppingPanBounds, ToppingPanShape } from './art/toppingGeometry';
 import { fitBackground } from './art/PannableBackground';
 import { pointerEventsStyles } from '../pointerEvents';
+import { ownLayer } from '../ownLayer';
 
 // --------------------------------------------------------------------------- layout
 
@@ -211,8 +212,6 @@ interface KitchenStationProps {
   onScoop: (category: 'toppings' | 'foam', optionId: string) => void;
   onIce: () => void;
   onSugar: () => void;
-  /** The pager must stop swiping while something is being dragged around the kitchen. */
-  onDragging: (dragging: boolean) => void;
   onMeterChange: (meter: PourMeterState | null) => void;
   /** Measured for the coin/toss effects. */
   cupRef: React.RefObject<View | null>;
@@ -239,7 +238,6 @@ export const KitchenStation = memo(function KitchenStation({
   onIce,
   onSugar,
   onPickCup,
-  onDragging,
   onMeterChange,
   cupRef,
 }: KitchenStationProps) {
@@ -254,11 +252,14 @@ export const KitchenStation = memo(function KitchenStation({
   const level = useSharedValue(build.fill);
 
   const panOffset = useSharedValue(0);
+  /*
+   * Holds the room still while something is carried. Only the room: the pager is already locked on
+   * the prep page (`scrollEnabled={page === 0}` in `GameScreen`), so telling the whole game screen
+   * about every grab and drop — which it used to — re-rendered all of it, the customers included,
+   * twice per scoop, for a prop that could not change.
+   */
   const [interacting, setInteracting] = useState(false);
-  const handleDragging = useCallback((held: boolean) => {
-    setInteracting(held);
-    onDragging(held);
-  }, [onDragging]);
+  const handleDragging = setInteracting;
   const [dock, setDock] = useState<{ cupId: number; key: string | null }>({ cupId, key: null });
   const docked = dock.cupId === cupId ? stations.find((item) => item.key === dock.key) : undefined;
   const [pouring, setPouring] = useState<{ id: string; color: string; x: number; top: number; running: boolean } | null>(null);
@@ -413,11 +414,11 @@ export const KitchenStation = memo(function KitchenStation({
    * equipment is locked out and says why, the way a tank holding the wrong tea does, rather than
    * taking a drag that can only end somewhere the player did not mean.
    */
-  const busy = !cup.size ? 'Kéo ly S / M / L từ kệ lên thảm trước'
+  const busy = !cup.size ? 'Chạm ly S / M / L trên kệ để lấy ly trước'
     : docked ? `Ly đang ở dưới vòi ${docked.name} — kéo ly ra trước` : undefined;
   // One object, kept stable, because it is spread into every piece of equipment in the room: built
   // fresh each render it defeated their `memo` and rebuilt the whole kitchen on the game's clock.
-  const shared = useMemo(() => ({ cup, build, onNudge: nudge.show, carry }), [cup, build, nudge.show, carry]);
+  const shared = useMemo(() => ({ onNudge: nudge.show, carry }), [nudge.show, carry]);
 
   return (
     <View style={StyleSheet.absoluteFill}>
@@ -431,6 +432,7 @@ export const KitchenStation = memo(function KitchenStation({
         {rackNode}
         {stations.filter((station) => station.kind === 'tea').map((station) => (
           <TeaDispenser key={station.key} station={station} {...shared} abort={abort}
+            cupTea={cup.tea} fill={build.fill}
             active={docked?.key === station.key} level={level} onPour={onPour} onPouring={startPouring} />
         ))}
         <View style={[StyleSheet.absoluteFill, pointerEventsStyles.none]}>
@@ -442,16 +444,18 @@ export const KitchenStation = memo(function KitchenStation({
         </View>
         {stations.filter((station) => station.kind === 'topping').map((station) => (
           <ToppingBin key={station.key} station={station} {...shared}
-            max={config.maxToppings} sceneOffset={panOffset} busy={busy} />
+            full={!cup.toppings.includes(station.id) && cup.toppings.length >= config.maxToppings}
+            sceneOffset={panOffset} busy={busy} />
         ))}
         {stations.filter((station) => station.kind === 'ice').map((station) => (
-          <IceChest key={station.key} station={station} {...shared} sceneOffset={panOffset} busy={busy} />
+          <IceChest key={station.key} station={station} {...shared} iceScoops={build.iceScoops}
+            sceneOffset={panOffset} busy={busy} />
         ))}
         {stations.filter((station) => ['milk', 'sugar', 'foam'].includes(station.kind)).map((station) => {
           const props = { station, ...shared, sceneOffset: panOffset, busy };
-          if (station.kind === 'milk') return <MilkCarton key={station.key} {...props} />;
-          if (station.kind === 'sugar') return <SyrupPump key={station.key} {...props} />;
-          return <FoamTub key={station.key} {...props} />;
+          if (station.kind === 'milk') return <MilkCarton key={station.key} {...props} cupMilk={cup.milk} />;
+          if (station.kind === 'sugar') return <SyrupPump key={station.key} {...props} sugarPumps={build.sugarPumps} />;
+          return <FoamTub key={station.key} {...props} cupFoam={cup.foam} />;
         })}
       </KitchenRoom>
 
@@ -465,7 +469,7 @@ export const KitchenStation = memo(function KitchenStation({
         accessible={Boolean(cup.size)}
         accessibilityLabel={cup.size ? 'Ly đang pha — kéo tới vòi trà' : undefined}
         accessibilityValue={cup.size ? { text: `Cỡ ${cup.size}` } : undefined}
-        style={[styles.cup, { width: cupW, height: cupH }, cupStyle, !cup.size && pointerEventsStyles.none]}
+        style={[styles.cup, ownLayer, { width: cupW, height: cupH }, cupStyle, !cup.size && pointerEventsStyles.none]}
       >
         {cup.size && <FreshCup key={cupId} width={cupW} height={cupH}>
           <KitchenCup drink={inCup} iceSeed={cupId} width={cupW} height={cupH} level={level} pouring={Boolean(pouring?.running)} />
@@ -477,7 +481,7 @@ export const KitchenStation = memo(function KitchenStation({
       {!cup.size && <View style={[{ position: 'absolute', left: kitchenHolderFor(W, H).left,
         top: kitchenHolderFor(W, H).top, width: kitchenHolderFor(W, H).width,
         height: kitchenHolderFor(W, H).height, alignItems: 'center', justifyContent: 'center' }, pointerEventsStyles.none]}>
-        <Text style={styles.emptyMat}>Kéo ly S / M / L vào đây</Text>
+        <Text style={styles.emptyMat}>Chạm ly S / M / L trên kệ</Text>
       </View>}
 
       {carriedTool}
@@ -516,7 +520,7 @@ function findStation(stations: Station[], x: number, y: number, cupW: number, cu
 }
 
 function hintFor(cup: Drink, docked?: Station): string {
-  if (!cup.size) return 'Chọn đúng cỡ khách gọi — kéo ly từ kệ lên thảm';
+  if (!cup.size) return 'Chạm ly đúng cỡ khách gọi trên kệ — hoặc kéo lên thảm';
   if (docked) {
     if (cup.tea && cup.tea !== docked.id) return 'Ly đã có trà khác — đổ bỏ để pha lại';
     return `Giữ vòi ${docked.name} để rót — xem thanh lượng trà`;
@@ -742,7 +746,7 @@ function useCarry({
   }));
 
   const node = (
-    <Animated.View style={[styles.carried, { width: size, height: size }, style, pointerEventsStyles.none]}>
+    <Animated.View style={[styles.carried, ownLayer, { width: size, height: size }, style, pointerEventsStyles.none]}>
       {held && <Tool station={held} size={size} />}
     </Animated.View>
   );
@@ -799,10 +803,15 @@ function Tool({ station, size }: { station: Station; size: number }) {
 
 // --------------------------------------------------------------------------- equipment shell
 
+/**
+ * What every piece of equipment is handed. **Not the drink**: each one is given only the fact
+ * about the cup it actually draws or checks (`cupTea`, `inCup`, `sugarPumps`…). Handed the whole
+ * `cup` and `build`, every scoop of anything made a new object for all of them and re-rendered the
+ * entire room — six tanks, nine pans, the cartons, the bottle, the tubs — at the very moment the
+ * scoop landed, which is the frame the drop's own animation starts on.
+ */
 interface EquipProps {
   station: Station;
-  cup: Drink;
-  build: CupBuild;
   onNudge: (message: string) => void;
   carry: Carry;
   /** Panorama-mounted equipment carries its tool in screen coordinates. */
@@ -908,7 +917,9 @@ function useCarryGesture(
 
 // --------------------------------------------------------------------------- tea dispensers
 
-const TeaDispenser = memo(function TeaDispenser({ station, cup, build, onNudge, active, level, onPour, onPouring, abort }: EquipProps & {
+const TeaDispenser = memo(function TeaDispenser({ station, cupTea, fill, onNudge, active, level, onPour, onPouring, abort }: EquipProps & {
+  cupTea: Drink['tea'];
+  fill: number;
   active: boolean;
   level: SharedValue<number>;
   onPour: KitchenStationProps['onPour'];
@@ -917,12 +928,12 @@ const TeaDispenser = memo(function TeaDispenser({ station, cup, build, onNudge, 
   abort: number;
 }) {
   const { w: W, h: H } = station;
-  const locked = cup.tea !== null && cup.tea !== station.id;
+  const locked = cupTea !== null && cupTea !== station.id;
   const labelWidth = W * TEA_DISPENSER_ART.label.width;
   const nameSize = Math.min(Math.max(7, Math.min(11, W * 0.08)),
     labelWidth / (station.name.length * 0.55));
   const press = useSharedValue(1);
-  const { handlers } = useHoldPour({ enabled: active && !locked, fill: build.fill, level, press, abort,
+  const { handlers } = useHoldPour({ enabled: active && !locked, fill, level, press, abort,
     onStart: (running) => onPouring(station, running),
     onCommit: (amount) => onPour('tea', station.id, amount),
     onBlocked: () => {
@@ -955,9 +966,11 @@ const TeaDispenser = memo(function TeaDispenser({ station, cup, build, onNudge, 
 // --------------------------------------------------------------------------- milk cartons
 
 /** A carton you pick up off the shelf and tip into the cup. */
-const MilkCarton = memo(function MilkCarton({ station, cup, carry, sceneOffset, onNudge, busy }: EquipProps) {
+const MilkCarton = memo(function MilkCarton({ station, cupMilk, carry, sceneOffset, onNudge, busy }: EquipProps & {
+  cupMilk: Drink['milk'];
+}) {
   const { w: W, h: H } = station;
-  const locked = cup.milk !== null && cup.milk !== station.id;
+  const locked = cupMilk !== null && cupMilk !== station.id;
   const press = useSharedValue(1);
   const handlers = useCarryGesture(station, carry, press, undefined, sceneOffset,
     busy ? () => onNudge(busy) : undefined);
@@ -979,11 +992,12 @@ const MilkCarton = memo(function MilkCarton({ station, cup, carry, sceneOffset, 
 // --------------------------------------------------------------------------- the topping bar
 
 /** A shallow inset pan, named on a card clipped to its near lip the way a tank is named on its glass. */
-const ToppingBin = memo(function ToppingBin({ station, cup, max, carry, sceneOffset, onNudge, busy }: EquipProps & { max: number }) {
+const ToppingBin = memo(function ToppingBin({ station, full, carry, sceneOffset, onNudge, busy }: EquipProps & {
+  /** Whether the cup has as many toppings as the day allows, and this is not one of them. */
+  full: boolean;
+}) {
   const { w: W, h: H } = station;
   const option = getIngredient('toppings', station.id) as Topping;
-  const inCup = cup.toppings.includes(station.id);
-  const full = !inCup && cup.toppings.length >= max;
   const press = useSharedValue(1);
   const handlers = useCarryGesture(station, carry, press, () => onNudge(option.name), sceneOffset,
     busy ? () => onNudge(busy) : undefined);
@@ -1017,8 +1031,10 @@ const ToppingBin = memo(function ToppingBin({ station, cup, max, carry, sceneOff
 
 // --------------------------------------------------------------------------- the painted ice box
 
-const IceChest = memo(function IceChest({ station, build, carry, sceneOffset, onNudge, busy }: EquipProps) {
-  const iceLabel = build.iceScoops === 0 ? 'Không đá' : build.iceScoops === 1 ? 'Ít đá' : 'Đá thường';
+const IceChest = memo(function IceChest({ station, iceScoops, carry, sceneOffset, onNudge, busy }: EquipProps & {
+  iceScoops: number;
+}) {
+  const iceLabel = iceScoops === 0 ? 'Không đá' : iceScoops === 1 ? 'Ít đá' : 'Đá thường';
   const press = useSharedValue(1);
   const handlers = useCarryGesture(station, carry, press,
     () => onNudge('Kéo muỗng đá vào ly · 1 muỗng: ít đá · 2 muỗng: đá thường'), sceneOffset,
@@ -1045,12 +1061,13 @@ const IceChest = memo(function IceChest({ station, build, carry, sceneOffset, on
 
 // --------------------------------------------------------------------------- syrup and foam
 
-const SyrupPump = memo(function SyrupPump({ station, build, carry, sceneOffset, onNudge, busy }: EquipProps) {
+const SyrupPump = memo(function SyrupPump({ station, sugarPumps: pumps, carry, sceneOffset, onNudge, busy }: EquipProps & {
+  sugarPumps: number;
+}) {
   const { w: W, h: H } = station;
   const press = useSharedValue(1);
   const handlers = useCarryGesture(station, carry, press, undefined, sceneOffset,
     busy ? () => onNudge(busy) : undefined);
-  const pumps = build.sugarPumps;
 
   return (
     <Frame
@@ -1075,10 +1092,12 @@ const SyrupPump = memo(function SyrupPump({ station, build, carry, sceneOffset, 
   );
 });
 
-const FoamTub = memo(function FoamTub({ station, cup, carry, sceneOffset, onNudge, busy }: EquipProps) {
+const FoamTub = memo(function FoamTub({ station, cupFoam, carry, sceneOffset, onNudge, busy }: EquipProps & {
+  cupFoam: Drink['foam'];
+}) {
   const { w: W, h: H } = station;
   const option = getIngredient('foam', station.id);
-  const inCup = cup.foam === station.id;
+  const inCup = cupFoam === station.id;
   const press = useSharedValue(1);
   const handlers = useCarryGesture(station, carry, press, undefined, sceneOffset,
     busy ? () => onNudge(busy) : undefined);
@@ -1086,7 +1105,7 @@ const FoamTub = memo(function FoamTub({ station, cup, carry, sceneOffset, onNudg
   return (
     <Frame
       station={station}
-      locked={(Boolean(cup.foam) && !inCup) || Boolean(busy)}
+      locked={(Boolean(cupFoam) && !inCup) || Boolean(busy)}
       label={station.id === 'cheese' ? 'Phô mai' : 'Brûlée'}
       accessibilityLabel={`Hũ ${option?.name ?? 'kem'} — kéo vào ly`}
       press={press}

@@ -11,6 +11,8 @@ interface CounterPageProps {
   stageHeight: number;
   /** Sideways: bigger customers, so a wide stage is not a row of distant figures. */
   wide: boolean;
+  /** Whether the counter is the page being looked at; off it, the window's clouds stand still. */
+  onScreen: boolean;
   slots: (Customer | null)[];
   departures: Departure[];
   selectedSlot: number | null;
@@ -25,6 +27,7 @@ export function CounterPage({
   width,
   stageHeight,
   wide,
+  onScreen,
   slots,
   departures,
   selectedSlot,
@@ -40,6 +43,7 @@ export function CounterPage({
         width={width}
         height={stageHeight}
         wide={wide}
+        drifting={onScreen}
         slots={slots}
         departures={departures}
         selectedSlot={selectedSlot}

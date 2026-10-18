@@ -1,18 +1,25 @@
 import { memo, useEffect } from 'react';
 import { StyleSheet, View } from 'react-native';
-import Animated, { Easing, useAnimatedStyle, useSharedValue, withRepeat, withSequence, withTiming } from 'react-native-reanimated';
+import Animated, { cancelAnimation, Easing, useAnimatedStyle, useSharedValue, withRepeat, withSequence, withTiming } from 'react-native-reanimated';
 import Svg, { Circle, Defs, G, LinearGradient, Path, Rect, Stop, Text as SvgText } from 'react-native-svg';
 
 import { colors, fonts } from '../../theme';
 import { pointerEventsStyles } from '../../pointerEvents';
+import { ownLayer } from '../../ownLayer';
 
 interface ShopBackdropProps {
   width: number;
   height: number;
+  /**
+   * Whether the clouds are moving. They stop while the prep page is up: the counter is still
+   * mounted beside it, off screen, and a cloud nobody can see still makes the browser restyle and
+   * re-layer the whole page on every frame — which is a frame's worth of work behind the cup.
+   */
+  drifting?: boolean;
 }
 
 /** The wall behind the customers: striped wallpaper, a window with slowly drifting clouds, lamps and a menu board. */
-export const ShopBackdrop = memo(function ShopBackdrop({ width, height }: ShopBackdropProps) {
+export const ShopBackdrop = memo(function ShopBackdrop({ width, height, drifting = true }: ShopBackdropProps) {
   const stripe = 22;
   const awning = 16;
   const win = { x: width * 0.05, y: awning + 16, w: Math.min(120, width * 0.3), h: height * 0.42 };
@@ -74,8 +81,8 @@ export const ShopBackdrop = memo(function ShopBackdrop({ width, height }: ShopBa
       </Svg>
 
       <View style={[styles.window, { left: win.x, top: win.y, width: win.w, height: win.h }]}>
-        <Cloud width={win.w} top={win.h * 0.12} size={30} duration={16000} offset={0.15} />
-        <Cloud width={win.w} top={win.h * 0.5} size={22} duration={22000} offset={0.65} />
+        <Cloud width={win.w} top={win.h * 0.12} size={30} duration={16000} offset={0.15} drifting={drifting} />
+        <Cloud width={win.w} top={win.h * 0.5} size={22} duration={22000} offset={0.65} drifting={drifting} />
       </View>
       <View style={[styles.windowBar, { left: win.x + win.w / 2 - 2, top: win.y, height: win.h }]} />
       <View style={[styles.windowBar, { left: win.x, top: win.y + win.h / 2 - 2, width: win.w, height: 4 }]} />
@@ -88,22 +95,28 @@ export const ShopBackdrop = memo(function ShopBackdrop({ width, height }: ShopBa
   );
 });
 
-function Cloud({ width, top, size, duration, offset }: { width: number; top: number; size: number; duration: number; offset: number }) {
+function Cloud({ width, top, size, duration, offset, drifting }: {
+  width: number; top: number; size: number; duration: number; offset: number; drifting: boolean;
+}) {
   const travel = width + size * 2;
   const progress = useSharedValue(offset);
   useEffect(() => {
-    // Finish the first partial pass, then loop full passes from the left edge.
-    progress.value = withSequence(
-      withTiming(1, { duration: duration * (1 - offset), easing: Easing.linear }),
+    // Held where it is while nobody can see it, and carried on from there when they can.
+    if (!drifting) return;
+    const from = progress.get();
+    // Finish the partial pass it is on, then loop full passes from the left edge.
+    progress.set(withSequence(
+      withTiming(1, { duration: duration * (1 - from), easing: Easing.linear }),
       withRepeat(
         withSequence(withTiming(0, { duration: 0 }), withTiming(1, { duration, easing: Easing.linear })),
         -1,
       ),
-    );
-  }, [duration, offset, progress]);
+    ));
+    return () => cancelAnimation(progress);
+  }, [duration, drifting, progress]);
   const style = useAnimatedStyle(() => ({ transform: [{ translateX: progress.value * travel - size * 1.5 }] }));
   return (
-    <Animated.View style={[{ position: 'absolute', top }, style]}>
+    <Animated.View style={[{ position: 'absolute', top }, ownLayer, style]}>
       <Svg width={size * 1.5} height={size * 0.8} viewBox="0 0 30 16">
         <Path d="M6 15 C1 15 1 9 6 9 C6 4 13 2 15 6 C17 2 25 3 24 9 C29 9 29 15 24 15 Z" fill="#FFFFFF" />
       </Svg>

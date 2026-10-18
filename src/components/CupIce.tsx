@@ -67,7 +67,9 @@ export function useIcePlacements(layout: IcePlacement[], level: SharedValue<numb
     return layout.map((cube, i) => cupIcePosition(raw, cube.x, cube.r, cube.angle, cube.depth,
       dry[i].cx, dry[i].cy, cube.restAngle, cube.submergedDepth ?? 0, cube.immersion ?? 0.42));
   }, [layout, dry, level, hasTea]);
-  return { dry, poses };
+  // Kept the same object between renders: it is a prop of the memoized `CupIce`, and a fresh one
+  // re-rendered both trays of ice — every cube, twice — whenever anything at all went into the cup.
+  return useMemo(() => ({ dry, poses }), [dry, poses]);
 }
 
 interface CupIceProps {

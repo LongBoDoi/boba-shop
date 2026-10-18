@@ -32,7 +32,7 @@ const RIGHT_FAN: CustomerLook = { skin: '#E9B48E', hair: '#6B4423', hairStyle: '
 function stepsFor(mode: GameMode) {
   return [
     mode === 'relaxed' ? '⚡ Order tự được nhận, khách tới liên tục' : '🧍 Chạm vào khách để nhận order',
-    '🧋 Kéo ly đúng cỡ S / M / L rồi thêm nguyên liệu',
+    '🧋 Chạm ly đúng cỡ S / M / L rồi thêm nguyên liệu',
     '💰 Phục vụ nhanh để được tip và dành tiền cho tiệm!',
   ];
 }

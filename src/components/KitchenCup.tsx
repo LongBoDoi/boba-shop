@@ -22,6 +22,7 @@ import {
   CUP_SPRITE,
 } from './art/kitchenArt';
 import { pointerEventsStyles } from '../pointerEvents';
+import { ownLayer } from '../ownLayer';
 
 export { pourLevel } from './cupGeometry';
 
@@ -188,10 +189,14 @@ export const KitchenCup = memo(function KitchenCup({ drink, iceSeed = 1, width, 
  * Stacked as separate views, each sheet keeps its own bitmap: the ones nothing touched are blitted
  * as they are and their children are never drawn. Source-over compositing is associative, so the
  * picture is the same. Keep the order below — it is the order they were drawn in.
+ *
+ * A browser has the same problem one level up, and `ownLayer` is the same answer to it: each sheet
+ * is its own compositor layer there, so nothing moving over the cup re-rasters it, and a portion
+ * settling re-rasters only the sheet it is on.
  */
 function CupLayer({ width, height, children }: { width: number; height: number; children: React.ReactNode }) {
   return (
-    <Svg style={[StyleSheet.absoluteFill, pointerEventsStyles.none]} width={width} height={height}
+    <Svg style={[StyleSheet.absoluteFill, ownLayer, pointerEventsStyles.none]} width={width} height={height}
       viewBox={`0 0 ${ART.w} ${ART.h}`}>
       {children}
     </Svg>

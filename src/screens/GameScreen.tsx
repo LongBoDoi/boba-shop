@@ -1,4 +1,4 @@
-import { Dispatch, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Dispatch, startTransition, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   AppState,
   NativeScrollEvent,
@@ -57,8 +57,6 @@ export function GameScreen({ state, dispatch }: GameScreenProps) {
   const [settings, setSettings] = useState(false);
   const [page, setPage] = useState(0);
   const [measureToken, setMeasureToken] = useState(0);
-  // The pager must let go while the cup is being dragged around the kitchen.
-  const [dragging, setDragging] = useState(false);
 
   useEffect(() => {
     if (paused || opening) return;
@@ -75,10 +73,6 @@ export function GameScreen({ state, dispatch }: GameScreenProps) {
     const subscription = AppState.addEventListener('change', (status) => {
       if (status === 'active') return;
       dispatch({ type: 'SET_PAUSED', paused: true });
-      // The kitchen empties its own hands when this happens; this is the pager's half of the same
-      // thing. A drag the system took away without ending leaves this `true` for good, and the
-      // player comes back to a prep page they cannot swipe off.
-      setDragging(false);
     });
     return () => subscription.remove();
   }, [dispatch]);
@@ -185,11 +179,20 @@ export function GameScreen({ state, dispatch }: GameScreenProps) {
     },
     [dispatch],
   );
+  /*
+   * Everything put into the cup is rendered as a transition. The sound and the buzz are immediate,
+   * but the new drink is a render of the whole game screen plus a new portion of the cup — seventeen
+   * sprites a topping, a dozen cubes of ice — and done synchronously inside the touch event it was
+   * one long task at exactly the moment the scoop tips and the pieces start to fall, so those
+   * animations were the ones that stuttered. As a transition React renders it in slices and the
+   * frames keep coming; the reducer is still the judge of what may go in, so a quick second drop
+   * that the kitchen checked against the drink before this landed is refused there.
+   */
   const pour = useCallback(
     (category: 'tea' | 'milk', optionId: string, amount: number) => {
       tapHaptic();
       if (category === 'milk') playSound('milk');
-      dispatch({ type: 'POUR', category, optionId, amount });
+      startTransition(() => dispatch({ type: 'POUR', category, optionId, amount }));
     },
     [dispatch],
   );
@@ -197,23 +200,23 @@ export function GameScreen({ state, dispatch }: GameScreenProps) {
     (category: 'toppings' | 'foam', optionId: string) => {
       tapHaptic();
       playSound(category === 'foam' ? 'foam' : 'scoop');
-      dispatch({ type: 'SCOOP', category, optionId });
+      startTransition(() => dispatch({ type: 'SCOOP', category, optionId }));
     },
     [dispatch],
   );
   const iceScoop = useCallback(() => {
     tapHaptic();
     playSound('ice');
-    dispatch({ type: 'ICE_SCOOP' });
+    startTransition(() => dispatch({ type: 'ICE_SCOOP' }));
   }, [dispatch]);
   const sugarPump = useCallback(() => {
     tapHaptic();
     playSound('sugar');
-    dispatch({ type: 'SUGAR_PUMP' });
+    startTransition(() => dispatch({ type: 'SUGAR_PUMP' }));
   }, [dispatch]);
   const pickCup = useCallback((size: CupSize) => {
     tapHaptic();
-    dispatch({ type: 'PICK_CUP', size });
+    startTransition(() => dispatch({ type: 'PICK_CUP', size }));
   }, [dispatch]);
   const finishOpening = useCallback(() => setOpening(false), []);
 
@@ -268,7 +271,7 @@ export function GameScreen({ state, dispatch }: GameScreenProps) {
           state.mode === 'relaxed'
             ? 'Order tự được nhận — xem ở Pha chế.'
             : 'Chạm vào khách ở Quầy để nhận order.',
-          'Chạm Pha chế ➜, kéo ly S / M / L đúng order từ kệ lên thảm.',
+          'Chạm Pha chế ➜, chạm ly S / M / L đúng order trên kệ để đặt lên thảm.',
           'Kéo ly dưới bình trà, giữ vòi để rót — xem lượng trà ở thanh phía trên bếp.',
           'Kéo đá từ hộp cạnh topping vào ly: 1 muỗng ít đá, 2 muỗng đá thường.',
         ]
@@ -294,7 +297,7 @@ export function GameScreen({ state, dispatch }: GameScreenProps) {
           ref={pagerRef}
           horizontal
           pagingEnabled
-          scrollEnabled={!dragging && page === 0}
+          scrollEnabled={page === 0}
           showsHorizontalScrollIndicator={false}
           scrollEventThrottle={16}
           onScroll={onScroll}
@@ -303,6 +306,7 @@ export function GameScreen({ state, dispatch }: GameScreenProps) {
         >
           <CounterPage
             width={width}
+            onScreen={page === 0}
             stageHeight={stageHeight}
             wide={wide}
             slots={state.slots}
@@ -332,7 +336,6 @@ export function GameScreen({ state, dispatch }: GameScreenProps) {
             onIce={iceScoop}
             onSugar={sugarPump}
             onPickCup={pickCup}
-            onDragging={setDragging}
             onClear={() => {
               playSound('trash', TOSS_MS);
               dispatch({ type: 'CLEAR_CUP' });

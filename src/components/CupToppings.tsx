@@ -62,7 +62,11 @@ export const CupToppings = memo(function CupToppings({ ids, ...props }: CupToppi
   );
 });
 
-function ToppingPortion({ id, portion, liquidShape, teaColor, milkColor }: Omit<CupToppingsProps, 'ids'> & {
+/**
+ * Memoized, because each portion is seventeen sprites and nothing about one changes once it has
+ * landed: without it, every scoop re-rendered every portion already in the cup.
+ */
+const ToppingPortion = memo(function ToppingPortion({ id, portion, liquidShape, teaColor, milkColor }: Omit<CupToppingsProps, 'ids'> & {
   id: string;
   portion: number;
 }) {
@@ -193,7 +197,7 @@ function ToppingPortion({ id, portion, liquidShape, teaColor, milkColor }: Omit<
       ))}
     </AnimatedGroup>
   );
-}
+});
 
 /** How far up a band of pieces the drink stands: the live tea, clipped to their own outlines. */
 function ToppingWash({ clip, liquidShape, settled, tint, opacity }: {

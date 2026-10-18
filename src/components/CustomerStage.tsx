@@ -32,6 +32,8 @@ interface CustomerStageProps {
   onFocusTicket: (slot: number) => void;
   /** A stage laid sideways, with the room for larger figures; see `stageMetrics`. */
   wide?: boolean;
+  /** Whether the window's clouds move — only while the counter is on screen. */
+  drifting?: boolean;
 }
 
 /**
@@ -54,7 +56,7 @@ export function stageMetrics(width: number, height: number, slotCount: number, w
   return { slotWidth, charWidth, charHeight, bubbleBottom, bubbleCenterY };
 }
 
-export function CustomerStage({ width, height, slots, departures, selectedSlot, clock, feedback, wide = false, onTakeOrder, onFocusTicket }: CustomerStageProps) {
+export function CustomerStage({ width, height, slots, departures, selectedSlot, clock, feedback, wide = false, drifting = true, onTakeOrder, onFocusTicket }: CustomerStageProps) {
   // The same object between renders, so a customer whose patience has not visibly moved is left
   // alone on the game's clock instead of being drawn again.
   const metrics = useMemo(() => stageMetrics(width, height, slots.length, wide), [width, height, slots.length, wide]);
@@ -66,7 +68,7 @@ export function CustomerStage({ width, height, slots, departures, selectedSlot, 
 
   return (
     <View style={{ width, height }}>
-      <ShopBackdrop width={width} height={height} />
+      <ShopBackdrop width={width} height={height} drifting={drifting} />
       <View style={[styles.row, wide && styles.rowCentred]}>
         {slots.map((customer, slot) => (
           <Pressable

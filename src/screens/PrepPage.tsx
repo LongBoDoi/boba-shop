@@ -44,7 +44,6 @@ interface PrepPageProps {
   onIce: () => void;
   onSugar: () => void;
   onPickCup: (size: CupSize) => void;
-  onDragging: (dragging: boolean) => void;
   onClear: () => void;
   onServe: () => void;
   machineRef: React.RefObject<View | null>;
@@ -71,7 +70,6 @@ export function PrepPage({
   onIce,
   onSugar,
   onPickCup,
-  onDragging,
   onClear,
   onServe,
   machineRef,
@@ -136,7 +134,7 @@ export function PrepPage({
     }}>
       {scene.height > 0 && <KitchenStation
         width={scene.width} height={scene.height} config={config} cup={cup} build={build} cupId={cupId}
-        onPour={onPour} onScoop={onScoop} onIce={onIce} onSugar={onSugar} onDragging={onDragging}
+        onPour={onPour} onScoop={onScoop} onIce={onIce} onSugar={onSugar}
         onPickCup={onPickCup}
         onMeterChange={setPourMeter} cupRef={machineRef}
       />}
