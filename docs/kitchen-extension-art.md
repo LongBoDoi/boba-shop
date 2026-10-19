@@ -8,7 +8,7 @@ All anchors were measured against the delivered image, including both tea shelve
 
 Previews: [cup station](kitchen-extended-cups-preview.png), [ice station](kitchen-extended-ice-preview.png).
 
-Validation: lint, TypeScript, the existing test suite and a production Expo web export pass. Browser interaction checks cover 375 × 667 (day 1), 390 × 844, 768 × 1024, 844 × 390 and 1180 × 820 (day 9): the complete cup rack is reachable, the preparation cup stays on screen and fixed during panning, the ice box is reachable with a touch target above 44 points, and dragging a scoop into the cup updates the saved ice count. Audio is muted for isolated kitchen checks; an earlier run with audio enabled emitted browser play/pause interruption errors. Native simulators were not run.
+Validation: TypeScript, the existing test suite and a production web build pass. Browser interaction checks cover 375 × 667 (day 1), 390 × 844, 768 × 1024, 844 × 390 and 1180 × 820 (day 9): the complete cup rack is reachable, the preparation cup stays on screen and fixed during panning, the ice box is reachable with a touch target above 44 points, and dragging a scoop into the cup updates the saved ice count. Audio is muted for isolated kitchen checks; an earlier run with audio enabled emitted browser play/pause interruption errors. Native simulators were not run.
 
 ## Generation prompt
 

@@ -1,91 +1,102 @@
 # Tiệm Trà Sữa (boba-shop)
 
-A mobile cooking game run as two swipeable screens: a **Counter** where customers wait and the
-player taps each one to take their order, and a **Preparation** screen where the player picks a
+A mobile cooking game run as two swipeable pages: a **Counter** where customers wait and the
+player taps each one to take their order, and a **Preparation** room where the player picks a
 taken-order ticket, builds the cup ingredient by ingredient, and serves it before the customer runs
-out of patience. One Expo / React Native codebase for iOS, Android and web.
-**All player-facing text is Vietnamese.**
+out of patience. **All player-facing text is Vietnamese.**
 
-Also read `AGENTS.md` (Expo's own rules: check the versioned docs for SDK 57, use
-`npx expo install` to add packages, never hand-edit `ios/` or `android/`).
+It is a **web game**: Phaser 4 draws the world on one canvas, Preact draws everything with words on
+it as HTML over that canvas, Vite builds it, and the page is what ships. The phone apps are the
+same build in a Capacitor shell. There is no React Native and no Expo in it any more — the one
+thing left with Expo's name on it is EAS Hosting, which serves the page (see
+`docs/deployment.md`), and `app.json`, which is only that hosting project's identity.
+
+Why it was rebuilt, since it is the one piece of history that still binds: drawn through
+`react-native-svg`, every shape in the game was an Android `View` — the prep screen was about 1,430
+of them, 630 of which were the cup, and the count grew with every scoop. That is what "it lags
+after adding ingredients" was, and two rounds of cutting the *drawing* cost did not help, because
+the cost was per view and not per pixel. On the same scripted play at an 8x CPU slowdown (carry a
+scoop over a loaded cup, carry the cup, idle, add a topping, add ice) the old build averaged ~17 ms
+a frame with 70–200 ms stalls on every grab and drop; this one averages 7–11 ms with its worst
+frame around 50–120 ms.
 
 ## Commands
 
 ```bash
 npm install
-npx expo start              # dev server; scan the QR with Expo Go (same Wi-Fi as the computer)
-npx expo start --web        # run in a browser
-npx tsc --noEmit            # typecheck
-npx expo lint               # lint (React Compiler rules are on, see Conventions)
-npx expo install <package>  # add a dependency at an SDK-compatible version
+npm run dev          # Vite on the LAN (--host); open it on a phone on the same Wi-Fi
+npm run build        # typecheck, then build into dist/
+npm run preview      # serve the built dist/ (--host)
+npm run typecheck    # tsc --noEmit
+npm test             # the regression scripts
+npm run sync         # cap sync: copy dist/ into android/ and ios/
 ```
 
-Run `npm run typecheck`, `npm run lint`, and `npm test` before calling a change done.
-Lint treats warnings as failures. The regression scripts check serving behavior, saving and
-restoring, reading releases, sound and music, and the scoped UUID dependency override; see
-"Verifying changes" below and `docs/dependency-health.md`.
+Run `npm run typecheck` and `npm test` before calling a change done. The regression scripts check
+serving behaviour, saving and restoring, the cup sizes, the sound (its assets, its catalogue and
+its whole lifecycle against a fake audio context), the topping tray's geometry and the backup
+code; see "Verifying changes" below. There is **no lint step** — the old one was
+`eslint-config-expo` and went with Expo; `tsc` is strict and is the gate.
 
-### Deploying the web build (EAS Hosting)
+`/art-test.html` on the dev server draws every piece of SVG art in `src/art/` with a spread of
+parameters, including rasterised through an `Image` the way a texture is made. It is not part of
+the game.
+
+### Deploying (EAS Hosting)
 
 The game is published at https://boba-shop.expo.app (Expo account `manhlong`, project
-`@manhlong/boba-shop`, id in `app.json`). Pushes to `main` deploy automatically after checks pass;
-see `docs/deployment.md`. To deploy locally:
+`@manhlong/boba-shop`, id in `app.json`). Pushes to `main` deploy automatically after the checks
+pass; see `docs/deployment.md`. To deploy locally:
 
 ```bash
-npx expo export --platform web && npx eas-cli@latest deploy --prod
+npx vite build && NODE_OPTIONS="--dns-result-order=ipv4first" npx eas-cli@latest deploy --prod
 ```
 
-If `eas-cli` fails with `read ECONNRESET` on every request (it uses `node-fetch` over an IPv6 path
-some networks reset), prefix the command: `NODE_OPTIONS="--dns-result-order=ipv4first" npx eas-cli@latest deploy --prod`.
+That `NODE_OPTIONS` is not decoration: `eas-cli` uses `node-fetch` over an IPv6 path some networks
+reset, and without it every request dies with `read ECONNRESET`. It also needs
+`npx eas-cli@latest login` on a new machine.
 
-`eas-cli` needs `npx eas-cli@latest login` on a new machine. `app.json` uses `web.output: "single"`;
-`public/index.html` is the web page template (sets `lang="vi"`).
+**One deployment, one link.** `--prod` publishes to the production alias and that is the only
+address the shop has; `--alias <name>` would add another (there was a `boba-shop--phaser.expo.app`
+while this was a preview — it is deleted). An installed page is pinned to the address it was
+installed from, so a second link is a second game to keep in step.
 
-### Playing on a phone, and the app routes that were ruled out
+### Playing on a phone
 
 **The phone app is the web page, installed.** Open https://boba-shop.expo.app and add it to the
-home screen: it opens with no browser chrome, keeps its own storage and plays with no signal (see
-"The page as the app" below). This is not a fallback — it is the fast one, and the reason is in
-"What a group costs": the native builds draw this game through `react-native-svg`, where every
-shape is an Android `View`. The prep screen is about 1,430 of them, 630 of which are the cup, and
-the count grows with every scoop — which is what "it lags after adding ingredients" was. A browser
-draws the same scene on its own compositor and does not care. Two rounds of cutting the drawing
-cost (faded groups, then the one-bitmap-per-`Svg` rule) measurably helped the *draw* and did not
-help the phone, because the cost is per view, not per pixel. Before reaching for the drawing code
-again, count views.
+home screen: it opens with no browser chrome, keeps its own storage, plays with no signal and is
+always the newest build (see "The page as the app"). Nothing to install, nothing to update.
 
-The native builds still exist — `.github/workflows/build-apps.yml` publishes an `.apk` and an
-unsigned `.ipa` to a GitHub release, and an installed build offers its own updates (see "Updating
-itself"). They run the same game and are the only route to native sound, haptics and the silent
-switch. A shop moves between the two with the **backup code** in the settings card (`saveCode.ts`):
-the installed page and the installed app keep separate storage, and nothing syncs them.
+The native builds are the same `dist/` in a Capacitor shell:
+`.github/workflows/build-apps.yml` is run by hand and publishes an `.apk` and an unsigned `.ipa` to
+a GitHub release. Three things about them:
 
-The routes to a *store* build were each tried and dropped, and are worth not re-litigating:
+- **The app id is `com.manhlong.bobashop.phaser`, not the old app's `com.manhlong.bobashop`**, and
+  it has to stay that way. Android installs a build over another only when the id *and* the signing
+  key match, and the old app's key lives in the build service that made it. So this installs beside
+  it rather than over it. Everyone who installed the preview keeps their shop, because for them
+  nothing changed.
+- **The `.apk`'s signing key is committed** (`android/app/preview-signing.p12`, password in
+  `android/app/build.gradle`) on purpose: the file is handed out directly, and a key that stays the
+  same is what lets a newer `.apk` install over an older one and keep the player's shop. A store
+  release would need a key that is a secret.
+- **An installed app does not update itself.** It carries the game inside it, so a change only
+  reaches it through a new file. The page is the thing that keeps itself current; this is the
+  trade for having an icon that is not a bookmark. (The old app had over-the-air updates, which is
+  what `expo-updates` was for; it went with Expo.)
 
-- **Expo Go** (publish with `eas update`, hand out one link) is dead on the current client. Expo Go
-  57.0.9 cannot launch EAS Updates at all: every runtime string (`exposdk:57.0.0`, `exposdk:57.0.9`,
-  bare `57.0.0`), a manifest with `sdkVersion` pinned to the client's own build number, and the
-  `exp://u.expo.dev/update/<id>` link form all died with `IOException: Failed to download remote
-  update`, while the published update itself was provably intact (manifest `200`, all 84 assets
-  downloadable with the `assetRequestHeaders` tokens). The fault is inside the client — it filters
-  updates with `sdkVersions.contains(manifest.getExpoGoSDKVersion())` — and the fix (expo/expo#46944)
-  had not shipped as of October 2026. **A standalone build is not affected by any of this**, and
-  EAS Update is exactly how the installed apps keep themselves current; see "Updating itself".
-- **A standalone build** is fine on Android (EAS generates the keystore; nothing to sign up for) but
-  iOS needs a paid Apple Developer account for any private route, ad-hoc or TestFlight.
-- **The stores' private channels** — Play internal testing (100 testers by email, $25 once) and
-  TestFlight internal (100 App Store Connect users, $99/yr) — are the clean answer if that money is
-  ever worth spending. Neither needs a public listing or a review.
+A shop moves between the page, the app and the old app with the **backup code** in the settings
+card (`src/game/saveCode.ts`): each install keeps its own storage and nothing syncs them.
 
 ### The page as the app
 
 Installed to a home screen the page is the game: its own icon, no browser chrome, its own storage,
-and no signal needed. Four small files in `public/` do it, and the web export copies that folder
-into `dist` as it stands.
+and no signal needed. Four small things in `public/` do it, and Vite copies that folder into
+`dist` as it stands.
 
 - **`manifest.webmanifest`** names it (`display: standalone`, so no address bar), paints the
   surround `#FFE3EC` and lists the icons. `orientation` is `any` — sideways is a layout this game
-  has (see "Turning it on its side"), unlike the native builds, which `app.json` locks to portrait.
+  has (see "Turning it on its side").
 - **`icons/`** is generated by `tools/make-web-icons.cjs` from the app's own icon and its Android
   adaptive icon. Two square and one **maskable**, which is the one that matters: a launcher may
   crop an icon to whatever shape it likes, and without a maskable one Chrome puts the square icon
@@ -94,82 +105,60 @@ into `dist` as it stands.
   resizing is the only thing the toolchain cannot already do, and that is not worth a dependency.
 - **`sw.js`** keeps the shop on the phone. Two caches, because the two kinds of file want opposite
   things: the page is **network-first** (its URL never changes, so caching it first would pin the
-  game to the build that was current the day it was installed), and everything under `/assets/` and
-  `/_expo/` is **cache-first** (those names carry a content hash, so they cannot go stale). The
-  install step fetches the page, *reads the bundle's name out of it* and caches that too — the
-  visit that installs a worker is not handled by it, so without that the first launch offline was a
-  blank screen asking for a script nobody had kept. The twenty megabytes of artwork are **not**
-  precached; the game pulls its own in behind the loading screen (`useArtwork`) and that pass fills
-  the cache, which is about 17 MB after one play. Bumping `VERSION` in that file empties both
-  caches on the next visit, and the whole thing is undone from the browser's own site-data screen.
-- **`index.html`** links all of it, carries the iOS meta tags (which read none of the manifest),
-  adds `viewport-fit=cover` — every screen already stands inside `SafeAreaView` — and asks for
+  game to the build that was current the day it was installed), and everything under `/assets/` is
+  **cache-first** (Vite puts a hash of the contents in every one of those filenames, so they
+  cannot go stale). The install step fetches the page, *reads the bundle's name out of it* and
+  caches that too — the visit that installs a worker is not handled by it, so without that the
+  first launch offline was a blank screen asking for a script nobody had kept. The twenty
+  megabytes of artwork are **not** precached; the game pulls its own in behind the loading screen
+  (`PreloadScene`) and that pass fills the cache, which is about 17 MB after one play. Bumping
+  `VERSION` in that file empties both caches on the next visit, and the whole thing is undone from
+  the browser's own site-data screen.
+- **`index.html`** at the repository root is the page itself (Vite's entry, not a template): it
+  carries the iOS meta tags, which read none of the manifest, links the manifest and the icons,
+  adds `viewport-fit=cover`, refuses the browser gestures that CSS cannot (see below), and asks for
   `navigator.storage.persist()` so the shop is not evicted when the phone is short of room.
 
-Verifying it needs a browser, not a reader: export, serve `dist/`, load it once, play as far as the
+Verifying it needs a browser, not a reader: build, serve `dist/`, load it once, play as far as the
 menu, then **go offline and reload**. The shop should open on the pause card with the kitchen
-painted. Check the console for failed requests, which is how the missing bundle and a missing icon
+painted. Check the console for failed requests, which is how a missing bundle and a missing icon
 were both found.
 
 ### The page is a game surface, not a document
 
-`public/index.html` refuses the browser behaviours that a game's holds and drags would otherwise
-trigger: the iOS share sheet on a long-pressed image, the selection magnifier on a long-pressed
-label, the Android long-press context menu, double-tap and pinch zoom, image dragging, and Safari's
-rubber-band / pull-to-refresh.
+`index.html` and `src/styles.css` refuse the browser behaviours that a game's holds and drags would
+otherwise trigger: the iOS share sheet on a long-pressed image, the selection magnifier on a
+long-pressed label, the Android long-press context menu, double-tap and pinch zoom, image dragging,
+and Safari's rubber-band / pull-to-refresh.
 
-Two details make it work:
+- Selection is off on `*` and back on for `input, textarea` — the backup code has to be selectable,
+  and the web is the one platform with no long-press "select all" to fall back on.
+- `img { pointer-events: none }` is what stops the iOS image menu.
+- `body` is `position: fixed`, which is what stops Safari rubber-banding the game away.
+- The canvas gets `touch-action: none`; the HTML over it is `pointer-events: none` except where it
+  has something to press (`.live`), so a touch meant for the room is not caught by a transparent
+  box above it.
+- `contextmenu`, `dragstart` and the iOS `gesture*` events are refused in `index.html`'s own
+  script, because no CSS covers them.
 
-- The selection rules carry `!important`. React Native Web styles its elements with single-class
-  rules, which out-rank a bare `*` selector.
-- `img { pointer-events: none }` is the one that stops the iOS image menu. RNW lays an invisible
-  `<img>` over every picture on purpose — its own source comments it as *"Accessibility image allows
-  users to trigger the browser's image context menu"* — so the gesture has to be let through to the
-  `View` underneath, which is what owns it.
+## Who draws what
 
-`touch-action` stays at `manipulation` rather than `none`: `none` would kill the page pager's swipe
-along with the zoom.
-
-## The Phaser rebuild (`phaser/`)
-
-The game is being rebuilt as a web game in **Phaser 4 + Vite + TypeScript**, beside the Expo app,
-because React Native draws this game as one element per shape and no amount of trimming made a
-loaded cup smooth on a phone (see "What a group costs" and "What a browser repaints" below). It is
-**not deployed yet**: production is still the Expo export until the rebuild has been played on a
-phone and is at least as good. It is web-only — the installed page is the phone app (see "The page
-as the app"); the native `.apk`/`.ipa` stay on the Expo code.
-
-```bash
-cd phaser
-npm install
-npm run dev        # Vite on the LAN (--host); open it on a phone on the same Wi-Fi
-npm run build      # typecheck + production build into phaser/dist
-```
-
-**What is shared, not copied.** The rules (`src/game/`: reducer, orders, levels, save format,
-backup codes), the sound engine (`src/audio/`), and every measurement of the painted artwork
-(`kitchenArt.ts`, `toppingArt.ts`, `toppingGeometry.ts`, `cupGeometry.ts`, `iceLayout.ts`) are
-imported from `../src` as they stand. Two Vite tricks make that work: the `metroAssets` plugin turns
-Metro's `require('…png')` into imported URLs, and `phaser/src/shims/` stands in for the slivers of
-`expo-asset`, `expo-audio` and `react-native` the audio engine touches. **Saves carry over** — same
-`localStorage` key, same `parseGame` — so a shop started in the Expo build opens here unchanged. The
-manifest, icons and `sw.js` are served from `../public` by the `sharedPublic` plugin.
-
-**Who draws what.** One Phaser canvas sits over the pager; the counter (`scenes/CounterScene.ts`,
+One Phaser canvas sits under the HTML and over nothing: the counter (`scenes/CounterScene.ts`,
 `counter/`) and the kitchen (`scenes/KitchenScene.ts`, `kitchen/`) are two scenes side by side,
-each through its own camera, laid out in CSS pixels with the camera zoomed by `DPR`. Everything with
-words on it — HUD, tabs, order card, pour meter, menus, settings, day end, coin/confetti effects — is
-Preact HTML over it (`ui/`). They meet in `store.ts` (the shared reducer), `ui-state.ts` (screen
-state: page, sign, meter, hint, the kitchen's rectangle, where the cup is) and `game/host.ts` (the
-UI tells the canvas where the pager and the kitchen are). The vector art is SVG strings in `art/`,
-rasterised once into textures.
+each through its own camera, laid out in CSS pixels with the camera zoomed by `DPR`. Everything
+with words on it — HUD, tabs, order card, pour meter, menus, settings, day end, coin and confetti
+effects — is Preact HTML over it (`ui/`). The vector art is SVG strings in `art/`, rasterised once
+into textures.
+
+They meet in three places and nowhere else: `store.ts` (the shared reducer), `ui-state.ts` (screen
+state: which page, the sign, the meter, the hint, the kitchen's rectangle, where the cup is) and
+`game/host.ts` (the UI tells the canvas where the pager and the kitchen are).
 
 **The cup** (`kitchen/cupPainter.ts`) is painted with Canvas 2D into one texture, using the same
-geometry functions as `KitchenCup`/`TeaLiquid`/`CupIce`/`CupToppings`, and only repainted while
-something in it moves (a pour, a portion settling, ice settling). The moving boundaries that had to
-be masks in react-native-svg are canvas clips. One deliberate difference: the glass is **not** laid
-over the tea at 22% — the web build players knew never drew that veil, and its saturated tea is the
-look kept (`GLASS_FILLED_ALPHA`).
+geometry functions the artwork is measured with, and only repainted while something in it moves (a
+pour, a portion settling, ice settling). One deliberate difference from the old build: the glass is
+**not** laid over the tea at 22% — the web players knew never saw that veil, and its saturated tea
+is the look that was kept (`GLASS_FILLED_ALPHA`).
 
 **Rules learned building it — each one cost a measured frame budget or a bug:**
 
@@ -192,21 +181,28 @@ look kept (`GLASS_FILLED_ALPHA`).
 - **Never read layout from the DOM per frame** — `gameArea()` holds where the canvas is.
 - **Text in a rasterised SVG falls back to a system font** (an SVG drawn through an `Image` cannot
   use page fonts): lettering that matters is drawn on top with Phaser text or Canvas 2D.
+- **A sprite is its own URL.** `import cup from '../assets/kitchen/cup.png'` gives the string Vite
+  serves it at, and that string is both the texture's key and where it is loaded from (`tex()` in
+  `game/view.ts`). There is no asset id and no bundler shim.
 
 **Testing it.** In development (and in a build opened with `?test`) `window.__shop` exposes
 `{ store, uiState, goToPage, load(json), game }`: `load` puts a saved shop on screen exactly as a
-launch would read it, which is how a test reaches a particular cup. Don't write the save from a page
-on the same origin and reload — any page on the Vite server is the game, and it flushes its own save
-as it unloads. The comparison numbers used in development: the same scripted play (carry a scoop
-over a loaded cup, carry the cup, idle, add a topping, add ice) at an 8x CPU slowdown — the Expo
-build averaged ~17 ms a frame with 70–200 ms stalls on every grab and drop; this one averages
-7–11 ms with its worst frame around 50–120 ms.
+launch would read it, which is how a test reaches a particular cup. Don't write the save from a
+page on the same origin and reload — any page on the dev server is the game, and it flushes its own
+save as it unloads.
 
 ## Architecture
 
 ```
-App.tsx                 fonts (Baloo 2), useReducer game state, phase switching + fade transition
-src/game/               pure game logic, no React
+index.html              the page: meta tags, the canvas and UI roots, the gestures CSS can't refuse
+src/main.tsx            boot: fonts, the saved shop, the clock, the sound, the canvas, the UI
+src/store.ts            the shop as one value: gameReducer + subscribers (no component state)
+src/ui-state.ts         screen state the rules don't own: page, sign, meter, hint, rectangles
+src/clock.ts            the day's tick
+src/persist.ts          localStorage: the read at launch and the slow write; see "Saving the shop"
+src/sound.ts            watches the shop and tells the engine what to play
+src/hooks.ts            useGame/useUi: the only way the HTML reads either store
+src/game/               the rules, and the canvas they run on
   reducer.ts            GameState + CupBuild, actions (START_DAY, TICK, TAKE_ORDER, POUR, SCOOP,
                         ICE_SCOOP, SUGAR_PUMP, SERVE, CLEAR_CUP, SET_MODE…), scoring
   levels.ts             getDayConfig(day): unlock schedule, order/serve patience, spawn rate; describeUnlocks
@@ -217,26 +213,32 @@ src/game/               pure game logic, no React
   random.ts             seeded RNG; the seed lives in state so the reducer stays pure
   money.ts              formatMoney: 1 game unit = 10.000 ₫, shown as "10k" / "3.180k"
   save.ts               serialize/validate a GameState for storage; see "Saving the shop"
-src/updates/            useUpdate.ts: ask EAS Update once a launch, download and restart into it;
-                        see "Updating itself"
+  saveCode.ts           the same save as a line of text the player can keep
+  game.ts               the Phaser game: scenes, scale, the one-texture-per-batch rule
+  host.ts               where the canvas is, as the UI measures it
+  pager.ts              the two pages and the swipe between them
+  view.ts               textures, baked canvases, text, DPR — what every scene draws through
+src/scenes/             PreloadScene (the artwork, before the shop opens), CounterScene, KitchenScene
+src/counter/            the customer stage: backdrop, customers, floating text, layout
+src/kitchen/            the room you work in: layout, equipment, the cup and its painter, pours
+src/ui/                 the HTML over the canvas: App, TitleScreen, GameScreen, PrepPage, Hud,
+                        OrderBubble, PourMeter, OpeningSign, SettingsSheet, DayEndScreen, Effects,
+                        LoadingScreen, responsive.ts (the three prep layouts), ui.css
+src/art/                the artwork: SVG strings (character, counter, counterTop, cup, icons,
+                        ingredientIcon, kitchenEquipment, shopBackdrop) and the measurements of the
+                        painted sprites (kitchenArt.ts, toppingArt.ts, toppingGeometry.ts,
+                        cupGeometry.ts, iceLayout.ts)
 src/audio/              sounds.ts (the cue catalogue and the mix), audio.ts (the engine — players,
-                        voices, fades), useAudio.ts (the only two places React touches it);
+                        voices, fades), foley.ts (the scheduler), webAudio.ts (the players);
                         see "The shop's sound" and docs/audio.md
-src/screens/            LoadingScreen (the wait while the artwork comes in), TitleScreen,
-                        DayEndScreen, and the in-play screens:
-  GameScreen.tsx        orchestrator: HUD, the two-page swipe pager + tab indicator, effects/opening/pause overlays
-  CounterPage.tsx       page 1 — the customer stage (take orders here)
-  PrepPage.tsx          page 2 — the KitchenStation (the room you work in) edge to edge, plus
-                        serve/clear. The orders hang inside the room, not above it.
-src/components/         Cup (layered, animated), CustomerStage, OrderBubble, KitchenStation,
-                        Hud, Effects (coins/confetti/toss), OpeningSign, SettingsSheet…
-src/components/art/     SVG illustrations: Character, IngredientIcon, ShopBackdrop (customer wall),
-                        KitchenRoom (the prep room: one painted plate, plus the transform
-                        everything in the room is placed through; exports the SHOP palette),
-                        kitchenArt.ts (the painted kitchen sprites + their geometry),
-                        Counter, CounterTop, Tiles, ToppingShelf
 src/assets/kitchen/     the painted sprites themselves — generated, see "The kitchen's artwork"
 src/assets/audio/       the sounds and the two music loops — generated, see "The shop's sound"
+src/assets/fonts/       Baloo 2, four weights, with its licence
+public/                 what makes the page installable: manifest.webmanifest, sw.js, icons/
+                        — see "The page as the app"
+android/, ios/          the Capacitor projects: the same dist/ in a native shell
+capacitor.config.ts     the app id, name and web directory
+app.json                not an app config — only the EAS Hosting project the page is published to
 tools/                  make-music.cjs: music only; audio/build-foley.cjs: recorded effects
                         cut-sheets.py: cuts the asset sheets into those sprites
                         cut-tea-jars.ps1: a whole dispenser per tea, off the kitchen sheet
@@ -244,19 +246,11 @@ tools/                  make-music.cjs: music only; audio/build-foley.cjs: recor
                         cut-tea-front.ps1: the tea window's greenery, back out of its own plate
                         cut-cup-holder.py: the holder under the cup, out of the kitchen painting
                         make-web-icons.cjs: the home-screen icons, off the app's own
-public/                 the page the game ships as, and what makes it installable:
-                        index.html (the template), manifest.webmanifest, sw.js, icons/
-                        — see "The page as the app"
-src/motion.ts           shared animation timings/easings
-src/theme.ts            colours and font family names
-src/useSavedGame.ts     Async Storage read on launch, slow write while playing
-src/useArtwork.ts       pulls the painted sprites in before the shop opens; see "Opening the shop"
-tools/check-drawing.cjs reads the SVG for the three things a phone draws differently
-tools/check-native-audio-api.cjs  reads expo-audio's Swift/Kotlin for writes a phone refuses
-tools/check-reinstall.cjs  the backup code, and when a new file is offered
 tools/check-audio.cjs   loop seams, cue wiring, and the volumes through a save
-tools/stamp-build.cjs   writes the CI run number into app.json as versionCode/buildNumber
+tools/check-audio-engine.cjs  the scheduler and the whole browser lifecycle, against a fake context
+tools/check-backup-code.cjs   the backup code's round trip and its refusals
 ```
+
 
 ### Saving the shop
 
@@ -265,14 +259,12 @@ day was reached: reopening puts you back in the same minute of the same day, wit
 waiting, the same half-built cup on the coaster and the same takings. `GameState` is already a plain
 serializable value, which is what makes this cheap.
 
-`src/game/save.ts` owns the format and `src/useSavedGame.ts` owns the store. Five decisions worth
-not re-litigating:
+`src/game/save.ts` owns the format and `src/persist.ts` owns the store. The decisions worth not
+re-litigating:
 
-- **The store is Async Storage.** The game ships on the web, where it is `localStorage` and needs no
-  configuration, and it is bundled into Expo Go, so a phone still needs no development build.
-  `expo-sqlite/kv-store` is the Expo-made drop-in alternative and was passed over: its web support
-  is alpha and wants a wasm Metro config plus `Cross-Origin-Embedder-Policy` /
-  `Cross-Origin-Opener-Policy` headers on the host, which is a lot of setup for a few kB of JSON.
+- **The store is `localStorage`, under one key, `boba-shop.save.v1`.** The save is a few kB of JSON
+  and the read has to happen before the first frame, which rules out anything asynchronous; in the
+  Capacitor shell it is the same `localStorage`, in the app's own origin.
 - **`config` is not saved**, because it is `getDayConfig(day)`. Re-deriving it means a save made
   before the levels were retuned comes back on the current numbers, and `parseGame` fits the
   restored counter to today's `config.slots`.
@@ -292,11 +284,11 @@ not re-litigating:
   `TICK` reduces it to the RNG's own 32-bit state, and the tick loop is held by the opening sign.
   Bounding it to an int32 discarded every save from launch until that sign was dismissed.
 - **Storage failures are reported, never swallowed.** A store that cannot be read is
-  indistinguishable from a first launch and a rejected write is invisible, so both warn — the silence
-  is what hid the seed bug on a native build, where the shop simply never came back.
+  indistinguishable from a first launch and a rejected write is invisible, so both warn — the
+  silence is what hid the seed bug on a phone, where the shop simply never came back.
 - **A read that *fails* is not a shop that isn't there, and it must never be written over.** The
-  read is retried (three times, backing off), and if it still fails the game opens a new shop and
-  `useSaveGame` is handed `writable: false`, so nothing is stored for the rest of that launch. This
+  read is retried (three times), and if it still fails the game opens a new shop and the writer is
+  switched off (`writable = false`), so nothing is stored for the rest of that launch. This
   is the one that cost a player their week: a moment's trouble reading the store looked exactly
   like a first launch, the game opened a fresh shop, and the two-second writer committed it over a
   save that was sitting there intact. Playing a session that will not be kept is the cheaper
@@ -305,9 +297,6 @@ not re-litigating:
   patched — a fresh shop is a better failure than a half-restored one — but the bytes go to
   `boba-shop.save.v1.broken` first. Nothing reads that key; it is there so that a validator the
   format has outgrown costs a diagnosis instead of a week.
-- **Writes go one at a time.** The slow timer and the flush on the way out overlap easily and
-  `setItem` makes no promise about which lands last, so they are chained. An older shift settling
-  on top of a newer one is indistinguishable, from the player's side, from the game losing a day.
 - **A field that is merely new is migrated, not discarded.** `SAVE_VERSION` is the switch that
   throws a save away on sight, and it is for a save this build genuinely cannot read — not for one
   it knows how to finish reading. `money` is the worked example: it is optional in `SavedGame`, and
@@ -315,16 +304,16 @@ not re-litigating:
   would have wiped every shop in existence to gain a tidier format, which is the same trade this
   whole section exists to refuse.
 - **Everything read back is validated, and a save that doesn't check out is thrown away** rather
-  than patched; a fresh shop is a better failure than a half-restored one. On the web the save sits
-  in `localStorage`, where it can be edited, and a save from an older build can name an ingredient
+  than patched; a fresh shop is a better failure than a half-restored one. The save sits in
+  `localStorage`, where it can be edited, and a save from an older build can name an ingredient
   that no longer exists. Ingredient *names* are checked against the catalogue; whether the day still
   *offers* them is not, so a retuned unlock schedule leaves one customer asking for a tea that isn't
   on the shelf rather than wiping the save. `cup.ice` and `cup.sweetness` are re-derived from the
   build's scoops and pumps instead of being trusted, since the reducer treats those as the same fact.
 
-The writer is on a **2 s timer**, not on every state change — a day ticks ten times a second — and
-flushes when `AppState` leaves `active`, on the web's `pagehide` (closing a tab doesn't reliably
-raise a visibility change), and on unmount. The most a crash can cost is the last couple of seconds.
+The writer is on a **2 s timer**, not on every state change — a day ticks several times a second —
+and flushes when the page is hidden and on `pagehide` (closing a tab doesn't reliably raise a
+visibility change). The most a crash can cost is the last couple of seconds.
 
 `tools/check-save.cjs` covers the round trip, the two non-playing phases, the saves that must be
 refused and the ones that are tidied up instead.
@@ -336,11 +325,10 @@ something drew them: the first swipe to the prep page landed on a room that fill
 the first scoop of each topping stuttered while its sprite decoded. A shift is two minutes long and
 every one of those stutters landed inside one, so the wait is taken up front instead.
 
-`src/useArtwork.ts` pulls in `PRELOAD` from `kitchenArt.ts` — two steps per sprite, because they
-are different jobs: `downloadAsync` puts the file where it can be read (on a phone it is already
-there; over the dev server or on the web it has to come down) and `Image.prefetch` is what decodes
-it. `App.tsx` holds `LoadingScreen` up until the fonts, the saved shop and the artwork are all in,
-and the bar is weighted the way the wait actually falls — the artwork is nearly all of it.
+`src/scenes/PreloadScene.ts` hands `PRELOAD` from `kitchenArt.ts` to Phaser's loader, which both
+fetches and decodes each sprite into a texture. `main.tsx` holds `LoadingScreen` up until the fonts,
+the saved shop and the artwork are all in, and the bar is weighted the way the wait actually falls
+— the artwork is nearly all of it (85%).
 
 Three things not to undo:
 
@@ -355,218 +343,94 @@ Three things not to undo:
 - **The loading screen uses no Baloo 2.** The fonts are part of what it is waiting for, so anything
   set in the display face would be drawn in the system one and jump when the real one arrived.
 
-The cost falls on the web, where the art is a real download — a cold first visit now waits several
-seconds on the loading screen instead of opening the menu at once and filling the kitchen in later.
-A repeat visit is cached, and on a phone the sprites are already in the app, so it only decodes.
-
-### Updating itself
-
-The shop is handed out as files rather than through a store, so nothing tells a player a new build
-exists — the game asks, on **every launch**, and the player decides. `src/updates/useUpdate.ts`
-does the asking and `src/components/UpdateDialog.tsx` is the card it puts up.
-
-**It is EAS Update, not a new file.** A published update is the JavaScript and the artwork, a few
-hundred kilobytes, swapped in place; the app restarts itself and that is the whole install. Both
-platforms, no reinstall, no permission. This replaced reading the repository's GitHub releases and
-handing the `.apk` to Android's package installer — a 95 MB download, `REQUEST_INSTALL_PACKAGES`,
-and nothing at all for iOS, which cannot install an `.ipa` from inside an app. (The EAS Update
-route that is ruled out under "Playing on a phone" is **Expo Go**, whose client cannot launch
-updates at all. A standalone build is a different thing and this is the supported path for it.)
-
-Five parts, and the first is the one that bites:
-
-- **The runtime version is the app version** (`runtimeVersion: { policy: "appVersion" }`), and an
-  update carries **no native code**. So adding or removing a native dependency without bumping
-  `expo.version` publishes an update to apps whose native side cannot run it, and the player gets a
-  crash. Nothing in the toolchain notices — it typechecks, it lints, it runs in a browser — so
-  `tools/check-updates.cjs` holds the native dependency list and the version it was recorded at,
-  and fails when they drift apart. When it fails: bump `expo.version`, re-record `BUILT` in that
-  file, and run **Build apps** before pushing. It matches on *names*, which is the case that
-  always crashes; **upgrading** a native package is usually survivable but wants the same
-  treatment, and nothing will tell you.
-- **The player is asked, never updated behind.** `checkAutomatically` is `NEVER` in `app.json`, so
-  the library downloads nothing on its own; the game checks once per launch and the dialog decides.
-  The default (`ON_LOAD`) would fetch an update quietly and swap it in on the next launch, which is
-  precisely the "it changed under me" this is meant to avoid.
-- **The dialog is over every screen**, not a card on the menu, because the question comes up once a
-  launch wherever the player happens to be. It is held back while a shift is actually running
-  (`phase === 'playing' && !paused`) so an unasked-for question cannot drain three patience timers
-  while it is read — at launch the day is always either not started or paused, so in practice it
-  shows immediately. "Để sau" puts it away until the game is opened again.
-- **The save is flushed and awaited before the restart.** `useSaveGame` returns its flush for this
-  one caller: `reloadAsync()` replaces the process, and a write still in flight when it goes is a
-  lost shift.
-- **Both halves of installing one are on a deadline, and the card can always be left.** The dialog
-  covers the screen and takes every touch, and while it downloads or restarts there is nothing on
-  it to press, so anything that does not finish leaves the player holding a picture of a boba shop
-  — a complete freeze, on a real build only, which is why a browser will never show it to you.
-  `fetchUpdateAsync` has no timeout of its own and a stalled download never settles, so it gets 60
-  seconds; `reloadAsync` replaces the process and therefore *cannot* resolve if it worked, so
-  still being here 15 seconds later is itself the error. Either one failing lands on `failed`,
-  which has a button. The downloading state has a "Để sau" as well.
-- **The channel is set in `app.json`**, as `updates.requestHeaders['expo-channel-name']`, not in
-  `eas.json`. The `.apk` is built by EAS Build but the `.ipa` is archived by the workflow itself,
-  which would get no channel from a build profile; set here, every build asks for the same one
-  whoever built it. It is applied at prebuild, so this only works because the project is CNG.
-
-**Publishing is part of "Deploy web"**: the same push that redeploys the page publishes the update,
-so the page and the apps are never running different games. It is skipped when a commit touches
-nothing the app is made of — otherwise a docs-only push would put a dialog in front of a player for
-nothing.
-
-`tools/stamp-build.cjs` still runs before each build, but only for `android.versionCode` and
-`ios.buildNumber` — a newer `.apk` has to install over an older one. It deliberately leaves
-`version` alone, because that is the runtime version: a build that stamped it would stop matching
-the updates published for it.
-
-**What still needs a new file**, and there is no way around it: anything native. New native
-dependency, new Expo SDK, a config plugin that changes the manifest. That is what the version bump
-and a fresh **Build apps** run are for — and the app now **says so itself**, which it used not to.
-
-### Offering the new file as well
-
-(Full detail, including the two things that are easy to get wrong about the install intent:
-`docs/reinstall.md`.)
-
-An update carries no native code, so the moment `expo.version` moves, every installed app at the
-old version stops matching the updates being published: `checkForUpdateAsync` answers "nothing
-new" and the player sits several versions behind an app that looks perfectly current. **That
-silence was the gap**, and `src/updates/useNewBuild.ts` closes it.
-
-It rests on an invariant this repository already keeps, rather than on any new bookkeeping:
-`expo.version` moves **if and only if** a new binary is required — which is precisely what
-`tools/check-updates.cjs` enforces further up. So comparing the version in the latest GitHub
-release against `Updates.runtimeVersion` is a complete answer, and needs no build numbers and no
-extra native module to read the installed version with. A *rebuild* at the same version is an
-update's job and is deliberately not offered.
-
-The two halves are not equal and cannot be made so:
-
-- **Android does the whole thing.** The `.apk` is downloaded (`expo-file-system`) and handed to
-  the system installer (`expo-intent-launcher`, `REQUEST_INSTALL_PACKAGES`). Because every release
-  is signed with the same EAS keystore this is an **update, not a reinstall**, so Android keeps the
-  app's data and *the shop survives untouched*. That is the one reason this route is worth a
-  sensitive permission.
-- **iOS cannot install an `.ipa` from inside an app.** No API, no entitlement, no permission —
-  this is iOS, not Expo. So iOS is told plainly and handed the release page, and because the
-  repository's `.ipa` is unsigned, re-signing it is usually a *fresh* install. That is why the
-  iOS wording is the one place in the game that tells the player to export a backup first.
-
-Three things not to undo:
-
-- **`check-updates.cjs` asserts the installer is present, and that reverses what it used to say.**
-  The APK route was once the whole update mechanism and was dropped for EAS Update; it is back for
-  the narrow job above only. The comment there says so, so that nobody "fixes" it back.
-- **The new-file offer takes precedence over the update offer** in `App.tsx`. In practice they
-  never compete, for the reason in the first paragraph; the precedence is written down so that if
-  that ever stops being true, the player hears about the one that can actually fix their app.
-- **It is checked once a launch, like the update**, and both are held back while a shift is
-  actually running (`shown` in `App.tsx`) — a card that takes every touch must not be able to
-  drain three patience timers while it is read.
+A cold first visit waits several seconds on the loading screen instead of opening the menu at once
+and filling the kitchen in later. A repeat visit is served by the worker's cache, and in the
+Capacitor shell the files are already on the device, so it only decodes.
 
 ### Keeping the shop across a reinstall
 
 Three layers, in the order they are relied on:
 
-1. **An in-place update keeps the data** — the Android route above, and nothing for the player to
-   do. This is the normal case.
-2. **`android.allowBackup`** is written into `app.json` rather than left to Expo's default,
-   because the save now leans on it: it is what can bring a shop back after a genuine uninstall.
-   Best-effort and account-dependent, so it is a safety net and not a plan.
+1. **A newer `.apk` installs over the old one and keeps its data** — same app id, same committed
+   signing key (see "Playing on a phone"). This is the normal case, and on the installed page there
+   is nothing to install at all.
+2. **`android:allowBackup="true"`** in `android/app/src/main/AndroidManifest.xml`, because the save
+   leans on it: it is what can bring a shop back after a genuine uninstall. Best-effort and
+   account-dependent, so it is a safety net and not a plan.
 3. **A backup code the player keeps** (`src/game/saveCode.ts`, offered under "Sao lưu tiệm" in the
-   settings card). The only remedy that works on iOS without a paid developer programme, and the
-   only one that survives an uninstall for certain.
+   settings card). The only remedy that works on iOS, the only one that survives an uninstall for
+   certain, and the way a shop moves between the installed page, the app, and the old app.
 
 The code is **the same bytes `save.ts` already writes**, base64 over UTF-8 with a fingerprint on
 the end — wrapped rather than re-described, because a second serializer would be a second thing to
 keep in step with `GameState` and the first to fall behind would be the one nobody tests. Base64
 because the save is full of Vietnamese names and raw JSON is the kind of string a chat app
-helpfully "corrects"; hand-rolled because `btoa` is not reliably present in a React Native runtime.
-The fingerprint is not security — the web save sits in `localStorage` — it is there because a code
-copied by hand arrives truncated often enough to matter, and a truncated base64 blob still parses
-into *something*. `parseGame` is the same gate a stored save goes through, so a restored shift comes
-back paused and a code from a build whose ingredients are gone is refused rather than half-applied.
-`tools/check-reinstall.cjs` covers the round trip, the refusals, and pins the payload against
-Node's own base64 — a round trip alone cannot tell UTF-8 from CESU-8, because this decoder reverses
-both.
+helpfully "corrects"; hand-rolled because `btoa` mangles anything outside Latin-1, which is most of
+a Vietnamese save. The fingerprint is not security — the save sits in `localStorage` — it is there
+because a code copied by hand arrives truncated often enough to matter, and a truncated base64 blob
+still parses into *something*. `parseGame` is the same gate a stored save goes through, so a
+restored shift comes back paused and a code from a build whose ingredients are gone is refused
+rather than half-applied. `tools/check-backup-code.cjs` covers the round trip, the refusals, and
+pins the payload against Node's own base64 — a round trip alone cannot tell UTF-8 from CESU-8,
+because this decoder reverses both.
 
-On the web, the one thing that had to change for this is `public/index.html`: the blanket
-`user-select: none !important` that makes the page a game surface also made the code impossible to
-copy, so `input, textarea` get an `!important` exception. The web is the one platform with no
-long-press "select all" to fall back on.
+The blanket `user-select: none` that makes the page a game surface also made the code impossible to
+copy, so `input, textarea` get an exception in `src/styles.css`.
 
-The menu **scrolls** (`flexGrow` keeps the spread-out layout wherever there is room). It has no
-vertical slack — on a 375x667 phone the logo was already sliding under the awning before anything
-was put above the card — so nothing that only sometimes appears may crop the shop's own name.
+The menu **scrolls**. It has no vertical slack — on a 375x667 phone the logo was already sliding
+under the awning before anything was put above the card — so nothing that only sometimes appears
+may crop the shop's own name.
 
 ### What the game's clock is allowed to redraw
 
-A shift ticks every `TICK_MS` and each tick is a new `GameState`, so **every tick is a render of
-both pages**. On a phone that is the most expensive repeating thing in the app, and it used to
-reach everything: `KitchenStation` was not memoized and the object of shared props it spread into
-the equipment was rebuilt every time, so six dispensers, six topping containers, the ice machine,
-the bottles, their contact shadows and the cup were all reconciled ten times a second — on the
-same JavaScript thread that the drag gestures are delivered on. That is why dragging and panning
-stuttered on a phone and felt fine in a browser, where there is a JIT and no bridge. Four rules
-keep it out:
+A shift ticks every `TICK_MS` (`src/clock.ts`) and each tick is a new `GameState`. Nothing is
+"re-rendered" by it: the scenes and the HTML both **subscribe** and update only what they own.
 
-- **`KitchenStation` is memoized, and every prop it takes has to stay the same between ticks.**
-  Adding one that doesn't — an object or arrow function built in `PrepPage`'s body — silently puts
-  the whole cascade back, and nothing will fail. The same goes for the `shared` object inside it
-  and the `carry` handle `useCarry` returns, which is why `node` is returned *beside* that handle
-  rather than on it: the element is new every render, and the equipment must not see it.
+- **A subscriber compares the slice it cares about** (`useGame(select, equal)`, `useUi`, and the
+  `onState(state, previous)` methods in the scenes). Almost every tick changes nothing but the
+  clock, so almost every tick ends there.
 - **`tick` hands back the same `slots`, `feedback` and `departures` arrays when nothing in them
-  moved** (`unchanged`). Almost every tick changes nothing but the clock, and a fresh copy told
-  every list on both screens it had new contents to draw.
+  moved** (`unchanged` in the reducer). A fresh copy would tell every subscriber that the contents
+  had changed, and those comparisons are what the rule above rests on.
 - **`patienceLeft` is rounded to a fiftieth.** It is drawn as a 20px ring and a 26px heart, where
-  that is half a pixel, and the raw fraction rebuilt both of them on every tick for every customer
-  on the counter.
-- **`TICK_MS` is how often the shop is redrawn, not how accurately it runs.** Every rule is
-  written against the measured `dt`, so this number is free to be as slow as the slowest thing on
-  screen can stand — and after the two rules above, nothing clock-driven can show the difference.
-
-The same reasoning governs a **grab and a drop**, which are the other renders a player feels:
-
-- **Equipment is handed the one fact about the cup it uses, never the drink.** `cupTea`, `full`,
-  `iceScoops`, `sugarPumps`… With `cup` and `build` in the `shared` object, every scoop of
-  anything re-rendered every station in the room on the frame the scoop landed.
-- **A grab tells the room, not the game screen.** `interacting` lives in `KitchenStation` and
-  holds the panorama still. The pager is already locked on the prep page (`scrollEnabled={page ===
-  0}`), so there is nothing above it to tell; it used to be told anyway, and re-rendered the whole
-  screen — customers and all — twice per scoop.
-- **Whatever goes into the cup is dispatched in a `startTransition`** (`GameScreen`'s `pour`,
-  `scoop`, `iceScoop`, `sugarPump`, `pickCup`). The sound and the buzz are immediate; the render
-  of the new drink is sliced, so the scoop's tip and the pieces' fall keep their frames. The
-  reducer is the judge of what may go in, which is what makes a deferred commit safe.
-- **The window's clouds stop while the prep page is up** (`drifting`). The counter is still
-  mounted, off screen, and a moving cloud nobody can see still has the browser restyle and
-  re-layer the page every frame.
+  that is half a pixel.
+- **`TICK_MS` is how often the shop's state moves, not how accurately it runs.** Every rule in the
+  reducer is written against the measured `dt`, so this number is free to be as slow as the slowest
+  thing on screen can stand.
+- **The clock does not drive the canvas.** Phaser runs its own frames; a pour's liquid, a settling
+  cube and a sliding page are tweens and `update()`, not reducer ticks. What the tick does is move
+  the rules on, and anything watching a number it changed.
+- **A hidden page pauses the shift** (`clock.ts`), which is what the app did when it was
+  backgrounded: a player does not lose three patience timers to a phone call.
 
 ### Hands are emptied when the game is put down
 
-A gesture here ends when the finger lifts (see `GRABBY`), and backgrounding the app takes the
-finger away without lifting it: Android ends the touch as the window loses focus and makes no
-promise of delivering a terminate to the responder, which has in any case refused to hand the
-gesture to anyone who might have cleaned up after it. So `KitchenStation` watches `AppState` and,
-on the way out, cancels the carry, stands the cup down, clears `dragging`, and bumps the `abort`
-its dispensers pass to `useHoldPour`.
+Hiding the page takes the finger away without lifting it, and a pointer that never came up leaves
+the kitchen holding something. So `KitchenScene` watches `visibilitychange` and, on the way out,
+`abortAll()`: the pour is stopped and *discarded* rather than committed, the carried tool goes
+back, and the cup is stood down.
 
-None of that is cosmetic. `interacting` is what holds the room still while something is carried
-and the pager is frozen for the same reason, so a drag that never ended left the prep page a
-picture: the wall would not pan, the swipe back to the counter did nothing, and a scoop was stuck
-to the middle of the screen. It looked exactly like the app hanging, and it was reported as that.
-The pour is the worst of the three to leave running, because `onCommit` measures how long the tap
-was held off the wall clock — a tap still open when the game was put down would tip however long
-the player was away into the cup and ruin a drink they never touched, so what had run is
-discarded rather than committed.
+None of that is cosmetic. While something is carried the panorama is held still and the pager is
+frozen, so a drag that never ended left the prep page a picture: the wall would not pan, the swipe
+back to the counter did nothing, and a scoop was stuck to the middle of the screen. It looked
+exactly like the game hanging, and it was reported as that. The pour is the worst of the three to
+leave running, because how long the tap was held is measured off the wall clock — a tap still open
+when the game was put down would tip however long the player was away into the cup and ruin a drink
+they never touched.
 
 ### The two pages (swipe navigation)
-`GameScreen` keeps the reducer state, the tick loop, haptics and the `measureInWindow` refs, and hosts a
-horizontal `pagingEnabled` `ScrollView` with `CounterPage` (left) and `PrepPage` (right). The `PageTabs`
+
+`src/game/pager.ts` owns one number, `uiState.pageOffset` (0 = counter, 1 = kitchen, in between
+mid-swipe): the two scenes' cameras and the HTML of both pages follow it, so a page slides as one
+piece. A finger drags it (`dragPage`), letting go settles on whichever page is nearer or wherever a
+flick was aimed (`releasePage`), and a tab taps straight to one (`goToPage`). The `PageTabs`
 indicator under the HUD highlights the active page and badges each side (Quầy = # waiting to order,
-Pha chế = # tickets to make); tapping a tab scrolls the pager (swiping is the primary gesture). Because
-`PrepPage` is off-screen until swiped to, it re-measures its machine/bin positions when the parent bumps
-its `measureToken` on scroll-settle, and reports them up via `onGeometry` for the effects overlay.
+Pha chế = # tickets to make). Swiping is the primary gesture; the tabs are the shortcut.
+
+The kitchen's own horizontal swipes belong to its panorama — the wall is reached by dragging it —
+so the counter is reached from the kitchen by the tab, while the kitchen is reached from the
+counter either way.
+
 
 ### The shop's money
 
@@ -609,54 +473,44 @@ Three decisions worth not re-litigating:
 
 ### The shop's sound
 
-Effects are recorded Foley: 29 edited WAV clips from 14 CC0 sources. src/audio/clips.ts names
-assets; sounds.ts defines action layers, alternate takes, buses, priorities and cooldowns;
-foley.ts schedules a bounded player pool, live fill for pours and cancellation. audio.ts
-handles Expo/browser lifecycle and the separate music crossfades. No audio props or context
-should be threaded through the memoized kitchen.
+Effects are recorded Foley: 29 edited WAV clips from 14 CC0 sources. `src/audio/clips.ts` names the
+files; `sounds.ts` defines action layers, alternate takes, buses, priorities and cooldowns;
+`foley.ts` schedules a bounded player pool, live fill for pours and cancellation; `audio.ts` is the
+lifecycle and the music crossfades. `src/sound.ts` is the only thing that watches the shop and
+decides what to play — the scenes and the UI never reach for the engine themselves.
 
-**On the web, sound is Web Audio, not `expo-audio`** (`src/audio/webAudio.ts`). `expo-audio`'s
-web player is an `<audio>` element per player — over fifty in a shift — and cycling them through
-pause, seek and play on every grab and drop is what made the web build lag once sound arrived,
-on desktop and phone alike. Headless benchmarks cannot see it (their audio goes to a null device);
-turning both volumes to 0 on a real device is what found it. Decoded buffers and a throwaway source
-per cue cost almost nothing. Native keeps `expo-audio`. See docs/audio.md.
+**Everything plays through Web Audio** (`src/audio/webAudio.ts`): one decoded `AudioBuffer` per
+clip, and a throwaway source node per cue. The obvious alternative is an `<audio>` element per
+player — over fifty in a shift — and cycling those through pause, seek and play on every grab and
+drop is what made the game lag once sound arrived, on desktop and phone alike. Headless benchmarks
+cannot see it (their audio goes to a null device); turning both volumes to 0 on a real device is
+what found it. A runtime with no `AudioContext` gets no sound at all, says so once, and plays on —
+there is no second kind of player any more. See `docs/audio.md`.
 
-The originals and license/checksum manifest live in tools/audio/. Rebuild effects with
-node tools/audio/build-foley.cjs (offline ffmpeg required). The two original music loops stay
-byte-identical and are built by tools/make-music.cjs. The old effect synthesizer is retired.
-Open tools/audio/audition.html to audition shipped clips. Full details: docs/audio.md.
+The originals and the license/checksum manifest live in `tools/audio/`. Rebuild effects with
+`node tools/audio/build-foley.cjs` (offline ffmpeg required). The two original music loops stay
+byte-identical and are built by `tools/make-music.cjs`. Open `tools/audio/audition.html` to
+audition shipped clips.
 
-Keep these behaviors: mix with other audio, no recording/background playback, web gesture unlock,
-no stale sounds after pause/background/teardown, and music outside effect warmup. Serve cues read
-departures rather than feedback; saved volumes migrate and clamp without increasing SAVE_VERSION.
-Cue delays share the visual motion constants in src/game/effectTiming.ts. Audio arithmetic checks
-do not replace listening on a phone.
+Keep these behaviours: the first gesture is what unlocks sound (a browser will not play before one,
+and there is no way to ask whether it will); a hidden page stops everything and lets go of the audio
+device; nothing stale restarts on return; and music is built outside the effect warmup. Serve cues
+read `departures` rather than `feedback`; saved volumes migrate and clamp without increasing
+`SAVE_VERSION`. Cue delays share the visual motion constants in `src/game/effectTiming.ts`.
 
-**Two things about `expo-audio` that a browser will never show you.** Both of these shipped a
-game whose effects were silent on a real phone while every check was green, which puts them in
-the same class as the `react-native-svg` gaps under Conventions — and `tools/check-native-audio-api.cjs`
-reads the SDK's own Swift and Kotlin for the first of them, because nothing else will.
+**The trap that is worth keeping written down**, because the shape of it outlives the library it
+came from: the player the game used to run on documented `playbackRate` as a property, gave it a
+real setter in its web class, and declared it getter-only on both phones. In `foley.ts` the
+assignment sat between the volume and the `play()` inside one `try`, so on a phone the throw was
+caught, logged to a console nobody reads, and **the `play()` never ran** — every one-shot in the
+game was silent while the music and the pour loop carried on, because neither touches the rate on
+its way to playing. So `FoleyPlayer` asks for `setPlaybackRate(rate)` as a **method**, with nothing
+to assign to, and the player stub in `check-audio-engine.cjs` keeps `playbackRate` an accessor with
+no setter. A stub that flatters the code is worse than no stub: that one went green through the
+whole outage.
 
-- **The rate is a method, never a property.** `playbackRate` is documented as a property and the
-  *web* player gives it a real setter, so assigning to it works perfectly in a browser. On both
-  iOS and Android it is declared `Property("playbackRate")` with no `.set` — getter-only — so the
-  assignment throws a TypeError in the bundle's strict mode. In `foley.ts` it sat between the
-  volume and the `play()` inside one `try`, so the throw was caught, logged to a console nobody
-  reads on a device, and **the `play()` never ran**: every one-shot in the game was silent, while
-  the music and the pour loop carried on because neither touches the rate on its way to playing.
-  Use `setPlaybackRate(rate)`, which exists on all three platforms, and call it before `play()` —
-  iOS starts playback at `currentRate`, and that is the only thing that sets it.
-- **"Silent mode" is not one concept.** On iOS the switch exists to silence exactly this kind of
-  app, so `playsInSilentMode` is **false** there. Android has no such switch: what the flag
-  consults is `ringerMode == RINGER_MODE_NORMAL`, which governs calls and notifications and has
-  nothing to do with the media stream a game plays on — and the check sits at the top of the
-  native `play()` and returns early, so a phone left on vibrate got no sound at all and nothing on
-  screen to explain why. It is `Platform.OS !== 'ios'`, and the test asserts both halves.
+Audio arithmetic checks do not replace listening on a phone.
 
-The test stub in `check-audio-engine.cjs` is faithful to the **native** player and not the web one
-for this reason: `playbackRate` is an accessor with no setter there, so it throws in the harness
-exactly as it throws on a device. A stub that flatters the code is worse than no stub.
 
 ### Game modes
 
@@ -681,246 +535,152 @@ card is centred with no slack, and sideways on a short phone the sound section a
 of it fell off the bottom. The day-1 instructions on both the title screen and the opening sign
 change their first line to match the mode.
 
-The two pages share one shop's palette — warm wood, cream tile and the shop's pink — so swiping feels
-like turning around inside it. The Counter uses `ShopBackdrop`; the kitchen is `KitchenRoom`, drawn by
-`KitchenStation` itself (it needs the same shelf lines the layout computes) and themed from the `SHOP`
-palette it exports.
+The two pages share one shop's palette — warm wood, cream tile and the shop's pink — so swiping
+feels like turning around inside it. The counter's wall is SVG (`art/shopBackdrop.ts`, drawn by
+`counter/Backdrop.ts`); the kitchen is one painted plate (see "Standing things on a painting").
 
-**The drink is made by hand, not picked from a list.** `KitchenStation`
-(`src/components/KitchenStation.tsx`) is a room, not a menu, and **the cup is a physical object you drag
-around it** (`PanResponder`; the room stops panning while you hold it).
-A cup comes off the rack by **tapping** its size — it goes straight onto the mat — or by dragging
-it there (`CupStation`); a drop anywhere on the mat counts.
-`layoutKitchen(config, w, h)` places everything absolutely, **on the surfaces the painting already
-has** (`LEVELS`): the tea dispensers in the open shelf across the top, the toppings in their stand
-in the tiled alcove, the ice/sugar/milk/foam on the bench nearer the viewer, and the cup on its
-coaster through the middle of the work top. Each dispenser gets a **dock**: the spot the cup is held
-while that tap runs into it, just under its shelf.
-Dropping the cup still standing on the work top sends it home.
+### The room you work in
 
-- **Tea tanks are anchored to the panoramic background's second rack on the left.**
-  `ROOM_BG_TEA_SHELF` gives the shelf coordinates in `kitchen-background.png`; `fitBackground`
-  projects both the image and tanks at the same scale. Tanks are children of the background's
-  ScrollView content, so they remain rigidly attached to the shelf. `panOffset` is only used for
-  hit testing and positioning the cup/stream, never for moving the tank graphics. Start at the left shelf, with available
-  teas growing from left to right along the top shelf and then down to the second, in six fixed
-  slots that are the catalogue's own order — so the week unlocks them across the rack and down. The new transparent `tea-tank.png` frame
-  supplies the dark lid, glass highlights and lever tap. Shaded tea is rendered behind it and
-  `TeaTankMount` supplies a static metal shelf bracket with bolted end plates, a beveled rail,
-  bent cradle arms and a contact shadow, behind the tank's lower collar and clear of its tap.
-  each tank has its own Vietnamese name tag above the lid, keeping the chamber clear. The tank
-  frame is memoized and does not scale, dim, or change opacity when the cup is carried around it. Toppings also share the panorama; the remaining equipment keeps its existing art and layout.
-- **Pour directly in the room.** Drag the cup under a visible tank and release to snap beneath
-  its spout. The cup scales to the shelf gap and its base rests on the lowest shelf surface,
-  with a small contact shadow; picking it up restores its carrying size. `findStation` tests that particular tap in screen coordinates, including the pan
-  offset. Hold its tap (`useHoldPour`) to raise the live liquid level; releasing commits the
-  amount and leaves the cup docked, ready for another pour. Drag the cup away to undock it.
-  A tank cannot pour until the cup is docked beneath it, and a cup holding a different tea locks
-  that tank. Panning returns
-  a docked cup to its holder; scrolling is frozen during cup/tool dragging or pouring.
-  `Stream` draws behind and in front of the cup, split at its scaled lip, with moving highlights
-  and a trailing drop on release. `Spill` shows overflow.
-  The removed tea-station dialog is no longer part of the game.
-- **A small horizontal meter floats beneath the order bubble** while the cup is docked.
-  It is a 220×20px overlay, with no separate panel, idle placeholder or reserved scene space.
-  `KitchenStation` reports its live shared level to `PrepPage`; the room and taps keep their
-  geometry when the bar appears. The order panel stays fixed; the bar floats at the top of the
-  room, clear of it.
-  Quarter marks and an inline Cạn / Ít / Nửa ly / Gần đầy / Đầy label show the current fill,
-  without percentages or a serving target. The gauge fills smoothly from left to right;
-  overflow displays Tràn ly! and turns the track border pink. The bar passes all touches through.
-  Its animated width uses the cup's `pourLevel` mapping against an inner track, so a full cup
-  covers the entire bar without a measured-width scale transform. The bright front of the fill
-  fades out over the last few percent: it is the liquid's leading edge, and held on to the end it
-  sat between the fill and the track's rounded cap, where it read as a gap the bar never closed.
-  **The label's bands are not the quarters the marks are drawn at.** It used to be
-  `floor(level * 4)`, which called a cup a quarter full "Cạn" — dry — and only ever said "Đầy" at
-  exactly 1, so a held tap ran from "Gần đầy" straight to "Tràn ly!" without passing through full.
-  The bands are their own list in `PourFeedback`, and "Đầy" covers the last eighth, where the cup
-  is drawn brim-full.
-  Band accessibility updates use `useAnimatedReaction`, with no JS polling.
-  There is no minimum amount required to serve and no fill-based tip bonus. Overflow still marks
-  a messy drink. The cup and its holder remain horizontally centered at rest.
-- **Toppings stand in upright glass containers in the middle cabinet**, three across in two
-  rows, to the left of the syrup recess. `ROOM_BG_TOPPING_SHELF` measures their positions in
-  `kitchen-background.png`; `fitBackground` projects them at the painting's scale. Containers,
-  empty slots and each container's cream nameplate are children of the same background
-  ScrollView as the tea tanks, so they remain attached while panning. Each available topping
-  carries a compact, single-line Vietnamese name on its lid, clear of the ingredients.
-  Fixed slots are the catalogue's own order, read like a page: left to right along the back row,
-  then the next row forward. The week therefore fills the tray from its back-left corner.
-  Each pan carries its name on a small cream card clipped to its near lip, the one band of steel
-  the ingredients never reach over (`TOPPING_TAG` in `toppingArt.ts` places it, and the card is
-  kept inside its own pan so nine of them never touch). Unlock order stays unchanged; `TOPPING_BOX_EMPTY` fills unavailable
-  slots, while `TOPPING_BOX[id]` draws an available container. New sprites are extracted from
-  `tools/sheets/topping-shelf-boxes.png` by `tools/cut-topping-boxes.py`; the prompt and workflow
-  are in `tools/topping-station-prompt.md`. Legacy `BIN` assets are retained for older art.
-  The whole container is a touch target. Grabbing one names it on the hint line and lifts the
-  existing painted `SCOOPFUL[id]`. `useCarryGesture` subtracts the panorama's current offset
-  before starting the carried tool in screen coordinates; the background and pager freeze
-  until release. Drop it on the centered cup to add it. Duplicate and topping-limit guards
-  stay unchanged, and existing scoopfuls and cup pieces are reused.
-- **Ice is available from day one.** The painted ice machine beneath the tea rack is the touch
-  target, measured by `ROOM_BG_ICE_MACHINE`. It and its cream/pink “Đá” plaque live inside the
-  panorama, so panning keeps the hit area and scoop origin attached to the machine.
-  The machine itself is only the original background painting, with no drawer overlay or count.
-  Drag into the cup once for ít đá, twice for đá
-  thường; no scoop means không đá. The legacy ice-pan sprite is no longer rendered.
-  The compact plaque sizes to its icon and text with 5 panorama pixels of padding on each side,
-  without reducing the machine's touch target.
-  `PIECE.ice` uses the blue `piece-ice-v2.png` in ingredient icons;
-  `SCOOPFUL.ice` is a complete silver scoop with a pink grip and contained blue cubes.
-  `CupIce` uses the separate neutral `CUP_ICE` sprite (`piece-ice-clear.png`) inside the drink.
-  Twelve varied sizes/angles render from back to front; one scoop uses three cubes, two use
-  twelve. Chunky 27–36-unit cube bodies are larger than topping pieces. Four exposed cubes
-  sit across the surface with varied immersion, heights
-  and tilts; the rest scatter below the surface with room between their centers,
-  rather than putting every extra cube in the same narrow band at the surface. Fully submerged
-  pieces have no surface contact ring.
-  Existing cubes keep their positions when the second scoop is added. Dry ice rests
-  on the ingredient bed; liquid raises it to the surface through shared animated SVG geometry.
-  `createIceLayout(cupId)` varies the first scoop's floating tilts and samples scattered
-  second-scoop placements once per cup, with different
-  resting tilts, floating angles, and immersion depths. Samples too close after fitting the glass
-  are retried; adding the second scoop keeps the first scoop in place. The seed keeps the layout stable
-  through pours, game ticks and reloads, while fresh cups get different arrangements.
-  **Where the ice is *now* is worked out once a frame, for the whole tray, by `useIcePlacements`**,
-  which `KitchenCup` calls and both sides of the waterline share. Each cube appears four times over
-  — drawn above the tea, drawn below it, its contact shadow and its meniscus — so leaving the fit
-  inside each of those ran `cupIcePosition`, an eighteen-point fit of the painted outline against
-  the tapered glass, forty-eight times a frame for twelve answers. It fits the whole `ICE_LAYOUT`
-  rather than the cubes currently in the cup, so an index means the same thing however many scoops
-  have gone in and a cube cannot mount off the end of an array that has not caught up with it.
-  `cupIceRestPosition` fits the actual rounded cube outline to the curved floor; the first scoop
-  touches that floor, while later pieces stack with varied overlap and small contact shadows.
-  New cubes settle briefly, then tilt and spread as tea lifts them, without any looping motion.
-  Rounded front, top and side faces render with distinct frosted blue-grey shading and dark
-  outer edges, independent of the sprite's alpha. The clear painting contributes only subtle
-  surface texture. White face seams and broad glints keep ice readable at phone scale in both
-  tea and milk tea. The ice above the waterline is drawn **over** the cup's painted front wall
-  rather than punched out of it, so the upper dry-pile cubes are as crisp as those on the floor
-  while submerged ice keeps the glass wash. `KitchenCup` draws `CupIce` twice for this, once per
-  side of the waterline (`layer="submerged"` then the wall then `layer="exposed"`), sharing one
-  `createIceLayout`. It used to be a mask built out of `<Use>`d silhouettes, which is the one
-  thing in this game that a browser drew and a phone could not — see "Drawing on a phone" below.
-  Every cube is split by one shared `cupIceFillPath` **mask** and its even-odd complement; it is a
-  mask and not a clip because it moves with the tea, and a clip would have stopped at the level the
-  ice was added at. It uses the near
-  arc of the same tea oval, while the tea's rear arc stays behind the crowns; contact strokes
-  follow that near arc too. Projected depth
-  affects cube placement only, so it cannot create a separate liquid level on each face.
-  the submerged body is softened and tea/milk-tinted, with a small contact meniscus to anchor
-  it to the surface. Cup ripples animate without moving its entire oval independently of the ice
-  and glass. `cupIcePosition` seats each cube against the shared oval's front edge, varying its height
-  with immersion and a small depth offset,
-  without the former upper-height clamp that stopped later pours moving the ice. The live level
-  is read unconditionally so every pour remains subscribed. Cubes stay inside the tapered cup
-  by fitting their actual rotated outlines to the walls, and remain still on game-clock ticks.
-  Their separate `CUP_ICE_WELL` clip allows crowns into the
-  clear space below the lip, so a full cup does not trim them into a flat surface cap.
-  Sources and built-in imagegen prompts are in `tools/ice-art-prompts.md`; repackage them with
-  `python3 tools/cut-ice-art.py`, preserving the source transparency.
-- **Everything else — carry it to the cup.** The topping bins, the ice machine, the syrup bottle, the milk
-  cartons and the foam tubs are dragged: `useCarry` keeps what's in hand, draws the tool following the
-  finger above everything else, and on release either tips it into the cup (`SCOOP` / `ICE_SCOOP` /
-  `SUGAR_PUMP`, or `POUR` of `MILK_SPLASH` for a carton) or puts it back. The cup doesn't move for these —
-  drop onto it wherever it stands. Syrup shows how many pumps went in on the machine itself.
-  Milk takes room in the cup, so a cup filled to the brim with tea has nowhere to put it.
-  **While the cup is docked under a tap, none of it can be picked up.** Every carried tool dims
-  and answers a touch with `Ly đang ở dưới vòi … — kéo ly ra trước` rather than lifting — it still
-  takes the touch, so the room does not pan out from under it. The cup is up at the shelf, nowhere
-  near the bench, and a drop counts over the cup's *home* as well as over the cup itself: a scoop
-  tipped onto the coaster it left behind went into a cup that was not there.
+**The drink is made by hand, not picked from a list.** `KitchenScene` is a room, not a menu, and
+**the cup is a physical object you drag around it**. A cup comes off the rack by tapping its size —
+it goes straight onto the mat — or by dragging it there; a drop anywhere on the mat counts.
+`layoutKitchen(config, w, h)` (`kitchen/layout.ts`) places everything **on the surfaces the
+painting already has**: the tea dispensers in the shelf across the top, the toppings in their stand
+in the tiled alcove, the ice machine under the rack, the syrup, milk and foam on the bench nearer
+the viewer, and the cup on its holder through the middle of the work top. Each dispenser gets a
+**dock**: where the cup is held while that tap runs into it.
 
-**Tea slots remain fixed across days**, filling the second rack from left to right. The tank art
-is sized to the rack and available space below its spout, independently of the other equipment.
-The remaining equipment keeps its existing bench scale and positions: rows can be swiped when they
-overflow, while a vertical lift carries the tool. Each `Frame` applies the shared row offset to
-its own touch target; the nonanimated row wrapper passes empty-space touches through to the
-panorama and topping containers. `carry.cancel` puts a tool back when
-the gesture becomes a swipe; row offsets are clamped when a new day changes the available equipment.
+Everything is anchored to the painting rather than to the screen, through `fitBackground` and the
+boxes measured in the plate's own pixels — `ROOM_BG_TEA_SHELF`, `ROOM_BG_TOPPING_SHELF`,
+`ROOM_BG_ICE_MACHINE`, `ROOM_BG_CUP_HOLDER`. The wall pans; the equipment pans with it because it
+is placed in the same space, and `findStation` tests a touch in that space too. The cup does not
+pan: it is the one thing that belongs to the player's hand.
 
-**All of this is the raw responder API (`GRABBY`), not `Pressable`**: a `Pressable` cancels its press when
-the finger drifts or the browser decides it was a long-press, which cut pours short. These gestures end
-only when the finger actually lifts, and the room is held still (`interacting`) for the duration. Equipment
-shows no "added ✓" badges — the order slip is the checklist; machines only dim when they're locked out.
+- **Pour by docking.** Drag the cup under a visible tank and release to snap beneath its spout; the
+  cup scales to the shelf gap and stands on the lowest shelf surface with a small contact shadow.
+  Hold the tap to raise the live level; releasing commits the amount and leaves the cup docked,
+  ready for another pour. Drag it away to undock. A tank cannot pour until the cup is docked
+  beneath it, and a cup holding a different tea locks every other tank
+  (`Ly đã có trà khác — đổ bỏ để pha lại`). Panning returns a docked cup to its holder. The stream
+  draws behind and in front of the cup, split at its lip, and spills over the brim.
+- **Everything else is carried to the cup.** The topping containers, the ice machine's scoop, the
+  syrup bottle, the milk cartons and the foam tubs are dragged: what is in hand follows the finger
+  above everything else, and on release either tips into the cup (`SCOOP` / `ICE_SCOOP` /
+  `SUGAR_PUMP`, or `POUR` of `MILK_SPLASH` for a carton) or goes back. The cup does not move for
+  these — drop onto it wherever it stands, and a drop counts over the cup's *home* as well as over
+  the cup itself, because a scoop tipped onto the coaster it left behind went into a cup that was
+  not there. Syrup shows how many pumps went in on the machine itself. Milk takes room in the cup,
+  so a cup filled to the brim with tea has nowhere to put it.
+- **While the cup is docked under a tap, nothing can be picked up.** A touch on any tool answers
+  `Ly đang ở dưới vòi … — kéo ly ra trước` rather than lifting, and still takes the touch, so the
+  room does not pan out from under it. The cup is up at the shelf, nowhere near the bench.
+- **The slots are fixed.** Teas fill the rack left to right and then down, toppings fill their
+  stand like a page — left to right along the back row, then the row in front — both in the
+  catalogue's own order, so the week unlocks them across the rack and across the tray. An
+  unavailable slot is drawn empty rather than closed up, so nothing moves when a day unlocks
+  something. Each one carries its Vietnamese name: a tank's above its lid, a container's on a cream
+  card clipped to its near lip (`TOPPING_TAG` in `toppingArt.ts` places it, inside its own pan, so
+  nine of them never touch).
+- **A gesture ends when the finger lifts**, never because it drifted or was held too long — that
+  cut pours short — and the room is held still for the duration. Equipment shows no "added ✓"
+  badges: the order slip is the checklist, and machines only dim when they are locked out.
 
-A drink can be served once tea has been chosen by pouring any positive amount. Serving and tips
-do not depend on a fill threshold. `Spill` shows overflow when the live level goes over the brim.
-The docked cup casts a soft elliptical contact shadow matched to its narrow foot.
+A drink can be served once tea has been chosen by pouring any positive amount. Serving and tips do
+not depend on how full the cup is; overflow still marks a messy drink.
+
+### The pour meter
+
+A small horizontal meter floats beneath the order card while the cup is docked (`ui/PourMeter.tsx`)
+— an overlay, with no panel, no idle placeholder and no reserved space in the room, and it passes
+every touch through. Quarter marks and an inline Cạn / Ít / Nửa ly / Gần đầy / Đầy label show the
+fill, without percentages and without a serving target; overflow says Tràn ly! and turns the track
+border pink. The fill animates from the left against an inner track, using the cup's own
+`pourLevel` mapping, so a full cup covers the whole bar. The bright leading edge fades out over the
+last few percent: held to the end it sat between the fill and the track's rounded cap, where it
+read as a gap the bar never closed.
+
+**The label's bands are not the quarters the marks are drawn at.** They used to be
+`floor(level * 4)`, which called a cup a quarter full "Cạn" — dry — and only ever said "Đầy" at
+exactly 1, so a held tap ran from "Gần đầy" straight to "Tràn ly!" without passing through full.
+The bands are their own list, and "Đầy" covers the last eighth, where the cup is drawn brim-full.
+
+### Ice in the cup
+
+Ice is available from day one: drag the scoop in once for ít đá, twice for đá thường; no scoop
+means không đá. One scoop is three cubes, two is twelve.
+
+`createIceLayout(cupId)` (`art/iceLayout.ts`) decides where they all go, once per cup, from the
+cup's id — so the arrangement is stable through pours, ticks and reloads, while a fresh cup gets a
+different one. It lays out the whole tray rather than the cubes currently in the cup, so adding the
+second scoop cannot move the first, and an index means the same thing however many scoops have gone
+in. Placements are fitted, not guessed: `cupIceRestPosition` fits the actual rounded cube outline
+to the curved floor, `cupIcePosition` seats a floating cube against the front edge of the shared
+tea oval with its own immersion and depth, and samples that land too close after fitting are
+retried. Dry ice rests on the ingredient bed; tea lifts it to the surface, where four cubes sit
+across the waterline with varied immersion and tilt and the rest scatter below it with room
+between their centres. Cubes settle briefly when they land, then stay put.
+
+The waterline is where the drawing gets its care: the submerged body is softened and tinted by the
+tea (more so with milk), with a small meniscus to anchor it to the surface, and the exposed crown
+is drawn over the glass's front wall so it is as crisp as a cube on the floor. Crowns are allowed
+up into the clear space below the lip, so a full cup does not trim them into a flat cap.
+
+Sources and the imagegen prompts for the ice art are in `tools/ice-art-prompts.md`; repackage them
+with `python3 tools/cut-ice-art.py`, preserving the source transparency.
 
 ### Liquid and glass layers
-`TeaLiquid` renders the kitchen liquid inside the tank's transparent chamber and the cup's traced
-well. The existing glass sprites, linework, cat decal, ice, toppings and foam remain intact.
-The cup's existing painted tea textures blend with opaque colour shading and depth gradients.
-The cup's painted glass is split by depth: the inner-floor detail draws behind the contents;
-the front wall reflections, rim and near base edge draw in front. This lets toppings naturally
-occlude the rear base rings instead of having a bright oval painted over the pile. Both parts
-reuse the original sprite. Glass opacity follows only actual tea fill (22% over the liquid);
-adding toppings never switches glass opacity or changes its masks. The liquid wash likewise
-follows only actual tea, with no artificial topping fill level.
-The shared inner mask is inset from the painted wall highlights;
-the surface follows its taper, and foam uses the same mask and live surface width.
-Tank tea instead uses fully opaque vector shading with stronger color and depth; enlarged raster
-textures no longer soften its chamber. The original tank glass and hardware remain intact. The surface
-is a complete oval with the same perspective as the cup rim, narrowing with its tapered walls.
-A painted meniscus, crescent highlight and curved reflection sit at its surface. Cup milk color blends with tea to give a
-creamier tint. All liquid stays clipped inside the glass; the cup linework and decal draw last.
 
-`CupToppings` reuses the painted `PIECE` sprites in seventeen smaller, staggered positions per
-portion. Back pieces are smaller and softer, front pieces overlap them, and their feet follow
-the cup's curved inner floor. `cupToppingPosition` fits the entire rotated sprite inside the
-narrower inner-floor opening, with 2.5 sprite pixels of clearance from its walls and curved base.
-The pile is packed towards the center so the clipping mask remains a containment safeguard,
-not a way to crop oversized pieces. Contact shadows and a liquid-clipped colour wash make submerged
-pieces belong to the tea; milk adds a stronger creamy wash. **The wash is drawn once per band of
-the pile, not once per piece.** It is the live tea boundary, so it is rewritten and re-rasterised
-as the drink moves, and a piece at a time was seventeen of those a portion — fifty-one for a
-finished drink, every frame of every pour and every settle. The three rows of `BED` are the depth
-bands the wash's strength is a function of, and their pieces are spaced wider than they are round,
-so a row is the grain that keeps the picture: the gradient from the back of the pile to the front
-survives, and a near piece still covers a far one's wash. Each additional ingredient adds its
-own portion behind the existing pile, preserving the first ingredient's positions. Deterministic
-variation keeps pieces stable on clock ticks. A short `withTiming` fall settles a new portion;
-ice, foam, the front glass reflections and the cat decal remain in front of the pile.
+The cup is painted in one pass by `kitchen/cupPainter.ts`, in the design's own 113×174 sprite
+space, in this order: the faint cool glass backing, the tea inside the traced `CUP_WELL`, the
+submerged ice and the pile of toppings, the exposed ice, foam, then the glass's front reflections,
+its edge highlights and the cat decal. Every moving boundary — the tea's surface, the waterline the
+ice is split at, the wash over each band of the pile — is a **canvas clip**, which costs nothing
+and can move freely.
 
-During pouring, two expanding surface ripples, small rising bubbles and shifting light reflections
-respond to the stream. The tank's
-surface responds gently. Loops run only while a tap is held and are canceled when it stops; surface
-movement settles instead of keeping the kitchen in constant motion. `TankGraphic` is memoized so
-unrelated cup gestures don't redraw its image or SVG. No tank frame transforms or locked-opacity
-crossfades are applied.
+What the painting is allowed to decide, and what the geometry is:
 
-Liquid geometry is a `useDerivedValue` shared directly by every animated SVG layer. Keep those
-subscriptions explicit: hiding the level inside a plain helper closure made the surface update only
-on the 100ms game-clock renders. Animated SVG hooks include dependencies for web support.
-`KitchenCup` and `TeaLiquid` are memoized, and the station memoizes the preview drink so clock ticks
-do not rebuild liquid mappers. Docking prepares the selected tea's textures at zero opacity before
-the tap is opened, avoiding first-pour image decoding stutter.
+- **The tea's surface is a complete oval** with the same perspective as the cup's rim, narrowing
+  with the tapered walls, carrying a painted meniscus, a crescent highlight and a curved
+  reflection. `cupGeometry.ts` is the one place its coordinates come from, and the stream and the
+  foam read the same ones.
+- **The glass's painted detail is split by depth**: the inner-floor detail is drawn behind the
+  contents, the front wall, rim and near base edge in front — so a pile of toppings occludes the
+  rear base rings instead of having a bright oval painted over it.
+- **Glass opacity follows the tea and nothing else.** Adding toppings never changes it. The veil
+  the old build laid over the liquid at 22% is off here (`GLASS_FILLED_ALPHA = 0`): the web players
+  knew never saw it, and the saturated tea is the look that was kept.
+- **Milk tints the tea** rather than being a layer of its own, and the wash over the toppings is
+  drawn once per row of the pile — three rows, which is the grain that keeps the gradient from the
+  back of the pile to the front while a near piece still covers a far one's wash.
+- **The dispenser's tea** is drawn into the tank's transparent chamber with the same shading, more
+  strongly: it is a big volume behind glass, and the raster texture that works in a cup softens it.
+  The tank's own glass and hardware are the painted sprite, untouched.
 
-`cupGeometry` shares the traced well and surface coordinates between the liquid, foam and stream.
-`pourLevel` clamps the actual fill without adding an artificial minimum pool. The surface ellipse
-is never sliced off by a flat-topped clip.
+`CupToppings`' pieces are placed by `cupToppingPosition`, which fits the whole rotated sprite
+inside the narrower inner-floor opening with a little clearance from the walls and the curved base:
+the pile is packed towards the centre so the clip stays a safeguard rather than a way to crop
+oversized pieces. Each portion lands behind the pile already there, keeping the first ingredient's
+positions, and a short fall settles it. Ice, foam, the front reflections and the decal are in front
+of the pile.
 
 **A full cup is drawn full, at `CUP_SURFACE_TOP` — the brim, not the line the design paints.**
-The design's full cup (`cut-cup-design.ps1`, `SURFACE_Y = 48`) is a drink made to be carried, with
-a fifth of the glass left clear for its lid, and the well was traced to it. Taking that as the
-game's brim made the meter lie: it ran to the end of its track, and then warned of tea going over
-the side, while the glass plainly still had room in it. The surface now stops where the painted rim
+The design's full cup (`cut-cup-design.ps1`, `SURFACE_Y = 48`) is a drink made to be carried, with a
+fifth of the glass left clear for its lid, and the well was traced to it. Taking that as the game's
+brim made the meter lie: it ran to the end of its track, and then warned of tea going over the
+side, while the glass plainly still had room in it. The surface now stops where the painted rim
 stops it (y 36, its far edge reaching into the mouth of the cup), and `CUP_WELL` is carried up the
 glass's own taper to meet it — so `CUP_RX_BOTTOM`/`CUP_RX_TOP` and `CUP_TAPER` are where the inside
 of the glass is measured, and the oval, the floating ice and the ice well all read their widths off
 that one line. The painted drink texture only has pixels from y 48 down; above it the body is the
-vector gradient alone, which is why nothing in there may depend on the sprite to carry a shape.
-The small horizontal meter floats beneath the order bubble, outside the cup and kitchen transforms.
-The legacy `DRINK`, `DRINK_TOP` and jar assets remain in the repository.
+gradient alone, which is why nothing in there may depend on the sprite to carry a shape.
+
 
 ### The kitchen's artwork
 Nearly everything in the prep room is a **painted sprite**. `tools/cut-sheets.py` cuts
 `tools/sheets/*.png` into `src/assets/kitchen/`; `tools/cut-topping-boxes.py` cuts the new
 upright shelf containers. The generated sheet and prompt are kept in `tools/`.
 
-[kitchenArt.ts](src/components/art/kitchenArt.ts) is the only place that names those files. The
+[kitchenArt.ts](src/art/kitchenArt.ts) is the only place that names those files. The
 sprites are generated — change the script (or the sheet), re-run it, never hand-edit a PNG.
 
 `pan-ice.png` came from a 1024px rendering of the kitchen sheet that no longer exists; those crops
@@ -961,18 +721,12 @@ their own. The kitchen now uses `TeaLiquid` for shaded, animated liquid; see "Li
 Anything that has to *move* is drawn against a window the script cleared out of the artwork, which
 keeps the painted ticks, highlights and the cat decal on top of it:
 
-- a **dispenser** uses the transparent `TEA_TANK` frame over `TeaLiquid`, blending the existing
-  painted tea textures with shaded liquid, an oval surface and pour ripples. `JAR_TEA` retains
-  the older complete jar sprites; the current shelf does not draw those;
-- the **cup** is [KitchenCup](src/components/KitchenCup.tsx), drawn in its 113×174 sprite space:
-  faint cool glass backing, then `TeaLiquid` inside the traced `CUP_WELL`, followed by clipped
-  ice/toppings and foam, glass reflections, edge highlights and the cat decal.
-  Its surface is an elliptical plane whose width follows the tapered glass. The stream and foam
-  use the same fill coordinates. Nothing can escape the glass because it stays inside the clip.
-  **Each of those sheets is its own `Svg`** (`CupLayer`), stacked in the order above, because an
-  `Svg` is one bitmap on Android and anything that moves inside it redraws all of it — see "What a
-  group costs". A cube settling redraws the ice; a portion of topping landing redraws the pile;
-  the painted glass and the front reflections, which nothing touched, are blitted;
+- a **dispenser** uses the transparent `TEA_TANK` frame over its tea, which is shaded, has an oval
+  surface and ripples while it pours. `JAR_TEA` retains the older complete jar sprites; the current
+  shelf does not draw those;
+- the **cup** is painted by [cupPainter.ts](src/kitchen/cupPainter.ts) into one texture in its
+  113×174 sprite space — see "Liquid and glass layers" — and drawn by `kitchen/CupView.ts`, which
+  repaints it only while something in it is moving;
 - a **scoop of topping** is one whole painted sprite, `SCOOPFUL[id]`, heap and all. It used to be
   the bare `SCOOP` with pieces laid into its bowl by hand, which was the same mistake the teas
   were — the design draws what a scoop of this looks like, so take its word for it. The six are
@@ -982,18 +736,17 @@ keeps the painted ticks, highlights and the cat decal on top of it:
   drawn in its bowl;
 - the **cartons, syrup, foam tubs and every fitting** (wall, lamps, shelf, steel counter,
   cabinets, rail, coaster, plant, poster, cup stack, towel) are whole sprites
-  that [KitchenRoom](src/components/art/KitchenRoom.tsx) and the station place by the layout's
-  lines;
+  that `kitchen/layout.ts` places by the painting's own lines and `kitchen/equipment.ts` draws;
 - **the room itself is one painted plate**, `room-bg.png` — the tiled wall and its lamps, the
   dispenser shelf, the fridge, the work top, the bench and the pink units at its foot, all of
   it painted rather than assembled. It used to be assembled: a wall tile set to repeat, a shelf
   plank and a stainless counter each sliced into bands and stretched across the room, a run of
   cabinet fronts, a group of props cut out of the mockup — every one of them a line to compute
   and a seam to get wrong. Those sprites are still cut (a station may yet want the stainless),
-  but the room no longer draws any of them. Each piece of equipment now sits in a contact
-  shadow of its own (`Frame`), because there is no well in a counter to sink it into.
-  The active topping cabinet is measured in the panoramic background by
-  `ROOM_BG_TOPPING_SHELF`. The portrait plate and `ROOM.tray` remain legacy geometry.
+  but the room no longer draws any of them. Each piece of equipment sits in a contact shadow of
+  its own, because there is no well in a counter to sink it into. The active topping cabinet is
+  measured in the panoramic background by `ROOM_BG_TOPPING_SHELF`. The portrait plate and
+  `ROOM.tray` remain legacy geometry.
 
 **The prep page is all kitchen.** There is no ticket rail, and no row of shortcut buttons for
 walking to a station — the room fills everything between the order panel and the action buttons,
@@ -1034,11 +787,11 @@ paint, not furniture. A layout can be worth having at the price of a lid.
 
 Two things not to undo:
 
-- **The three layouts are keyed** (`key={layout}` on each branch's root). They are all a `<View>`
-  of `<View>`s, so React will otherwise reconcile the band's strip *into* the kitchen's box and
-  the kitchen into whatever stood beside it: the host views survive, their `onLayout` never
-  fires, and `KitchenStation` goes on laying the room out for the box it had under the other
-  layout — a room at the wrong scale with its hint pill below the bottom of the screen.
+- **Each layout's root is keyed** (`key={layout}` in `ui/GameScreen.tsx`). They are all nested
+  boxes, so a renderer will otherwise reuse the band's strip *as* the kitchen's box and the kitchen
+  as whatever stood beside it: the elements survive, nothing reports a new size, and the scene goes
+  on laying the room out for the box it had under the other layout — a room at the wrong scale with
+  its hint pill below the bottom of the screen.
 - **`PREP_BAND_HEIGHT` and `PREP_ACTIONS_HEIGHT` count their own rules and padding, exactly.**
   Every pixel of both comes off the room, and the room is already down to its reach band on an
   11" tablet; a couple of pixels of border unaccounted for is another row of the painting gone.
@@ -1049,10 +802,10 @@ Two things not to undo:
   become unreadable at one line).
 
 The counter page has its own sideways form, which is a different question — `isWideLayout` alone,
-since `CustomerStage` has no painting to crop, only customers to make bigger and to centre.
+since the counter has no painting to crop, only customers to make bigger and to centre.
 
 ### The order, spoken back
-[OrderBubble.tsx](src/components/OrderBubble.tsx) is the **panel docked across the top of the
+[OrderBubble.tsx](src/ui/OrderBubble.tsx) is the **panel docked across the top of the
 prep page** (it was a paper note clipped to a rail inside the room, then a bubble floating over
 it): who the drink is for, what it is called, how far along it is, and a tile for every thing that
 goes in it, each ticking off as the cup comes together. The heart beside the name is the
@@ -1074,28 +827,27 @@ Five things about it are deliberate:
 - **the other taken orders stand inside it**, in a queue to the right of the heart — tap one to
   make it next. They used to hang off the card's bottom-right corner, over the room, where a
   seven-thing order had its last two ingredients covered by them;
-- the patience heart is emptied by a **`<Mask>`, not a `<ClipPath>`**, because a `View` cannot be
-  heart-shaped and a clip path is frozen at its first draw on Android — the heart would have
-  stayed as full as the frame it first appeared on. See "Drawing on a phone"; `check-drawing.cjs`
-  only catches the animated case, and this one is driven by ordinary renders.
+- the patience heart empties from the top through a clip on its own SVG, which is the one piece of
+  the card that is redrawn as the day runs.
 
-The card itself takes no touches (`box-none`); only the queue portraits are live.
+The card itself takes no touches; only the queue portraits are live (`.live`).
 
 `drinkName` puts "sữa" where Vietnamese puts it, which is not the same place every time: "Trà Thái"
 becomes "Trà sữa Thái", "Hồng trà" becomes "Hồng trà sữa".
 
 ### Standing things on a painting
 The plate is `tools/sheets/room-bg.png`, 941x1672, and `ROOM` in
-[kitchenArt.ts](src/components/art/kitchenArt.ts) is **where it draws its surfaces, in its own
+[kitchenArt.ts](src/art/kitchenArt.ts) is **where it draws its surfaces, in its own
 pixels**: the shelf's board, the ceiling over it and the face of the board above that (where its
-sign is mounted), the ledge, the line a cup stands on along the work top, the bench, the cabinets. Nothing in the room is a fraction of the phone any more —
-`fitRoom(w, h)` gives the `px`/`py` that take plate pixels to room pixels, and a dispenser is on
-the shelf the painting paints however the phone is shaped.
+sign is mounted), the ledge, the line a cup stands on along the work top, the bench, the cabinets.
+Nothing in the room is a fraction of the phone — `fitBackground(w, h, …)` in `kitchen/layout.ts`
+gives the scale and offset that take plate pixels to screen pixels, and a dispenser is on the shelf
+the painting paints however the phone is shaped.
 
-`fitRoom` deliberately does **not** use `resizeMode="cover"`. Cover centres the image on itself,
-and a phone shorter than the painting then loses the work top off the bottom; this centres on
-the working band instead (`KEEP`, the shelf down to the bench) and lets the ceiling and the
-floor be what goes. Anything that must stay reachable in a short room has to clamp itself into
+`fitBackground` deliberately does **not** centre the plate on itself, the way a `cover` background
+would: a phone shorter than the painting then loses the work top off the bottom. It centres on the
+working band instead (`ROOM_BG_KEEP`, the crown of a tank down to the front of the cup's holder)
+and lets the ceiling and the floor be what goes. Anything that must stay reachable in a short room has to clamp itself into
 view — the hint pill does, because the pink units it sits on can be cropped away.
 
 **The holder under the cup is measured there too, and only half used.** `ROOM_BG_CUP_HOLDER` is the
@@ -1120,181 +872,78 @@ stands plainly inside the shelf; divided across the board it laps over the ends 
 
 ## Conventions
 
-- **Vietnamese UI text** everywhere, including accessibility labels. Money always goes through
-  `formatMoney`.
-- **Calm motion** (the user asked for this explicitly): use `withTiming` with the helpers in
-  `src/motion.ts`. No springs/bounce, no shaking, no looping movement near the play area. The
-  only loops are the slow window clouds and the faint tea-surface shimmer. Keep it that way
-  unless asked.
-- The opening sign at the start of each day closes **only** via its "Bắt đầu" button (no timer,
-  no tap-outside).
-- Play is split across two swipeable pages (Counter / Prep); the HUD and the tab indicator stay fixed
-  above the pager. Keep swipe as the primary navigation (the tabs are a tappable shortcut).
-- React Compiler lint rules (eslint-plugin-react-hooks v7) are enforced:
-  - in event handlers/callbacks write shared values with `sv.set(...)`, not `sv.value = ...`;
-  - don't call `setState` synchronously inside `useEffect` (do it in a timer/callback, or use
-    the "adjust state during render" pattern as in `App.tsx` and `useChangeCount` in `Cup.tsx`);
-  - no `Math.random()` during render (use the deterministic `noise()` in `Effects.tsx`);
-  - don't read refs during render.
-- **Drawing on a phone, not in a browser.** `react-native-svg` is not an SVG renderer with a
-  React wrapper — it is three renderers, and the web one is the forgiving one. Four gaps have
-  already cost a crash, a dead animation, a drink that stopped following its tea and a tray of
-  topping pans that would not close up, and every one of them is easy to walk back into.
-  `tools/check-drawing.cjs` (in `npm test`) reads the source for all four, because nothing else
-  will:
-  - **An animated `transform` has to be the array form** — `[{ translateX }, { translateY },
-    { rotate: '12deg' }]` — never the SVG string `translate(…) rotate(…)`. The string is turned
-    into the `matrix` prop a phone reads by JavaScript, *inside* the element, and an animated prop
-    goes straight to the view without passing through it — so a string written by a worklet is
-    dropped in silence and the thing never moves. Static transforms are fine either way: they do
-    go through the element. A **clip** cannot take even the array form, because a clip is a path:
-    give it a path already drawn where it belongs, as `cupIceOutlinePath` does.
-  - **A `<ClipPath>` is drawn once and then frozen, so anything that moves is a `<Mask>`.**
-    Android builds a clip path's geometry the first time it is used and caches it, and nothing
-    inside one can clear that cache: the renderer skips invalidation for any element that has not
-    been drawn, and a `<Path>` inside a `<ClipPath>` is never drawn. An animated `d` in there
-    therefore arrives in the browser and on iOS and is simply dropped on Android, where the clip
-    keeps the shape it had on the frame it first appeared. A **mask's** contents *are* drawn, every
-    frame, so an animated `d` inside one lands everywhere — which is why the tea's edge, the glass's
-    wet and clear halves, the waterline the ice is split at and the wash on the toppings are all
-    masks. Fixed boundaries (`CUP_WELL`, `CUP_ICE_WELL`, the cube's own silhouette) stay clips,
-    which are cheaper. Mask contents are filled `#FFFFFF`, and `fillRule="evenodd"` on the path
-    itself is read by all three renderers — a clip instead took its rule from whatever referenced
-    it, and the platforms disagreed about the default.
-  - **An atlas cell is drawn through an SVG viewport, not an oversized `<Image>` in an
-    `overflow: hidden` box.** That box is clipped correctly and its CSS reads correctly, but
-    Chrome keeps one raster per element for the background and, for cells near the sheet's left
-    edge, paints the wrong slice of it: the black pearls pan came out orange and the taro
-    dispenser amber, on the *web* build, from a cold load, until something forced the element to
-    repaint. This is the one gap that runs the other way — a phone drew it correctly and a
-    browser did not — so the only honest check is a screenshot of the exported build.
-  - **A 4x4 matrix is not a transform a phone will perform.** Only two of the three renderers do
-    a projective transform: React Native hands Android's `View` the matrix through
-    `MatrixMathHelper.decomposeMatrix`, which gives it back as `setTranslation`, `setRotation`,
-    `setScale` and a camera distance. A `View` has no `setSkew`, and a perspective divide is not a
-    camera distance, so both are dropped — the topping pans came out too small and in the wrong
-    place, which on a tray reads as a gap between every pan and the next. The pans are drawn as a
-    stack of horizontal bands instead (`toppingPanBands`): plain numbers and plain rectangles,
-    which all three renderers agree about. `toppingPanMatrix` is still the fit; it is what the
-    bands are read off, and what `check-topping-layout.cjs` holds them to.
-  - **`<Use>` is not safe.** Asked for the path of a template it cannot find at that moment, it
-    hands back nothing — which Android calls a method on and iOS passes to `CFAutorelease`. Draw
-    the shape where it is needed, even when that means repeating it.
-  None of them shows up in a browser, in `tsc`, or in the lint, and there is no emulator here: the
-  only honest check on anything new is a build on a real phone.
-- **What a group costs.** The four gaps above are things a phone draws *wrong*. These three it
-  draws correctly and ruinously slowly, which is the same bug with a longer fuse — and a desktop
-  browser will never show you any of them, because it has a GPU compositor where `react-native-svg`
-  has `android.graphics.Canvas`. Read `SvgView.java`, `GroupView.java` and `RenderableView.java`
-  before arguing:
-  - **A `<G>` whose opacity is not 1 allocates a bitmap the size of the whole canvas, throws it
-    away, and allocates it again — on every draw.** That is `GroupView.drawGroup`, and nothing
-    caches it. The fade belongs on the leaves instead, which cost nothing; that is only a different
-    picture where the leaves overlap, so it is a judgement each time. The cup's toppings were
-    seventeen faded groups per portion and three portions deep, which is fifty-one canvas-sized
-    bitmaps allocated and freed every frame, and it is most of why a finished drink stuttered on a
-    phone. Submerged ice keeps *one* group fade, because its cubes genuinely do overlap.
-  - **A masked element costs four canvas-sized offscreen layers (`saveLayer`) and draws the mask's
-    own contents twice** — once through `luminanceToAlpha` and once for its alpha. So masks are for
-    boundaries that *move*, where the rule above forbids a clip, and there should be as few as the
-    picture allows. Where a moving boundary can be turned inside out — drawing the boundary and
-    clipping it to the static shape, rather than drawing the shape and masking it to the boundary —
-    that is the same picture for a canvas clip instead of four layers, and it is what `CupToppings`
-    does for the tea wash over each band of the pile.
-  - **An `<Svg>` is one bitmap, and *any* animated prop under it throws that bitmap away.**
-    `SvgView` renders its whole tree into a `Bitmap` it keeps and blits (`drawOutput`), and
-    `invalidate` — which every prop change of every descendant bubbles up to — recycles it and
-    allocates a new one, then redraws every child into it. There is no partial invalidation. So a
-    picture where one thing moves and the rest is still should be **stacked as several `Svg`s**,
-    not drawn as one: the sheets nothing touched are blitted as they are and their children are
-    never drawn at all. Source-over compositing is associative, so splitting along the z-order is
-    the same picture — see `CupLayer` in `KitchenCup`, where a cube settling or a portion of
-    topping falling used to redraw the painted glass, the ice and the pile together, fifteen
-    frames running, for a quarter of a second.
-  Nothing checks any of these; `check-drawing.cjs` is about pictures that come out wrong. The
-  honest measurement is still a phone, and what a browser *can* prove is that a change made for a
-  phone left the web alone — export before and after and diff the cup, as "Verifying changes" says.
-- **What a browser repaints.** The browser has its own version of the `Svg`-is-one-bitmap rule:
-  the page is a few big rasterised layers, and anything moving *inside* one re-rasters every
-  pixel it passes over, whatever is drawn underneath. The cup is the most expensive picture in the
-  game — five masks of glass, twelve gradient cubes, fifty-one clipped sprites — so a scoop carried
-  over it, or the cup itself carried, re-rastered all of that every frame: a finished drink tripled
-  the page's raster work and made every action after it stutter on a phone. `ownLayer`
-  (`src/ownLayer.ts`, `will-change: transform`, web only) puts a view on a compositor layer of its
-  own, where moving it is the compositor sliding a picture already drawn. It is on what moves every
-  frame (the cup, the carried tool, the carried empty cup, the clouds) and on each `CupLayer`, so a
-  settling cube re-rasters the ice and not the glass. Each layer is GPU memory, so it is not a
-  blanket style. With it, a loaded cup's raster work went from 143 ms to 13 ms over the same
-  scripted play at an 8x CPU slowdown, and the per-frame re-layering from 2 s to 0.2 s.
-- Reanimated 4 + `react-native-worklets`; the Babel plugin is configured automatically by
-  `babel-preset-expo` (no babel config file).
-- Custom fonts: set `fontFamily: fonts.*` and don't also set `fontWeight`.
-- `Cup` is tapered by drawing triangles in `backgroundColor` over its corners, so pass the colour
-  actually behind it. Cups that move over busy backgrounds use `tapered={false}`.
-- Everything used must work on the web build — that is where the game actually ships — and in
-  Expo Go, which is how it is tried on a real phone while developing. A library with native code
-  that Expo Go lacks costs both.
+- **Vietnamese UI text** everywhere, including the labels a screen reader would read. Money always
+  goes through `formatMoney`.
+- **Calm motion** (the user asked for this explicitly): short, eased, no springs or bounce, no
+  shaking, no looping movement near the play area. The durations and easings are in
+  `src/ui/motion.ts` (CSS) and `src/kitchen/motion.ts` (tweens); the only loops are the slow window
+  clouds and the faint tea-surface shimmer. Keep it that way unless asked.
+- The opening sign at the start of each day closes **only** via its "Bắt đầu" button (no timer, no
+  tap-outside).
+- Play is split across two swipeable pages (Counter / Prep); the HUD and the tab indicator stay
+  fixed above the pager. Keep swipe as the primary navigation (the tabs are a tappable shortcut).
+- **The HTML over the canvas lets touches through.** `#ui` is `pointer-events: none`; anything
+  interactive opts back in with the `.live` class. A full-screen box that forgets this takes every
+  touch meant for the room, and nothing on screen shows why.
+- **A subscriber reads a slice, not the state.** `useGame(select, equal)` and `useUi(select, equal)`
+  in the HTML, `onState(state, previous)` in the scenes. See "What the game's clock is allowed to
+  redraw" — a subscriber that takes the whole state updates several times a second for a clock it
+  does not draw.
+- **The scenes own what they draw; the UI owns what has words on it.** They talk through `store`,
+  `ui-state` and `game/host`, and nothing else. A scene that reaches into the DOM, or HTML that
+  reaches into a scene, is how a layout ends up measured twice.
+- **No `Graphics` left on screen, one texture per batch, and never read layout from the DOM per
+  frame** — see "Who draws what", where each of those has a measured frame cost behind it.
+- **Lettering in a rasterised SVG is drawn on top**, with Phaser text or Canvas 2D: an SVG drawn
+  through an `Image` cannot use the page's fonts and falls back to a system face.
+- **Everything has to work in a browser**, because the browser *is* the game — and in the Capacitor
+  shell, which is the same page in a WebView. A dependency with native code costs both.
 
 ## Verifying changes
 
-- Logic: drive `gameReducer` directly with a small script (e.g. run with `npx tsx`): start a
-  day, `TICK` until a customer spawns, `TAKE_ORDER` that slot, `PICK` the order's ingredients and
-  `SERVE`, then check coins/stats; also let a `requesting` customer time out (no order taken) and
-  confirm `stats.missed` rises. Reaching `dayEnd` needs the counter to empty after closing time.
-- Saving: the save is one key, `boba-shop.save.v1`, and on the web it is plain `localStorage` —
+- Logic: drive `gameReducer` directly with a small script (the regression scripts in `tools/` do
+  this — they transpile the TypeScript with `typescript` and `require` it, so no build step): start
+  a day, `TICK` until a customer spawns, `TAKE_ORDER` that slot, pour and scoop the order's
+  ingredients and `SERVE`, then check coins/stats; also let a `requesting` customer time out (no
+  order taken) and confirm `stats.missed` rises. Reaching `dayEnd` needs the counter to empty after
+  closing time.
+- Saving: the save is one key, `boba-shop.save.v1`, in plain `localStorage` —
   `localStorage.getItem('boba-shop.save.v1')` in the console shows the shop as it stands, and
   removing it is how a first launch is tested. Reload mid-shift and you should come back to the
   same minute of the same day behind the pause card, with the opening sign *not* replayed.
-- Reinstall updates and the backup code: `tools/check-reinstall.cjs` covers the code's round trip
-  and refusals and the version comparison, all of which are pure. What it cannot cover is the
-  install: the package installer, the "allow from this source" prompt, and whether the data really
-  survived can only be tried on a phone, with two builds signed by the same keystore. Say so in
-  the report. On the web both offers are inert — `Updates.isEnabled` is false there — so a browser
-  cannot show either dialog without faking the hook.
-- Updates: `expo-updates` is a stub on the web that always answers "no update", and the API
-  rejects outright in Expo Go and dev builds, so none of it runs locally. To see the dialog, fake
-  the hook's return in `src/updates/useUpdate.ts` and export — and revert it before committing
-  (`grep -rn PREVIEW src/`). Downloading and restarting into a real update can only be tried on a
-  phone with a build that has `expo-updates` in it.
-- Ice, and anything else drawn in SVG: there is no emulator here, so a browser is the only thing
-  that can be driven — and a browser is precisely what will not catch the three gaps under "Drawing
-  on a phone" in Conventions. `tools/check-drawing.cjs` reads the source for them; read that list
-  too before changing `CupIce`, `CupToppings`, `TeaLiquid` or `KitchenCup`, and say plainly in the
-  report that the phone itself was not tried. What a browser *can* prove is that a change meant to
-  fix a phone left the web alone: export before and after, drive both to the same cup from the same
-  save, and diff the screenshots — the cup should come out identical, and only the HUD clock and
-  the looping window clouds should move.
-  The quickest way to put a cup in a particular state is the save: write one key to
-  `localStorage` from a *blank* page on the same origin (the running game flushes its own save on
-  `pagehide` and will write the title screen straight back over anything set while it is up), then
-  load the game and dismiss the pause card.
+- The backup code: `tools/check-backup-code.cjs` covers the round trip and the refusals, all of
+  which are pure. What it cannot cover is a real move between two installs — say so in the report.
+- Putting a cup in a particular state: `window.__shop.load(json)` in development or with `?test`,
+  which reads a save exactly as a launch would. Do **not** write the save from a page on the same
+  origin and reload: any page on the dev server is the game, and it flushes its own save as it
+  unloads, over whatever was just set.
 - The loading screen: it is over in a flash on a warm cache, so throttle the network to see it
   (`Network.emulateNetworkConditions` over CDP, or the browser's own throttle).
 - Sound and music: `tools/check-audio.cjs` is arithmetic on sample values — it proves the loops
   join, the one-shots do not click, every cue is wired to something and the volumes survive a save,
-  and it proves **nothing about whether any of it sounds good**. A browser can show that the web
-  build plays: export, serve `dist/`, press "Bắt đầu" and the menu theme should come up under it.
-  Nothing may play before that first gesture, which is the browser's rule and not a bug. The
-  silent switch, mixing with the player's own music, and the real latency of a cue fired from a
-  drag are all phone-only — say plainly in the report when a change has not been heard on one.
+  and it proves **nothing about whether any of it sounds good**.
+  `tools/check-audio-engine.cjs` drives the engine's whole lifecycle against a fake audio context.
+  A browser shows that it plays: build, serve `dist/`, press "Bắt đầu" and the menu theme should
+  come up under it. Nothing may play before that first gesture, which is the browser's rule and not
+  a bug. Mixing with the player's own music, the silent switch and the real latency of a cue fired
+  from a drag are phone-only — say plainly in the report when a change has not been heard on one.
   To hear a single cue in isolation, play its file from `src/assets/audio/` directly.
 - Performance: a desktop browser absorbs anything this game does, so measuring it there says
   nothing until the CPU is slowed to roughly phone class (`Emulation.setCPUThrottlingRate`, rate 8
   over CDP). Then `Performance.getMetrics`' `ScriptDuration` over a fixed window of play — idle on
-  the prep page, and again while a drag is driven in a loop — is comparable between two exports,
-  which is enough to tell a change that removed work from one that only moved it. It is still a
-  browser: it cannot tell you how the gesture *feels* on the phone, and it has none of
-  `react-native-svg`'s per-view cost on Android.
+  the prep page, and again while a drag is driven in a loop — is comparable between two builds,
+  which is enough to tell a change that removed work from one that only moved it. The frame times
+  in the header of this file were measured that way. It is still a browser: it cannot tell you how
+  the gesture *feels* on the phone.
 - Storage failures: `localStorage.getItem` can be made to throw for one key from an init script
-  that runs before the bundle, which is the only way to reach the read-failure path above — and
-  the thing to assert afterwards is that the save is still there, byte for byte, after several
-  write intervals of play.
-- UI: `npx expo export --platform web`, serve `dist/`, and look at it at phone sizes
-  (390×844 and the small 375×667). The Prep page is reached by swiping left or tapping the "Pha chế"
-  tab. To test a later day quickly, temporarily change `START_DAY, day: 1` in `App.tsx` — revert
-  before committing. The money shows in three places (the HUD and the opening sign, both the till;
-  the day-end screen, which is the only one that reports a single day's takings); the quickest way
-  to see any of them against a particular balance is to write a save with the `coins` and `money`
-  you want straight to `localStorage`, the way the cup states are set up above.
-- Native bundles: `npx expo export --platform ios --platform android` catches native-only
-  bundling errors; `npx expo-doctor` checks dependency health.
+  that runs before the bundle, which is the only way to reach the read-failure path under "Saving
+  the shop" — and the thing to assert afterwards is that the save is still there, byte for byte,
+  after several write intervals of play.
+- UI: `npm run build`, serve `dist/` (`npm run preview`), and look at it at phone sizes (390×844
+  and the small 375×667). The Prep page is reached by swiping left or tapping the "Pha chế" tab. To
+  reach a later day quickly, load a save with `window.__shop.load`. The money shows in three places
+  (the HUD and the opening sign, both the till; the day-end screen, which is the only one that
+  reports a single day's takings).
+- The phone apps: `npm run sync` copies `dist/` into `android/` and `ios/`. A real build needs the
+  **Build apps** workflow or a local Android SDK / Xcode; neither is here, so say in the report
+  that the app shell was not built.

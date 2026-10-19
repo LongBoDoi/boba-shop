@@ -10,7 +10,7 @@ Bottle targets have a minimum width of 44 points. Cream jars sit on the back cou
 
 Previews: [tea station](kitchen-preview.png), [topping station](kitchen-toppings-preview.png).
 
-Validation: `npm run typecheck`, `npm run lint`, `npm test`, and a production Expo web export. Browser interaction checks cover 375 × 667, 390 × 844 and 768 × 1024, with early and fully unlocked kitchens: docking and pouring, returning the cup when changing stations, adding toppings/milk/sugar/foam/ice after panning, switching orders, serving and discarding. Native simulator checks were not run.
+Validation: `npm run typecheck`, `npm test`, and a production web build. Browser interaction checks cover 375 × 667, 390 × 844 and 768 × 1024, with early and fully unlocked kitchens: docking and pouring, returning the cup when changing stations, adding toppings/milk/sugar/foam/ice after panning, switching orders, serving and discarding. Native simulator checks were not run.
 
 ## Final generation prompt
 

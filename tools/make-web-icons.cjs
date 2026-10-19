@@ -4,7 +4,7 @@
  *
  *   node tools/make-web-icons.cjs
  *
- * Three come out, into `public/icons/`, and the web export copies `public/` into `dist` as it is:
+ * Three come out, into `public/icons/`, and the build copies `public/` into `dist` as it is:
  *
  * - **192 and 512, square and transparent**, off `assets/icon.png`. Android reads the largest it
  *   is offered and iOS takes the `apple-touch-icon`; both are listed so neither has to downscale a

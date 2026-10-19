@@ -8,7 +8,7 @@ The shelf has fixed slots: black, green and oolong above; taro, matcha and Thai 
 
 [Phone preview](tea-tanks-preview.png).
 
-Validation: lint, typecheck, existing regression tests and production web export pass. Browser checks at 375 × 667, 390 × 844 and 768 × 1024 cover every unlocked tank in both rows, correct tea IDs after pouring, cup docking, and docking and pouring after horizontal panning. Early-day ingredients retain their fixed positions. No native simulator was run.
+Validation: typecheck, existing regression tests and a production web build pass. Browser checks at 375 × 667, 390 × 844 and 768 × 1024 cover every unlocked tank in both rows, correct tea IDs after pouring, cup docking, and docking and pouring after horizontal panning. Early-day ingredients retain their fixed positions. No native simulator was run.
 
 ## Generation prompt
 

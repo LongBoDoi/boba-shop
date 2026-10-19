@@ -1,12 +1,24 @@
 # Dependency health
 
-Expo SDK 57 is aligned to the compatible package versions reported by `npx expo install --check` and `npx expo-doctor`. Keep the SDK-compatible versions when updating dependencies.
+The game is built from five runtime packages — `phaser`, `preact` and the three `@capacitor/*`
+pieces — plus Vite and TypeScript to build it. `npm audit` reports **0 vulnerabilities**, and the
+two decisions that keep it there are worth not undoing by accident:
 
-The `xcode@3.0.1` dependency is scoped to `uuid@11.1.1` through an npm override. This removes the [UUID buffer bounds advisory](https://github.com/advisories/GHSA-w5hq-g745-h8pq) and its deprecated UUID version. Xcode uses the supported CommonJS `uuid.v4()` API; project ID generation is checked with the overridden version. Remove this override when Xcode updates its own dependency to a patched version.
+- **`xcode`'s `uuid` is pinned through a scoped override** (`"overrides": { "xcode": { "uuid":
+  "11.1.1" } }`). `@capacitor/cli` depends on `xcode`, which asks for a `uuid` old enough to carry
+  the [buffer bounds advisory](https://github.com/advisories/GHSA-w5hq-g745-h8pq). `xcode` only
+  uses `uuid.v4()`, which the pinned version still provides as CommonJS. Remove the override when
+  `xcode` updates its own dependency.
+- **`@capacitor/assets` is not a dependency.** It generates the app icons and splash screens from
+  `assets/icon-*.png` and `assets/logo.png`, which is an occasional job, and it drags in `sharp`,
+  its own nested `@capacitor/cli` and `tar` — most of the advisories this project ever had. Run it
+  when the artwork changes and let it go again:
 
-As of October 13, 2026, `npm audit` still reports 18 high-severity entries stemming from two upstream packages used by Expo's tooling:
+  ```sh
+  npx @capacitor/assets@3 generate --android --ios
+  ```
 
-- [braces: recursive pattern parsing](https://github.com/advisories/GHSA-vfj7-8cjw-p6xm), latest published version `3.0.3`, no published fix.
-- [node-forge: signature verification](https://github.com/advisories/GHSA-86w9-cpqp-85rv), latest published version `1.4.0`, no published fix.
+  The generated icons are committed under `android/` and `ios/`, so a normal build never needs it.
 
-The entries include packages that depend on these two libraries; they do not represent 18 separate underlying advisories. They have not been suppressed. Recheck for patched releases before the next dependency upgrade. `npm audit fix --force` currently proposes downgrading Expo and React Native to incompatible older versions and must not be used to resolve these alerts.
+`@capacitor/cli` itself is a devDependency: it is `cap sync`, which copies `dist/` into the two
+native projects. Nothing in the shipped bundle comes from it.

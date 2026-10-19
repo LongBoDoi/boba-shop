@@ -11,13 +11,13 @@
  *   caching it first would pin the shop to whatever build was current the day it was installed —
  *   and the deploy that publishes a new game would never reach anyone. Online, the newest page
  *   wins; offline, yesterday's page opens, which is the whole point.
- * - **Everything under `/assets/` and `/_expo/` is cache-first**, because every one of those
- *   filenames carries a hash of its own contents. They cannot go stale: a changed file is a
+ * - **Everything under `/assets/` is cache-first**, because every one of those filenames carries
+ *   a hash of its own contents. They cannot go stale: a changed file is a
  *   different URL. So the first play downloads the artwork and no later one does.
  *
- * Only the page is precached. The export is twenty megabytes, and forcing that on someone who
+ * Only the page is precached. The build is twenty megabytes, and forcing that on someone who
  * opened a link to look at it would be rude; the game pulls its own artwork in behind the loading
- * screen (see `useArtwork`), and that pass is what fills the file cache. The page is the one
+ * screen (see `PreloadScene`), and that pass is what fills the file cache. The page is the one
  * exception, and it has to be, because the visit that installs this worker is not itself handled
  * by it: without that first copy, the shop only became openable offline after a *second* online
  * visit, and nothing about the first one looked wrong.
@@ -32,10 +32,10 @@ const FILE_CACHE = `boba-shop-files-${VERSION}`;
 const MINE = [PAGE_CACHE, FILE_CACHE];
 
 /** The files whose names carry their own hash, and so can be kept until their name changes. */
-const HASHED = /^\/(assets|_expo)\//;
+const HASHED = /^\/assets\//;
 
 /** The small fixed-name files the page asks for by hand. */
-const TRIMMINGS = ['./manifest.webmanifest', './icons/icon-192.png', './favicon.ico'];
+const TRIMMINGS = ['./manifest.webmanifest', './icons/icon-192.png'];
 
 self.addEventListener('install', (event) => {
   // Take over at once rather than waiting for every tab to close: a game is one tab, and the

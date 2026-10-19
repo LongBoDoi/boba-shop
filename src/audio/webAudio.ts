@@ -1,10 +1,8 @@
-import { Asset } from 'expo-asset';
-
 /**
  * The shop's sound, on the web, played the way a browser game should be: through the Web Audio
  * API rather than through `<audio>` elements.
  *
- * `expo-audio`'s web player is an `HTMLAudioElement` per player, and this game keeps one player
+ * The obvious way to play a sound on a page is an `HTMLAudioElement` per player, and this game keeps one player
  * per voice — fourteen effects, the pour loop and the music, rising past fifty elements over a
  * shift as voices are recycled. A media element is a whole playback pipeline (demuxer, decoder,
  * an output stream in the browser's audio service), and every cue on a recycled voice drove one
@@ -19,15 +17,14 @@ import { Asset } from 'expo-asset';
  * allocations, no pipeline, no seek — and all of it is mixed on the browser's own audio thread.
  * A loop is sample-accurate, which a media element's `loop` is not.
  *
- * `WebAudioPlayer` is the slice of `expo-audio`'s `AudioPlayer` that `audio.ts` and `FoleyEngine`
- * actually use, with the same meaning, so the engine above it does not know which one it has:
+ * `WebAudioPlayer` is the whole of what `audio.ts` and `FoleyEngine` ask of a player:
  *
  * - `volume`, `loop`, `playing`, `play()`, `pause()`, `seekTo()`, `remove()`, as a media element;
  * - `setPlaybackRate()` moves the pitch with the speed. `shouldCorrectPitch` is accepted and
  *   ignored, because every caller here sets it false — the rate *is* the variation.
  *
- * Native keeps `expo-audio`. None of this runs off the web: `audio.ts` only reaches for it where
- * an `AudioContext` exists.
+ * This is the only player the game has. `audio.ts` checks for an `AudioContext` before building
+ * any of it; a browser without Web Audio simply plays no sound.
  */
 
 type ContextClass = typeof AudioContext;
@@ -35,7 +32,7 @@ type ContextClass = typeof AudioContext;
 let context: AudioContext | null = null;
 /** Whether the browser has ever let the context run. Until then, a resume needs a gesture. */
 let allowed = false;
-const decoded = new Map<number, Promise<AudioBuffer | null>>();
+const decoded = new Map<string, Promise<AudioBuffer | null>>();
 
 function contextClass(): ContextClass | undefined {
   const scope = globalThis as unknown as { AudioContext?: ContextClass; webkitAudioContext?: ContextClass };
@@ -107,13 +104,12 @@ function decode(ctx: AudioContext, bytes: ArrayBuffer): Promise<AudioBuffer> {
  * cannot be had is silent for the rest of the session rather than retried on every cue — which,
  * for a sound that fails, would be a failing fetch on every scoop.
  */
-function bufferFor(module: number): Promise<AudioBuffer | null> {
-  const known = decoded.get(module);
+function bufferFor(uri: string): Promise<AudioBuffer | null> {
+  const known = decoded.get(uri);
   if (known) return known;
   const ctx = audio();
   const pending = (async () => {
     if (!ctx) return null;
-    const uri = Asset.fromModule(module).uri;
     const response = await fetch(uri);
     if (!response.ok) throw new Error(`HTTP ${response.status} for ${uri}`);
     return decode(ctx, await response.arrayBuffer());
@@ -121,12 +117,12 @@ function bufferFor(module: number): Promise<AudioBuffer | null> {
     console.warn('[audio] a sound could not be loaded:', error);
     return null;
   });
-  decoded.set(module, pending);
+  decoded.set(uri, pending);
   return pending;
 }
 
 export class WebAudioPlayer {
-  /** Accepted for parity with `expo-audio`; the rate always moves the pitch here. See above. */
+  /** Accepted and ignored: the rate always moves the pitch here. See above. */
   shouldCorrectPitch = true;
 
   private gain: GainNode | null = null;
@@ -143,7 +139,7 @@ export class WebAudioPlayer {
   private wanted = false;
   private removed = false;
 
-  constructor(module: number) {
+  constructor(module: string) {
     const ctx = audio();
     if (ctx) {
       this.gain = ctx.createGain();

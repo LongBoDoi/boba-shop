@@ -1,3 +1,6 @@
+import musicMenu from '../assets/audio/music-menu.wav';
+import musicShop from '../assets/audio/music-shop.wav';
+
 import { CLIPS, Clip } from './clips';
 
 export type SoundId = 'tap' | 'button' | 'nudge' | 'customer' | 'order' | 'leave'
@@ -53,9 +56,9 @@ export const SOUNDS: Record<SoundId, SoundSpec> = {
 };
 export const BUS_GAIN: Record<SoundBus, number> = { ui: 0.9, kitchen: 1, counter: 1 };
 export const POUR_LOOP = { ...CLIPS.pourLoop, gain: 0.72 };
-export const MUSIC: Record<MusicId, number> = {
-  menu: require('../assets/audio/music-menu.wav'),
-  shop: require('../assets/audio/music-shop.wav'),
+export const MUSIC: Record<MusicId, string> = {
+  menu: musicMenu,
+  shop: musicShop,
 };
 // Recorded contacts have more transient headroom than the old synth cues. Leave room for them.
 export const MUSIC_GAIN: Record<MusicId, number> = { menu: 0.45, shop: 0.32 };

@@ -19,8 +19,8 @@ try {
   const { drinkPrice } = require(path.join(__dirname, '../src/game/orders.ts'));
   const { getDayConfig, describeUnlocks } = require(path.join(__dirname, '../src/game/levels.ts'));
   const { parseGame, serializeGame } = require(path.join(__dirname, '../src/game/save.ts'));
-  const { cupIceFillPath, cupFillPath, cupIcePosition, cupIceRestPosition, cupSurface } = require(path.join(__dirname, '../src/components/cupGeometry.ts'));
-  const { createIceLayout, ICE_LAYOUT } = require(path.join(__dirname, '../src/components/iceLayout.ts'));
+  const { cupIceFillPath, cupFillPath, cupIcePosition, cupIceRestPosition, cupSurface } = require(path.join(__dirname, '../src/art/cupGeometry.ts'));
+  const { createIceLayout, ICE_LAYOUT } = require(path.join(__dirname, '../src/art/iceLayout.ts'));
   const { ICE_LEVELS } = require(path.join(__dirname, '../src/game/ingredients.ts'));
   assert.ok(ICE_LEVELS.find((level) => level.id === 'regular').cubes >
     ICE_LEVELS.find((level) => level.id === 'less').cubes * 2, 'The second scoop visibly fills out the ice cluster');

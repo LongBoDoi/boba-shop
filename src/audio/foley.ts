@@ -7,18 +7,13 @@ export interface FoleyPlayer {
   loop: boolean;
   shouldCorrectPitch: boolean;
   /**
-   * The rate, as a **method**, and it has to stay one.
+   * The rate, as a **method**, and it stays one.
    *
-   * `expo-audio` documents `playbackRate` as a property, and its *web* player is a plain class
-   * where that property has a real setter — so assigning to it worked perfectly in a browser. On
-   * both iOS and Android the property is declared getter-only (`Property("playbackRate")` with no
-   * `.set`, unlike `volume`, `loop` and `shouldCorrectPitch` beside it), so the assignment threw a
-   * TypeError in the bundle's strict mode — and because it sat between the volume and the
-   * `play()` in `begin` below, **every one-shot in the game was silent on a real phone** while the
-   * pour loop and the music carried on, because neither of those touches the rate on its way to
-   * playing. `setPlaybackRate` exists on all three platforms and is the only way to set it.
-   *
-   * `tools/check-native-audio-api.cjs` reads the native modules and holds this.
+   * The player this once ran on declared `playbackRate` as a property that only its web version
+   * gave a setter, so assigning to it worked in a browser and threw on a phone — between the
+   * volume and the `play()` in `begin` below, inside one `try`, which is how **every one-shot in
+   * the game came to be silent on a real phone** while the pour loop and the music carried on.
+   * The stub in `tools/check-audio-engine.cjs` keeps the shape honest for the same reason.
    */
   setPlaybackRate(rate: number): void;
   play(): void;
@@ -28,7 +23,7 @@ export interface FoleyPlayer {
 }
 interface Voice {
   player: FoleyPlayer;
-  module: number;
+  module: string;
   cue: SoundId | null;
   until: number;
   priority: number;
@@ -55,7 +50,7 @@ export class FoleyEngine {
   private fillPerSecond = 0;
 
   constructor(
-    private create: (module: number) => FoleyPlayer,
+    private create: (module: string) => FoleyPlayer,
     private report: (message: string, error: unknown) => void,
     private random: () => number = Math.random,
     private now: () => number = Date.now,

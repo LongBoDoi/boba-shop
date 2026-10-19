@@ -1,6 +1,3 @@
-import { createAudioPlayer, setAudioModeAsync } from 'expo-audio';
-import { AppState, Platform } from 'react-native';
-
 import { AudioSettings, DEFAULT_AUDIO } from '../game/reducer';
 import { POUR_RATE } from '../game/ingredients';
 import { MUSIC, MUSIC_GAIN, MusicId, SOUNDS, SoundId } from './sounds';
@@ -40,12 +37,13 @@ let ready = false;
  * Whether a sound is allowed to come out yet.
  *
  * A browser will not play audio until the page has been interacted with, and there is no way to
- * ask whether it will — `play()` returns nothing to catch. So on the web this starts false and the
- * first real gesture anywhere in the document flips it; until then the game remembers what it
- * wanted and `reconcile` starts it the moment it is allowed. In practice the player never notices,
- * because the first gesture *is* the tap that starts the game. Native has no such rule.
+ * ask whether it will — `play()` returns nothing to catch. So this starts false and the first real
+ * gesture anywhere in the document flips it; until then the game remembers what it wanted and
+ * `reconcile` starts it the moment it is allowed. In practice the player never notices, because
+ * the first gesture *is* the tap that starts the game. The app in its Capacitor shell is this same
+ * page, so the rule follows it onto the phone.
  */
-let unlocked = Platform.OS !== 'web';
+let unlocked = false;
 
 let effects: FoleyEngine | null = null;
 
@@ -59,23 +57,16 @@ function warn(what: string, error: unknown) {
 type GamePlayer = FoleyPlayer & { readonly playing: boolean };
 
 /**
- * On the web the players are Web Audio, everywhere else `expo-audio`.
- *
- * A browser's `expo-audio` player is an `<audio>` element, and a game that plays a cue on every
- * grab and drop drove dozens of them through pause, seek and play — which is what made the web
- * build stutter once there was sound, on a desktop as much as a phone. See `webAudio.ts`. It is
- * chosen by what the runtime *has* rather than by `Platform.OS` alone, so a browser without Web
- * Audio still gets sound the old way, and so do the tests, which have no audio device.
+ * Every player is Web Audio — a decoded buffer and a throwaway source node per cue. See
+ * `webAudio.ts` for why a media element per voice is not an option for a game that fires a cue on
+ * every grab and drop, and `initAudio` for what happens in a browser that has no `AudioContext`.
  */
-const webAudio = Platform.OS === 'web' && webAudioAvailable();
-
-function effectPlayer(source: number): GamePlayer {
-  return webAudio ? new WebAudioPlayer(source)
-    : createAudioPlayer(source, { downloadFirst: true, updateInterval: 250 });
+function effectPlayer(source: string): GamePlayer {
+  return new WebAudioPlayer(source);
 }
 
-function musicPlayer(source: number): GamePlayer {
-  return webAudio ? new WebAudioPlayer(source) : createAudioPlayer(source);
+function musicPlayer(source: string): GamePlayer {
+  return new WebAudioPlayer(source);
 }
 
 // ------------------------------------------------------------------ fades
@@ -86,8 +77,8 @@ const stopping = new Map<ReturnType<typeof setTimeout>, GamePlayer>();
 /**
  * Walk a player's volume to `to` over `FADE_MS`, then optionally stop it.
  *
- * Reanimated is no use here — nothing about this is rendered — so it is a plain timer, and it only
- * runs while a fade is actually in flight. One fade per player: starting a second cancels the
+ * Nothing about this is drawn, so it is a plain timer rather than anything the canvas knows about,
+ * and it only runs while a fade is actually in flight. One fade per player: starting a second cancels the
  * first, or the two would fight over the same volume and the loser would win half the time.
  */
 function fadeTo(player: GamePlayer, to: number, thenStop = false) {
@@ -131,55 +122,53 @@ export function initAudio(): () => void {
   if (ready) return () => {};
   ready = true;
 
-  // The silent switch is the player's, not ours — but **"silent" is not the same thing on the two
-  // platforms**, and treating it as though it were made the game mute for anyone whose phone was
-  // on vibrate.
+  // There is no audio session to configure and nothing to ask for: a page is mixed with whatever
+  // else the device is playing by the browser, and it is not allowed to play in the background at
+  // all. The silent switch is the player's and stays theirs — iOS silences a page's sound with it,
+  // which for this game is the right answer, and on Android the media volume is the control.
   //
-  // On iOS the switch exists to silence exactly this kind of app, so it is respected there.
-  //
-  // Android has no such switch. What `playsInSilentMode: false` consults there is the **ringer**
-  // mode — `playsInSilentMode || ringerMode == RINGER_MODE_NORMAL` — which governs calls and
-  // notifications and has nothing to do with the media stream a game plays on. Worse, the check
-  // sits at the top of the native `play()` and returns early, so a phone left on vibrate got no
-  // sound at all and nothing on screen to explain why. Media has its own volume on Android, and
-  // that is the control the player already has.
-  //
-  // `mixWithOthers` is the other half of the manners: whatever they already had on keeps playing.
-  setAudioModeAsync({
-    playsInSilentMode: Platform.OS !== 'ios',
-    interruptionMode: 'mixWithOthers',
-    shouldPlayInBackground: false,
-  }).catch((error: unknown) => warn('the audio session could not be configured', error));
+  // A runtime with no `AudioContext` gets no sound rather than a worse kind of sound: there is no
+  // second player to fall back to, and every cue goes through the same `effects?.` optional calls,
+  // so the game plays on in silence. The tests take this path too — they have no audio device.
+  if (!webAudioAvailable()) {
+    warn('the browser has no Web Audio, so the shop is silent', null);
+    return () => { ready = false; };
+  }
 
-  active = AppState.currentState !== 'background' && AppState.currentState !== 'inactive';
+  active = visible();
   effects = new FoleyEngine(
     effectPlayer, warn,
   );
   effects.prepare();
   reconcile();
 
-  const subscription = AppState.addEventListener('change', (status) => {
-    active = status === 'active';
+  const seen = () => {
+    active = visible();
     reconcile();
-  });
+  };
+  document.addEventListener('visibilitychange', seen);
 
-  // On the web, the first gesture anywhere is what buys the right to make a sound. These are the
-  // events a browser counts, they fire during the capture phase so nothing can swallow them, and
-  // they take themselves off once the first one lands.
-  const page = Platform.OS === 'web' && typeof window !== 'undefined' ? window : null;
+  // The first gesture anywhere is what buys the right to make a sound. These are the events a
+  // browser counts, they fire during the capture phase so nothing can swallow them, and they take
+  // themselves off once the first one lands.
   const unlock = () => {
     unlocked = true;
-    if (webAudio) resumeWebAudio();
-    for (const event of UNLOCKING) page?.removeEventListener(event, unlock, true);
+    resumeWebAudio();
+    for (const event of UNLOCKING) window.removeEventListener(event, unlock, true);
     reconcile();
   };
-  for (const event of UNLOCKING) page?.addEventListener(event, unlock, true);
+  for (const event of UNLOCKING) window.addEventListener(event, unlock, true);
 
   return () => {
-    subscription.remove();
-    for (const event of UNLOCKING) page?.removeEventListener(event, unlock, true);
+    document.removeEventListener('visibilitychange', seen);
+    for (const event of UNLOCKING) window.removeEventListener(event, unlock, true);
     teardown();
   };
+}
+
+/** Whether the page is in front. A hidden tab, or a phone with the app behind, is not. */
+function visible(): boolean {
+  return typeof document === 'undefined' || document.visibilityState !== 'hidden';
 }
 
 const UNLOCKING = ['pointerdown', 'touchstart', 'mousedown', 'keydown'] as const;
@@ -195,10 +184,10 @@ function teardown() {
   current = null;
   ready = false;
   gamePaused = false;
-  unlocked = Platform.OS !== 'web';
+  unlocked = false;
 }
 
-/** `createAudioPlayer` does not clean up after itself, so every player made here is removed. */
+/** A player holds a decoded buffer and its own gain node, so every one made here is released. */
 function remove(player: GamePlayer) {
   const fade = fades.get(player);
   if (fade) clearInterval(fade);

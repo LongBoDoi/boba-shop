@@ -1,5 +1,12 @@
 name: Build apps
 
+# The phone apps: the web build in a Capacitor shell, one `.apk` and one unsigned `.ipa`, published
+# as a GitHub release. Run it by hand, when a new file is actually wanted.
+#
+# The *page* keeps itself current — installed to a home screen it fetches the newest build on every
+# launch (public/sw.js) — but an app built here carries the game inside it, so a change only
+# reaches an installed app through a new file from this workflow.
+
 on:
   workflow_dispatch:
     inputs:
@@ -7,10 +14,6 @@ on:
         description: 'Publish a GitHub Release with the .apk and .ipa'
         type: boolean
         default: true
-      android_build_id:
-        description: 'Reuse this finished EAS build instead of starting a new one (optional)'
-        type: string
-        default: ''
 
 permissions:
   contents: write
@@ -20,32 +23,9 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  version:
+  web:
     runs-on: ubuntu-latest
-    outputs:
-      version: ${{ steps.read.outputs.version }}
-      tag: ${{ steps.read.outputs.tag }}
-      build: ${{ steps.read.outputs.build }}
-    steps:
-      - name: Check out source
-        uses: actions/checkout@v7
-
-      - name: Read the app version
-        id: read
-        run: |
-          version="$(node -p "require('./app.json').expo.version")"
-          echo "version=$version" >> "$GITHUB_OUTPUT"
-          echo "tag=v$version+${{ github.run_number }}" >> "$GITHUB_OUTPUT"
-          # Stamped into the apps as versionCode/buildNumber so a newer file installs over an
-          # older one. It is not the update runtime version — that is the app version above.
-          echo "build=${{ github.run_number }}" >> "$GITHUB_OUTPUT"
-
-  android:
-    needs: version
-    runs-on: ubuntu-latest
-    timeout-minutes: 60
-    env:
-      CI: '1'
+    timeout-minutes: 20
     steps:
       - name: Check out source
         uses: actions/checkout@v7
@@ -59,45 +39,64 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Stamp the build number
-        run: node tools/stamp-build.cjs "${{ needs.version.outputs.build }}"
+      - name: Typecheck
+        run: npm run typecheck
 
-      - name: Build the APK on EAS
-        env:
-          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
-          NODE_OPTIONS: --dns-result-order=ipv4first
-          REUSE: ${{ inputs.android_build_id }}
-        run: |
-          if [ -z "$EXPO_TOKEN" ]; then
-            echo "::error::Add an Expo access token as the EXPO_TOKEN repository Actions secret. See docs/deployment.md."
-            exit 1
-          fi
-          if [ -n "$REUSE" ]; then
-            echo "Reusing EAS build $REUSE instead of starting a new one"
-            npx --yes eas-cli@latest build:view "$REUSE" --json > eas-build.json
-          else
-            npx --yes eas-cli@latest build \
-              --platform android \
-              --profile apk \
-              --non-interactive \
-              --wait \
-              --json > eas-build.json
-          fi
+      - name: Run regression checks
+        run: npm test
 
-      - name: Download the APK
+      - name: Build the game
+        run: npx vite build
+
+      - name: Keep the build
+        uses: actions/upload-artifact@v7
+        with:
+          name: web
+          path: dist
+          if-no-files-found: error
+
+  android:
+    needs: web
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      # Stamped in as versionCode/versionName, so a newer .apk installs over an older one.
+      BUILD_NUMBER: ${{ github.run_number }}
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Set up Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Install Capacitor
+        run: npm ci --ignore-scripts
+
+      - name: Fetch the web build
+        uses: actions/download-artifact@v8
+        with:
+          name: web
+          path: dist
+
+      - name: Copy the game into the Android project
+        run: npx cap sync android
+
+      - name: Build the APK
+        working-directory: android
         run: |
-          url="$(node -e '
-            const builds = require("./eas-build.json");
-            const build = Array.isArray(builds) ? builds[0] : builds;
-            const url = build?.artifacts?.applicationArchiveUrl;
-            if (!url) {
-              console.error("No applicationArchiveUrl in the EAS build result; status is " + build?.status);
-              process.exit(1);
-            }
-            console.log(url);
-          ')"
-          curl -fsSL -o "boba-shop-${{ needs.version.outputs.version }}.apk" "$url"
-          ls -lh ./*.apk
+          chmod +x gradlew
+          ./gradlew assembleRelease --no-daemon
+          mv app/build/outputs/apk/release/app-release.apk "$GITHUB_WORKSPACE/tiem-tra-sua-${BUILD_NUMBER}.apk"
+          ls -lh "$GITHUB_WORKSPACE"/*.apk
 
       - name: Upload the APK
         uses: actions/upload-artifact@v7
@@ -107,14 +106,9 @@ jobs:
           if-no-files-found: error
 
   ios:
-    needs: version
-    # macos-15 defaults to Xcode 16.4 (Swift 6.1). Expo SDK 57's precompiled
-    # ExpoModulesJSI xcframework resolves a SwiftPM package that requires Swift
-    # tools 6.2, so the archive needs an Xcode 26 image.
+    needs: web
     runs-on: macos-26
-    timeout-minutes: 60
-    env:
-      CI: '1'
+    timeout-minutes: 40
     steps:
       - name: Check out source
         uses: actions/checkout@v7
@@ -125,8 +119,14 @@ jobs:
           node-version: '22'
           cache: npm
 
-      - name: Install dependencies
-        run: npm ci
+      - name: Install Capacitor
+        run: npm ci --ignore-scripts
+
+      - name: Fetch the web build
+        uses: actions/download-artifact@v8
+        with:
+          name: web
+          path: dist
 
       - name: Select the newest Xcode
         run: |
@@ -135,40 +135,22 @@ jobs:
             sudo xcode-select -s "$latest/Contents/Developer"
           fi
           xcodebuild -version
-          swift --version
 
-      - name: Stamp the build number
-        run: node tools/stamp-build.cjs "${{ needs.version.outputs.build }}"
-
-      - name: Generate the iOS project
-        run: npx expo prebuild --platform ios --clean
-
-      - name: Find the Xcode scheme
-        id: scheme
-        run: |
-          workspace="$(ls -d ios/*.xcworkspace | head -1)"
-          # The app scheme is named after the generated .xcodeproj. Listing the
-          # workspace instead also returns every CocoaPods scheme, and picking one
-          # of those archives a pod library rather than the app.
-          scheme="$(basename "$(ls -d ios/*.xcodeproj | head -1)" .xcodeproj)"
-          if ! xcodebuild -workspace "$workspace" -list -json \
-            | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{const n=JSON.parse(s).workspace.schemes;if(!n.includes(process.argv[1])){console.error("Schemes found: "+n.join(", "));process.exit(1)}})' "$scheme"; then
-            echo "::error::Scheme '$scheme' is not in $workspace"
-            exit 1
-          fi
-          echo "workspace=$workspace" >> "$GITHUB_OUTPUT"
-          echo "scheme=$scheme" >> "$GITHUB_OUTPUT"
-          echo "Building scheme '$scheme' from $workspace"
+      - name: Copy the game into the iOS project
+        run: npx cap sync ios
 
       - name: Archive without signing
+        working-directory: ios/App
         run: |
           set -o pipefail
           xcodebuild archive \
-            -workspace '${{ steps.scheme.outputs.workspace }}' \
-            -scheme '${{ steps.scheme.outputs.scheme }}' \
+            -project App.xcodeproj \
+            -scheme App \
             -configuration Release \
             -destination 'generic/platform=iOS' \
-            -archivePath "$RUNNER_TEMP/boba-shop.xcarchive" \
+            -archivePath "$RUNNER_TEMP/tiem-tra-sua.xcarchive" \
+            CURRENT_PROJECT_VERSION="${{ github.run_number }}" \
+            MARKETING_VERSION="1.0.${{ github.run_number }}" \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
@@ -198,9 +180,9 @@ jobs:
       - name: Package the .ipa
         run: |
           mkdir -p "$RUNNER_TEMP/Payload"
-          cp -R "$RUNNER_TEMP/boba-shop.xcarchive/Products/Applications/"*.app "$RUNNER_TEMP/Payload/"
-          (cd "$RUNNER_TEMP" && zip -qry "boba-shop-${{ needs.version.outputs.version }}-unsigned.ipa" Payload)
-          mv "$RUNNER_TEMP/boba-shop-${{ needs.version.outputs.version }}-unsigned.ipa" .
+          cp -R "$RUNNER_TEMP/tiem-tra-sua.xcarchive/Products/Applications/"*.app "$RUNNER_TEMP/Payload/"
+          (cd "$RUNNER_TEMP" && zip -qry "tiem-tra-sua-${{ github.run_number }}-unsigned.ipa" Payload)
+          mv "$RUNNER_TEMP/tiem-tra-sua-${{ github.run_number }}-unsigned.ipa" .
           ls -lh ./*.ipa
 
       - name: Upload the .ipa
@@ -211,7 +193,7 @@ jobs:
           if-no-files-found: error
 
   release:
-    needs: [version, android, ios]
+    needs: [android, ios]
     if: inputs.publish_release
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -219,36 +201,40 @@ jobs:
       - name: Download the built apps
         uses: actions/download-artifact@v8
         with:
-          path: dist
+          pattern: '{apk,ipa}'
+          path: out
           merge-multiple: true
 
       - name: List what will be published
-        run: ls -lhR dist
+        run: ls -lhR out
 
       - name: Publish the release
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: ${{ needs.version.outputs.tag }}
-          VERSION: ${{ needs.version.outputs.version }}
+          TAG: build-${{ github.run_number }}
         run: |
           cat > notes.md <<'NOTES'
           Tiệm Trà Sữa, built from this commit.
 
           | File | Platform | Notes |
           | --- | --- | --- |
-          | `.apk` | Android | Signed with the project's EAS keystore. Copy it to the phone and open it; allow installs from that source. |
-          | `.ipa` | iOS | **Unsigned.** iOS will not install it as-is. Re-sign it with Sideloadly or AltStore using a free Apple ID (the app then runs for 7 days per install), or with a paid Apple Developer certificate. |
+          | `.apk` | Android | Copy it to the phone and open it; allow installs from that source. A later build installs over this one and keeps the shop. |
+          | `.ipa` | iOS | **Unsigned.** iOS will not install it as-is. Re-sign it with Sideloadly or AltStore using a free Apple ID (it then runs for 7 days per install), or with a paid developer certificate. |
 
-          **This is the only install you should need for a while.** From here the app offers its
-          own updates: every push to `main` publishes one, and the game asks on its next launch
-          whether to take it. A new file like this one is only needed when the native side
-          changes — which shows up as a new app version number.
+          **You do not need either of these to play.** The game is a web game: open
+          https://boba-shop.expo.app and add it to the home screen, and it runs with no browser
+          chrome, keeps its own shop and plays with no signal — and it is always the newest build,
+          with nothing to install. These files are the same game in a native shell, for when that
+          is wanted; unlike the page, an installed app only changes when a new file like this one
+          is installed.
 
-          You can also just play the game in a browser: https://boba-shop.expo.app
+          Moving a shop between the page and the app, or from the old app: ⚙️ Cài đặt → Sao lưu
+          tiệm, copy the code, and paste it into the same card on the other one.
           NOTES
           gh release create "$TAG" \
             --repo "$GITHUB_REPOSITORY" \
-            --title "Tiệm Trà Sữa $VERSION (build ${{ github.run_number }})" \
+            --target "$GITHUB_SHA" \
+            --title "Tiệm Trà Sữa (build ${{ github.run_number }})" \
             --notes-file notes.md \
-            dist/*.apk dist/*.ipa
+            out/*.apk out/*.ipa
           echo "Released [$TAG]($(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json url -q .url))" >> "$GITHUB_STEP_SUMMARY"

@@ -1,7 +1,0 @@
-<?xml version='1.0' encoding='utf-8'?>
-<resources>
-    <string name="app_name">Trà Sữa (mới)</string>
-    <string name="title_activity_main">Trà Sữa (mới)</string>
-    <string name="package_name">com.manhlong.bobashop.phaser</string>
-    <string name="custom_url_scheme">com.manhlong.bobashop.phaser</string>
-</resources>

@@ -2,7 +2,7 @@
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const ts = require('typescript');
-const code = ts.transpileModule(fs.readFileSync('src/components/art/toppingGeometry.ts', 'utf8'), {
+const code = ts.transpileModule(fs.readFileSync('src/art/toppingGeometry.ts', 'utf8'), {
   compilerOptions: { module: ts.ModuleKind.CommonJS },
 }).outputText;
 const geometry = { exports: {} };

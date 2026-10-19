@@ -32,8 +32,9 @@ export type GameMode = 'standard' | 'relaxed';
  * This lives in game state for the same reasons `mode` does: `SET_AUDIO` can be sent from any
  * screen, `START_DAY` carries it to the next day, and it rides along in the save, so the volume a
  * shop was last played at is the one it reopens at. It is kept here rather than in
- * `src/audio/` because this file must stay free of native imports — `tools/check-save.cjs` and
- * `check-serving.cjs` load the reducer in plain Node, and an `expo-audio` import would end that.
+ * `src/audio/` because this file must stay free of anything a browser provides —
+ * `tools/check-save.cjs` and `check-serving.cjs` load the reducer in plain Node, and an import
+ * that reaches for an `AudioContext` would end that.
  */
 export interface AudioSettings {
   /** The looping music under the screen. */

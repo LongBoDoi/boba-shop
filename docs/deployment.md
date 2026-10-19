@@ -1,45 +1,62 @@
 # Web deployment
 
-Every push to `main` runs the [Deploy web workflow](https://github.com/LongBoDoi/boba-shop/actions/workflows/deploy.yml). After dependency installation, lint, typecheck, regression checks, and web export succeed, it publishes the game to [boba-shop.expo.app](https://boba-shop.expo.app) using EAS Hosting. Lint warnings fail the workflow.
+The game is a web game, and this is how it ships. Every push to `main` runs the
+[Deploy web workflow](https://github.com/LongBoDoi/boba-shop/actions/workflows/deploy.yml): after
+`npm ci`, the typecheck, the regression checks and the Vite build succeed, it publishes `dist/` to
+[boba-shop.expo.app](https://boba-shop.expo.app) on EAS Hosting.
 
-Deployments run one at a time. GitHub keeps the latest pending run when several commits arrive during a deployment. Pushes to other branches do not deploy production.
+**That link is the only one.** `eas deploy --prod` publishes to the production alias; a deploy
+without `--prod` would leave the build on a URL of its own, and `--alias <name>` would add a named
+one (there was a `boba-shop--phaser.expo.app` while the rebuild was a preview; it is gone). The
+shop has one address because an installed page is pinned to the address it was installed from, and
+a second link is a second game to keep in step. The one URL that does appear beside it is the
+current deployment's own `boba-shop--<id>.expo.app`, which is how EAS Hosting rolls back; nothing
+links to it.
 
-To redeploy the current `main`, open the workflow's **Run workflow** button and choose `main`.
+Deployments run one at a time. GitHub keeps the latest pending run when several commits arrive
+during a deployment. Pushes to other branches do not deploy. To redeploy the current `main`, open
+the workflow's **Run workflow** button and choose `main`.
+
+## What `app.json` is now
+
+`app.json` is **not** an app config — the game has no Expo app any more. It is only the identity of
+the hosting project this is published to (`@manhlong/boba-shop`, project
+`a7ab235c-52a1-459c-a82e-cca1e4c3cf36`), which is what `eas deploy` reads to know where a build
+goes. Nothing in the game imports it, and `npx expo` is not installed. The phone apps are
+configured in `capacitor.config.ts`.
 
 ## Authentication
 
-The workflow uses the repository Actions secret `EXPO_TOKEN`. This must be an [Expo personal access token](https://docs.expo.dev/accounts/programmatic-access/) for an account with access to the `@manhlong/boba-shop` project.
+The workflow uses the repository Actions secret `EXPO_TOKEN`. This must be an
+[Expo personal access token](https://docs.expo.dev/accounts/programmatic-access/) for an account
+with access to the `@manhlong/boba-shop` project.
 
 To replace or rotate it:
 
-1. Create a token in [Expo account settings](https://expo.dev/accounts/manhlong/settings/access-tokens), with a recognizable name such as `boba-shop GitHub deploy`.
-2. Save it as `EXPO_TOKEN` in the repository's [Actions secrets](https://github.com/LongBoDoi/boba-shop/settings/secrets/actions).
+1. Create a token in [Expo account settings](https://expo.dev/accounts/manhlong/settings/access-tokens),
+   with a recognizable name such as `boba-shop GitHub deploy`.
+2. Save it as `EXPO_TOKEN` in the repository's
+   [Actions secrets](https://github.com/LongBoDoi/boba-shop/settings/secrets/actions).
 3. Run the deployment workflow and confirm it succeeds before revoking the old token.
 
-Do not commit tokens to the repository. The workflow exposes this secret only to the deployment step.
+Do not commit tokens to the repository. The workflow exposes this secret only to the deploy step.
 
 ## Local deployment
 
-Log in to Expo, then run:
+Log in to Expo (`npx eas-cli@latest login`), then:
 
 ```sh
-npx expo export --platform web
+npx vite build
 NODE_OPTIONS="--dns-result-order=ipv4first" npx eas-cli@latest deploy --prod
 ```
 
-The EAS project ID and single-page web export are configured in `app.json`.
+`eas-cli` uses `node-fetch` over an IPv6 path some networks reset; that `NODE_OPTIONS` is what
+gets past `read ECONNRESET` on every request.
 
-## The installed apps
+## The phone apps
 
-Pushing to `main` also publishes an over-the-air update, which the installed `.apk`/`.ipa` offer
-the player on their next launch. The "Deploy web" workflow does both, so the page and the apps are
-never running different games. To publish one by hand:
-
-```sh
-npx eas-cli@latest update --channel production --environment production --message "what changed"
-```
-
-An update is JavaScript and assets only. **Anything native — a new dependency, a new SDK, a config
-plugin — needs `expo.version` bumped and a fresh "Build apps" run**, because the update runtime
-version is that version; `npm test` fails if the native dependencies move without it. See
-"Updating itself" in `CLAUDE.md`.
+The apps are the same web build in a Capacitor shell and are **not** published by this workflow —
+run **Build apps** by hand when a new file is actually wanted. The difference that matters to a
+player: the installed *page* fetches the newest build every launch (`public/sw.js`), while an
+installed *app* carries the game inside it and only changes when a new `.apk`/`.ipa` is installed.
+There is no over-the-air update any more; the page is the thing that updates itself.

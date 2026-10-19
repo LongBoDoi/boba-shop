@@ -20,9 +20,9 @@ import { parseGame, serializeGame } from './save';
  * - **Base64 over UTF-8, hand-rolled.** The save carries customer names with Vietnamese
  *   diacritics, and raw JSON full of quotes, braces and accented letters is the kind of string
  *   that a chat app helpfully "corrects" on the way through. Base64 reduces it to sixty-four
- *   characters that survive being pasted anywhere. It is written out below rather than taken from
- *   a library because `btoa` is not reliably present in a React Native runtime and the dependency
- *   would be native code for forty lines of arithmetic.
+ *   characters that survive being pasted anywhere. It is written out below rather than taken
+ *   from a library: it is forty lines of arithmetic, and `btoa` mangles anything outside Latin-1,
+ *   which is most of a Vietnamese save.
  * - **It carries a checksum.** A code is copied by hand and arrives truncated often enough to
  *   matter. A truncated base64 blob usually still parses into *something*, and restoring half a
  *   shop over a whole one is the one outcome worse than refusing.

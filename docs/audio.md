@@ -7,13 +7,13 @@ cup contacts, spoon scrapes, paper, a door bell, coins, splashes, a bag, footste
 
 ## Runtime
 
-- `src/audio/clips.ts`: generated asset IDs and measured durations, with static Metro requires.
+- `src/audio/clips.ts`: the clip files and their measured durations.
 - `src/audio/sounds.ts`: actions, alternate takes, layers, timing, levels, variation and priorities.
 - `src/audio/foley.ts`: effects scheduling, player pool, cancellation and held-pour envelopes.
-- `src/audio/audio.ts`: Expo lifecycle, browser unlock, foreground state, settings and music.
-- `src/audio/webAudio.ts`: the web build's players — Web Audio, not `<audio>` elements. See
-  "The web plays through Web Audio" below.
-- `src/audio/useAudio.ts`: syncs settings, phase and pause without audio props or context.
+- `src/audio/audio.ts`: browser unlock, whether the page is in front, settings and music.
+- `src/audio/webAudio.ts`: the players — Web Audio, not `<audio>` elements. See "Everything
+  plays through Web Audio" below.
+- `src/sound.ts`: watches the shop and tells the engine the track, the volumes and the cues.
 
 Six common contacts and one stream player are warmed. Alternate takes load on demand. There
 are at most 14 effect players plus the stream; idle players are reused, and lower/equal-priority
@@ -45,12 +45,12 @@ The two original music loops remain separate and byte-identical. Music loads on 
 crossfades with phase changes. Mixing with other audio and existing saved-volume
 migration/clamping behavior are preserved. Recording and background audio remain disabled.
 
-## The web plays through Web Audio
+## Everything plays through Web Audio
 
-On the web, `audio.ts` hands `FoleyEngine` and the music `WebAudioPlayer`s instead of
-`expo-audio` players. Native is unchanged.
+`audio.ts` hands `FoleyEngine` and the music `WebAudioPlayer`s: a decoded `AudioBuffer` per clip
+and a throwaway source node per cue.
 
-`expo-audio`'s web player is one `HTMLAudioElement` per player, and this engine keeps a player per
+The obvious alternative is one `HTMLAudioElement` per player, and this engine keeps a player per
 voice: twenty-one at launch, past fifty over a shift. Each is a full media pipeline, and every cue
 on a recycled voice drove one through pause, an asynchronous seek and a play, while the pour
 envelope rewrote an element's volume every 16 ms. That is what made the web build stutter once
@@ -75,37 +75,37 @@ listens for every candidate until the context is actually running, rather than t
 event `audio.ts` sees. A hidden page suspends the context, so a background tab lets go of the
 audio device.
 
-It is chosen by what the runtime *has* (`AudioContext`), not by `Platform.OS` alone, so a browser
-without Web Audio still gets sound the old way — and so do the tests, which have no audio device.
-`check-audio-engine.cjs` drives the Web Audio path separately against a fake context.
+A runtime without an `AudioContext` — a browser old enough to lack one, and the regression
+scripts, which have no audio device — gets no sound rather than a worse kind of sound: there is no
+second player to fall back to, every cue goes through the same optional calls, and the game plays
+on in silence after saying so once. `check-audio-engine.cjs` drives the whole lifecycle against a
+fake context.
 
-## Two `expo-audio` traps a browser cannot show you
+## The trap a browser cannot show you
 
-Both of these shipped a game whose effects were **silent on a real phone** while the whole suite
-was green. `tools/check-native-audio-api.cjs` reads the SDK's own Swift and Kotlin to hold them.
+This one shipped a game whose effects were **silent on a real phone** while the whole suite was
+green, and it is kept written down because the shape of the mistake outlives the library it came
+from.
 
-**The playback rate is a method, never a property.** `playbackRate` is documented as a property,
-and `AudioPlayer.web.js` is a plain class that gives it a real setter — so assigning to it is
-flawless in a browser. On iOS and Android it is declared `Property("playbackRate")` with no
-`.set`, i.e. getter-only (unlike `volume`, `loop` and `shouldCorrectPitch` beside it), so the
-assignment throws a `TypeError` under the bundle's strict mode. In `foley.ts` it sat between the
+**The playback rate was a method pretending to be a property.** The player the game ran on then
+documented `playbackRate` as a property, and its web class gave it a real setter — so assigning to
+it was flawless in a browser. On iOS and Android the same property was declared getter-only, so
+the assignment threw a `TypeError` under the bundle's strict mode. In `foley.ts` it sat between the
 volume and the `play()` inside a single `try`: the throw was caught, logged to a console nobody
 reads on a device, and the `play()` never ran. Every one-shot was silent; the music and the pour
 loop kept working because neither touches the rate on the way to `play()`, which is what made it
-look like only *some* sounds were broken. Use `setPlaybackRate(rate)` — present on all three
-platforms — and call it **before** `play()`, because iOS starts playback at `currentRate` and that
-is the only thing that sets it.
+look like only *some* sounds were broken.
 
-**"Silent mode" means two different things.** iOS has a switch meant to silence exactly this kind
-of app, so `playsInSilentMode` is `false` there. Android has no such switch: the flag consults
-`ringerMode == RINGER_MODE_NORMAL`, which governs calls and notifications, not the media stream a
-game plays on — and the check is at the top of the native `play()` and returns early, so a phone
-on vibrate produced no sound at all with nothing on screen to explain it. The setting is
-`Platform.OS !== 'ios'`.
+Two things came out of it and both stay. `FoleyPlayer` asks for `setPlaybackRate(rate)` as a
+method, so there is nothing to assign to; and the player stub in `check-audio-engine.cjs` keeps
+`playbackRate` an accessor with no setter, so a stub cannot flatter code that the platform would
+refuse. A stub that flatters the code is worse than no stub — that one went green through the
+whole outage.
 
-The engine test's player stub is modelled on the **native** player, not the web one: `playbackRate`
-is an accessor with no setter, so it throws in the harness exactly as on a device. A stub that
-flatters the code is worse than no stub — this one went green through the whole outage.
+**On a phone, the system's own switches are the player's.** iOS silences a web page's audio with
+the ring/silent switch and there is nothing to configure; on Android the media volume is the
+control. Neither is something the game asks about, which is why there is no audio-session setup
+left in `initAudio`.
 
 ## Rebuild or audition
 
@@ -128,11 +128,8 @@ bundle. Listening on phone speakers and headphones is still needed.
 
 ## Verification
 
-Run `npm run lint`, `npm run typecheck` and `npm test`. `check-native-audio-api.cjs` additionally
-reads `expo-audio`'s iOS and Android module declarations and fails if the game assigns any player
-member that one of them declares getter-only — it re-checks itself against every SDK upgrade for
-free. Audio checks validate source/output hashes,
+Run `npm run typecheck` and `npm test`. Audio checks validate source/output hashes,
 catalogue coverage, no orphaned synth files, the sub-1 MB effect budget, PCM format, levels,
 one-shot edges and loop seams. Scheduler checks cover alternate takes, layers, voice limits,
-priority, cooldowns, live fill, browser/native startup, mute/pause/background cancellation,
-stale/rejected rewind promises and resource cleanup. These checks cannot judge subjective sound quality.
+priority, cooldowns, live fill, the page's own lifecycle (the gesture gate, a hidden page),
+mute/pause cancellation, stale/rejected rewind promises and resource cleanup. These checks cannot judge subjective sound quality.

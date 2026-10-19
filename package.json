@@ -1,47 +1,31 @@
 {
   "name": "boba-shop",
+  "private": true,
   "version": "1.0.0",
-  "main": "index.ts",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview --host",
+    "typecheck": "tsc --noEmit",
+    "sync": "cap sync",
+    "test": "node tools/check-serving.cjs && node tools/check-save.cjs && node tools/check-cup-station.cjs && node tools/check-audio.cjs && node tools/check-audio-engine.cjs && node tools/check-topping-layout.cjs && node tools/check-backup-code.cjs"
+  },
   "dependencies": {
-    "@expo-google-fonts/baloo-2": "^0.4.2",
-    "@expo/metro-runtime": "~57.0.16",
-    "@react-native-async-storage/async-storage": "2.2.0",
-    "expo": "~57.0.30",
-    "expo-asset": "~57.0.20",
-    "expo-audio": "~57.0.5",
-    "expo-file-system": "~57.0.7",
-    "expo-font": "~57.0.4",
-    "expo-haptics": "~57.0.3",
-    "expo-intent-launcher": "~57.0.1",
-    "expo-status-bar": "~57.0.1",
-    "expo-updates": "~57.0.26",
-    "react": "19.2.3",
-    "react-dom": "19.2.3",
-    "react-native": "0.86.3",
-    "react-native-reanimated": "4.5.1",
-    "react-native-safe-area-context": "~5.7.0",
-    "react-native-svg": "15.15.4",
-    "react-native-web": "^0.21.2",
-    "react-native-worklets": "0.10.1"
+    "@capacitor/android": "^8.5.3",
+    "@capacitor/core": "^8.5.3",
+    "@capacitor/ios": "^8.5.3",
+    "phaser": "^4.2.1",
+    "preact": "^11.0.1"
   },
   "devDependencies": {
-    "@types/react": "~19.2.2",
-    "eslint": "^9.0.0",
-    "eslint-config-expo": "~57.0.2",
-    "typescript": "~6.0.3"
+    "@capacitor/cli": "^8.5.3",
+    "@preact/preset-vite": "^2.10.6",
+    "typescript": "~6.0.3",
+    "vite": "^8.3.4"
   },
-  "scripts": {
-    "start": "expo start",
-    "android": "expo start --android",
-    "ios": "expo start --ios",
-    "web": "expo start --web",
-    "lint": "expo lint --max-warnings=0",
-    "typecheck": "tsc --noEmit",
-    "test": "node tools/check-serving.cjs && node tools/check-save.cjs && node tools/check-cup-station.cjs && node tools/check-drawing.cjs && node tools/check-audio.cjs && node tools/check-audio-engine.cjs && node tools/check-native-audio-api.cjs && node tools/check-topping-layout.cjs && node tools/check-updates.cjs && node tools/check-reinstall.cjs && node tools/check-dependencies.cjs"
-  },
-  "private": true,
   "overrides": {
-    "xcode@3.0.1": {
+    "xcode": {
       "uuid": "11.1.1"
     }
   }
