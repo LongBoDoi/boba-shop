@@ -32,4 +32,7 @@
     <!-- Permissions -->
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Installing a newer build of this same app, when one is needed. The player still decides:
+         Android asks "allow from this source" the first time, and nothing here skips that. -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 </manifest>

@@ -47,6 +47,10 @@ jobs:
         run: npm test
 
       - name: Build the game
+        # The build id goes into the bundle and into `dist/update.json`, which is what an installed
+        # app reads to find out whether the site is serving something it has not got.
+        env:
+          BUILD_ID: ${{ github.sha }}
         run: npx vite build
 
       - name: Deploy to EAS Hosting

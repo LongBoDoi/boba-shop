@@ -56,7 +56,14 @@ gets past `read ECONNRESET` on every request.
 ## The phone apps
 
 The apps are the same web build in a Capacitor shell and are **not** published by this workflow —
-run **Build apps** by hand when a new file is actually wanted. The difference that matters to a
-player: the installed *page* fetches the newest build every launch (`public/sw.js`), while an
-installed *app* carries the game inside it and only changes when a new `.apk`/`.ipa` is installed.
-There is no over-the-air update any more; the page is the thing that updates itself.
+run **Build apps** by hand when a new file is actually wanted.
+
+Every deploy also publishes `dist/update.json`: the build id, the native shell it expects and every
+file with its size. That is what an installed app reads on launch to find out whether this deploy
+is something it has not got, and then which files it has to fetch. So a push to `main` reaches the
+installed apps as well, as an offer on their next launch — see "Updating itself" in `CLAUDE.md`.
+
+A new **file** is only needed when the native shell changes, which `tools/check-updates.cjs` will
+not let you do quietly: bump `NATIVE_VERSION`, re-record the fingerprint, and run **Build apps**
+before the next deploy, or installed apps will be told there is a version they cannot have while no
+file exists to give them.

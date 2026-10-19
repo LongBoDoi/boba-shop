@@ -23,7 +23,28 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      native: ${{ steps.read.outputs.native }}
+      name: ${{ steps.read.outputs.name }}
+      tag: ${{ steps.read.outputs.tag }}
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v7
+
+      - name: Read the native shell version
+        id: read
+        run: |
+          # `v<native shell>.<run>` is the whole of how an installed app tells whether this file is
+          # worth installing — see src/updates/release.ts. tools/check-updates.cjs holds this read.
+          native="$(node -p "/NATIVE_VERSION = (\\d+)/.exec(require('fs').readFileSync('src/updates/native.ts','utf8'))[1]")"
+          echo "native=$native" >> "$GITHUB_OUTPUT"
+          echo "name=$native.${{ github.run_number }}" >> "$GITHUB_OUTPUT"
+          echo "tag=v$native.${{ github.run_number }}" >> "$GITHUB_OUTPUT"
+
   web:
+    needs: version
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -46,6 +67,10 @@ jobs:
         run: npm test
 
       - name: Build the game
+        # The same build id the deploy gives this commit, so an app built from it does not open
+        # offering itself an update.
+        env:
+          BUILD_ID: ${{ github.sha }}
         run: npx vite build
 
       - name: Keep the build
@@ -56,12 +81,13 @@ jobs:
           if-no-files-found: error
 
   android:
-    needs: web
+    needs: [version, web]
     runs-on: ubuntu-latest
     timeout-minutes: 40
     env:
       # Stamped in as versionCode/versionName, so a newer .apk installs over an older one.
       BUILD_NUMBER: ${{ github.run_number }}
+      VERSION_NAME: ${{ needs.version.outputs.name }}
     steps:
       - name: Check out source
         uses: actions/checkout@v7
@@ -95,7 +121,7 @@ jobs:
         run: |
           chmod +x gradlew
           ./gradlew assembleRelease --no-daemon
-          mv app/build/outputs/apk/release/app-release.apk "$GITHUB_WORKSPACE/tiem-tra-sua-${BUILD_NUMBER}.apk"
+          mv app/build/outputs/apk/release/app-release.apk "$GITHUB_WORKSPACE/tiem-tra-sua-${VERSION_NAME}.apk"
           ls -lh "$GITHUB_WORKSPACE"/*.apk
 
       - name: Upload the APK
@@ -106,7 +132,7 @@ jobs:
           if-no-files-found: error
 
   ios:
-    needs: web
+    needs: [version, web]
     runs-on: macos-26
     timeout-minutes: 40
     steps:
@@ -150,7 +176,7 @@ jobs:
             -destination 'generic/platform=iOS' \
             -archivePath "$RUNNER_TEMP/tiem-tra-sua.xcarchive" \
             CURRENT_PROJECT_VERSION="${{ github.run_number }}" \
-            MARKETING_VERSION="1.0.${{ github.run_number }}" \
+            MARKETING_VERSION="${{ needs.version.outputs.name }}" \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
@@ -181,8 +207,8 @@ jobs:
         run: |
           mkdir -p "$RUNNER_TEMP/Payload"
           cp -R "$RUNNER_TEMP/tiem-tra-sua.xcarchive/Products/Applications/"*.app "$RUNNER_TEMP/Payload/"
-          (cd "$RUNNER_TEMP" && zip -qry "tiem-tra-sua-${{ github.run_number }}-unsigned.ipa" Payload)
-          mv "$RUNNER_TEMP/tiem-tra-sua-${{ github.run_number }}-unsigned.ipa" .
+          (cd "$RUNNER_TEMP" && zip -qry "tiem-tra-sua-${{ needs.version.outputs.name }}-unsigned.ipa" Payload)
+          mv "$RUNNER_TEMP/tiem-tra-sua-${{ needs.version.outputs.name }}-unsigned.ipa" .
           ls -lh ./*.ipa
 
       - name: Upload the .ipa
@@ -193,7 +219,7 @@ jobs:
           if-no-files-found: error
 
   release:
-    needs: [android, ios]
+    needs: [version, android, ios]
     if: inputs.publish_release
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -211,7 +237,7 @@ jobs:
       - name: Publish the release
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: build-${{ github.run_number }}
+          TAG: ${{ needs.version.outputs.tag }}
         run: |
           cat > notes.md <<'NOTES'
           Tiệm Trà Sữa, built from this commit.
@@ -221,12 +247,15 @@ jobs:
           | `.apk` | Android | Copy it to the phone and open it; allow installs from that source. A later build installs over this one and keeps the shop. |
           | `.ipa` | iOS | **Unsigned.** iOS will not install it as-is. Re-sign it with Sideloadly or AltStore using a free Apple ID (it then runs for 7 days per install), or with a paid developer certificate. |
 
+          **The app keeps itself up to date from here.** It asks on launch whenever the site is
+          serving a newer build, downloads it into place and restarts — no reinstall, and the shop
+          is untouched. A file like this one is only needed when the app's *native* side changes,
+          which is what the first number of the tag counts: an app on shell
+          ${{ needs.version.outputs.native }} is current.
+
           **You do not need either of these to play.** The game is a web game: open
           https://boba-shop.expo.app and add it to the home screen, and it runs with no browser
-          chrome, keeps its own shop and plays with no signal — and it is always the newest build,
-          with nothing to install. These files are the same game in a native shell, for when that
-          is wanted; unlike the page, an installed app only changes when a new file like this one
-          is installed.
+          chrome, keeps its own shop and plays with no signal.
 
           Moving a shop between the page and the app, or from the old app: ⚙️ Cài đặt → Sao lưu
           tiệm, copy the code, and paste it into the same card on the other one.
@@ -234,7 +263,7 @@ jobs:
           gh release create "$TAG" \
             --repo "$GITHUB_REPOSITORY" \
             --target "$GITHUB_SHA" \
-            --title "Tiệm Trà Sữa (build ${{ github.run_number }})" \
+            --title "Tiệm Trà Sữa ${{ needs.version.outputs.name }}" \
             --notes-file notes.md \
             out/*.apk out/*.ipa
           echo "Released [$TAG]($(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json url -q .url))" >> "$GITHUB_STEP_SUMMARY"

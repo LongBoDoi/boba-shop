@@ -2,4 +2,7 @@
 <paths xmlns:android="http://schemas.android.com/apk/res/android">
     <external-path name="my_images" path="." />
     <cache-path name="my_cache_images" path="." />
+    <!-- The .apk of a new build is downloaded here and handed to the installer; see
+         InstallPlugin.java. -->
+    <files-path name="downloads" path="." />
 </paths>

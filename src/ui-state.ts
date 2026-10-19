@@ -13,6 +13,8 @@ export interface PourMeter {
   running: boolean;
 }
 
+import type { UpdateOffer } from './updates';
+
 export interface Rect {
   x: number;
   y: number;
@@ -47,6 +49,11 @@ export interface UiState {
    * discarded drink. Null while there is no cup on the mat.
    */
   cupScreen: { x: number; y: number; width: number } | null;
+  /**
+   * A new version of the app, and what is being done about it. Only ever set in the installed
+   * apps — the page has no such thing to offer. See `src/updates/`.
+   */
+  update: UpdateOffer | null;
 }
 
 type Listener = (ui: UiState, previous: UiState) => void;
@@ -64,6 +71,7 @@ let ui: UiState = {
   kitchenRect: { x: 0, y: 0, width: 0, height: 0 },
   pager: { width: 0, height: 0 },
   cupScreen: null,
+  update: null,
 };
 const listeners = new Set<Listener>();
 

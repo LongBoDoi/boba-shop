@@ -80,10 +80,9 @@ a GitHub release. Three things about them:
   `android/app/build.gradle`) on purpose: the file is handed out directly, and a key that stays the
   same is what lets a newer `.apk` install over an older one and keep the player's shop. A store
   release would need a key that is a secret.
-- **An installed app does not update itself.** It carries the game inside it, so a change only
-  reaches it through a new file. The page is the thing that keeps itself current; this is the
-  trade for having an icon that is not a bookmark. (The old app had over-the-air updates, which is
-  what `expo-updates` was for; it went with Expo.)
+- **An installed app keeps itself up to date**, and asks before it does — see "Updating itself".
+  The rare change it cannot take that way is one to its own native shell, and then it says so and
+  offers the file.
 
 A shop moves between the page, the app and the old app with the **backup code** in the settings
 card (`src/game/saveCode.ts`): each install keeps its own storage and nothing syncs them.
@@ -123,6 +122,85 @@ Verifying it needs a browser, not a reader: build, serve `dist/`, load it once, 
 menu, then **go offline and reload**. The shop should open on the pause card with the kitchen
 painted. Check the console for failed requests, which is how a missing bundle and a missing icon
 were both found.
+
+### Updating itself
+
+The page is always the newest build — it fetches it every launch — but an app carries the game
+inside it, so it has to be told. `src/updates/` does the telling, **once a launch**, and the player
+decides; nothing is ever swapped behind them. There are two kinds of new version and the difference
+between them is the whole design:
+
+- **The web build** — the HTML, the JavaScript, the artwork. Downloaded into the app and served
+  from there (`live.ts`). No reinstall, no store, and the shop is untouched.
+- **The native shell** — a Capacitor plugin, a permission, the Gradle or Xcode projects. An update
+  cannot carry native code, so the app is told to install a file instead (`install.ts`).
+
+**Why the first one works at all.** A Capacitor app is this same page, served to its WebView by a
+local server out of the app's own files. `WebView.setServerBasePath` points that server at a
+directory in the app's data instead and reloads it. So an update is: fetch the files, write them
+down, point the server at them. The page's **origin does not change**, which is why the shop
+survives — the save is `localStorage` on that origin.
+
+Four rules, each of which is the difference between an update and an unusable app:
+
+- **Nothing is swapped until every file is written.** A half-written directory served to the
+  WebView is a white screen with no way back.
+- **A build is made permanent only once it has booted.** `setServerBasePath` lasts for the launch;
+  `persistServerBasePath` is what survives a restart, and `settle()` calls it *from the new build*,
+  after the shop is on screen. A build that cannot boot is therefore never persisted: the player
+  force-closes the app and the next launch comes up on the last one that did boot. That is the
+  whole rollback, and it needs no native code — which is why it is arranged this way rather than
+  the obvious way round.
+- **Installing a file resets the app to the build inside it**, and that is Capacitor's doing
+  rather than ours: both platforms forget the persisted path when the binary's version changes. It
+  is the only safe answer — the downloaded build was made for the shell that was just replaced —
+  and it is why `settle()` throws away the downloads when it finds itself running the bundled
+  build. Don't re-implement it; do remember it exists.
+- **A site caught mid-deploy is a wait, not an update.** The host caches each file for an hour and
+  takes no notice of a query string (that was tried), so for a few minutes after a deploy
+  `update.json` can be the new build while `index.html` is still the old one. Taking that pair
+  would write down a build whose page asks for a script that is not in it — a white screen, and an
+  app that believes it is already up to date. So the page is held against the manifest before
+  anything is offered (`isWhole` in `manifest.ts`), and when they disagree the next launch asks
+  again.
+- **Only what changed comes down.** Everything under `assets/` carries a hash of its contents in
+  its name, so a file with the same name is the same file and is copied across from the build
+  already on disk (`plan` in `manifest.ts`). The usual update is a few hundred kilobytes; the
+  first one after installing a file is the whole twenty megabytes, because what that app has is
+  inside its own package where nothing can be copied from.
+- **Every state of the card has a way off it.** It covers the screen and takes every touch, so a
+  download that stalls would otherwise leave the player holding a picture of a boba shop. The card
+  is also held back while a shift is actually running, so an unasked-for question cannot drain
+  three patience timers while it is read.
+
+**`NATIVE_VERSION` (`src/updates/native.ts`) is how the other half works**, and it is a number
+somebody has to remember to move. The site publishes it in `update.json`; an app whose own number
+is lower knows that no update can reach it. `tools/check-updates.cjs` holds a fingerprint of
+everything an update cannot carry — the `@capacitor/*` versions, `capacitor.config.ts`, the
+manifests, the Gradle and SPM files, the Java and Swift — and **fails when they drift without it
+moving**, because nothing else will: it typechecks, it builds, and it runs perfectly in a browser.
+When it fails: bump the number, re-record `BUILT` beside it, and run **Build apps** before the next
+deploy.
+
+The file itself comes from the GitHub release, and the **release tag says which shell it contains**
+— "Build apps" tags `v<nativeVersion>.<run>`, so `v2.57` is run 57 of shell 2. An app offers the
+file only when that first number is higher than its own. Reading it off the release rather than off
+the site is what keeps the offer honest in the window between a deploy and a build: the site may
+already want shell 3 while the newest file anyone can install is still shell 2, and in that window
+the right thing to say is nothing at all.
+
+The two halves are not equal on the two platforms, and the card says so rather than pretending:
+Android downloads the `.apk` and hands it to the system installer (`InstallPlugin.java`, which is
+the one plugin this app has of its own) — same signing key, so it installs over the top and the
+shop survives. iOS cannot install an `.ipa` from inside an app at all, so it is handed the release
+page, and because the repository's `.ipa` is unsigned, re-signing it is usually a *fresh* install:
+that is why the iOS wording is the one place in the game that tells the player to export a backup
+first.
+
+**None of this runs in a browser.** `Capacitor.isNativePlatform()` is false there, so the check
+never starts and the card never shows. To see the card, set `uiState`'s `update` by hand from
+`window.__shop` (that is how the states in this repository were looked at); to see an update
+actually apply, you need a phone with two builds.
 
 ### The page is a game surface, not a document
 
@@ -218,6 +296,10 @@ src/game/               the rules, and the canvas they run on
   host.ts               where the canvas is, as the UI measures it
   pager.ts              the two pages and the swipe between them
   view.ts               textures, baked canvases, text, DPR — what every scene draws through
+src/updates/            keeping an installed app current: manifest.ts (what a build is and which
+                        kind of new version this is), live.ts (the web build, downloaded into
+                        place), install.ts + release.ts (the new file, when the shell moved),
+                        native.ts (NATIVE_VERSION); see "Updating itself"
 src/scenes/             PreloadScene (the artwork, before the shop opens), CounterScene, KitchenScene
 src/counter/            the customer stage: backdrop, customers, floating text, layout
 src/kitchen/            the room you work in: layout, equipment, the cup and its painter, pours
@@ -249,6 +331,7 @@ tools/                  make-music.cjs: music only; audio/build-foley.cjs: recor
 tools/check-audio.cjs   loop seams, cue wiring, and the volumes through a save
 tools/check-audio-engine.cjs  the scheduler and the whole browser lifecycle, against a fake context
 tools/check-backup-code.cjs   the backup code's round trip and its refusals
+tools/check-updates.cjs       the native shell's fingerprint, and which new version is which
 ```
 
 
@@ -360,6 +443,9 @@ Three layers, in the order they are relied on:
 3. **A backup code the player keeps** (`src/game/saveCode.ts`, offered under "Sao lưu tiệm" in the
    settings card). The only remedy that works on iOS, the only one that survives an uninstall for
    certain, and the way a shop moves between the installed page, the app, and the old app.
+
+An over-the-air update is none of these: it changes the files the app is served, not the app, and
+the save is on the page's own origin either way. See "Updating itself".
 
 The code is **the same bytes `save.ts` already writes**, base64 over UTF-8 with a fingerprint on
 the end — wrapped rather than re-described, because a second serializer would be a second thing to
@@ -944,6 +1030,12 @@ stands plainly inside the shelf; divided across the board it laps over the ends 
   reach a later day quickly, load a save with `window.__shop.load`. The money shows in three places
   (the HUD and the opening sign, both the till; the day-end screen, which is the only one that
   reports a single day's takings).
-- The phone apps: `npm run sync` copies `dist/` into `android/` and `ios/`. A real build needs the
-  **Build apps** workflow or a local Android SDK / Xcode; neither is here, so say in the report
-  that the app shell was not built.
+- The phone apps: `npm run sync` copies `dist/` into `android/` and `ios/` and re-writes their
+  plugin lists — run it after adding a plugin, and expect `check-updates.cjs` to fail until
+  `NATIVE_VERSION` moves with it. A real build needs the **Build apps** workflow or a local
+  Android SDK / Xcode; neither is here, so say in the report that the app shell was not built.
+- Updating an app: the pure half — which kind of new version it is, what it costs, what a tag and a
+  manifest mean — is `tools/check-updates.cjs`. The rest is phone-only and a browser cannot fake
+  it: downloading a build into the app, pointing the WebView at it, the rollback when one does not
+  boot, and Android's installer prompt all need two real builds on a real device. Say so in the
+  report.

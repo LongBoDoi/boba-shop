@@ -725,3 +725,26 @@ button:focus-visible { outline: 2px solid var(--primary-dark); outline-offset: 2
 @media (prefers-reduced-motion: reduce) {
   .title-word, .title-card, .dayend-card, .dayend-star, .dayend-row, .card-in, .overlay-dim-in, .meter { animation-duration: 1ms; }
 }
+
+/* ------------------------------------------------------------------ The new-version card */
+.update-card {
+  width: 100%;
+  max-width: 300px;
+  margin: 0 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 22px 20px;
+  border-radius: 24px;
+  background: var(--floor-ui);
+  border-bottom: 6px solid var(--line);
+}
+.update-mark { font-size: 34px; text-align: center; }
+.update-note { margin: 0; font-size: 15px; line-height: 21px; font-weight: 500; color: var(--ink-soft); text-align: center; }
+.update-track {
+  height: 10px;
+  border-radius: 5px;
+  background: var(--line);
+  overflow: hidden;
+}
+.update-fill { height: 100%; border-radius: 5px; background: var(--primary); transition: width 200ms var(--ease-out); }

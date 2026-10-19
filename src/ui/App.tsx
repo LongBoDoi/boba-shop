@@ -17,6 +17,8 @@ import { animateSampled, easeInOut } from './motion';
 import { SettingsSheet } from './SettingsSheet';
 import { Svg } from './Svg';
 import { TitleScreen } from './TitleScreen';
+import { UpdateCard } from './UpdateCard';
+import { startUpdates } from '../updates';
 
 const WIPE_MS = 250;
 const BADGE_DRINK: Drink = { size: 'M', toppings: ['pearls'], sweetness: null, ice: null, tea: 'black', milk: 'whole', foam: null };
@@ -45,12 +47,23 @@ export function App() {
   const ready = useUi((ui) => ui.ready);
   const phase = useGame((state) => state.phase);
   const settings = useUi((ui) => ui.settings);
+  // A card that covers the screen and takes every touch must not be able to drain three patience
+  // timers while it is read, so it waits for a lull — which at launch is immediate, because the
+  // day is always either not started or paused by then.
+  const busy = useGame((state) => state.phase === 'playing' && !state.paused);
+  const opening = useUi((ui) => ui.opening);
   const [shown, setShown] = useState<Phase>(phase);
   const wiping = useRef(false);
   const fade = useRef<HTMLDivElement>(null);
   const badge = useRef<HTMLDivElement>(null);
 
   useEffect(watchOpenings, []);
+
+  // Asking whether there is a new version is an installed app's business; the page is always the
+  // newest build already. See `src/updates/`.
+  useEffect(() => {
+    if (ready) void startUpdates();
+  }, [ready]);
 
   useEffect(() => {
     if (!ready) {
@@ -99,6 +112,7 @@ export function App() {
       {shown === 'playing' && <GameScreen />}
       {shown === 'dayEnd' && <DayEndScreen />}
       {settings && <SettingsSheet />}
+      {!busy && !opening && <UpdateCard />}
       <div class="wipe">
         <div ref={fade} class="wipe-fade" />
         <div ref={badge} class="wipe-badge">
