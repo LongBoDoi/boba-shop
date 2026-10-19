@@ -212,6 +212,6 @@ export function hintFor(cup: Drink, docked?: Station): string {
     if (cup.tea && cup.tea !== docked.id) return 'Ly đã có trà khác — đổ bỏ để pha lại';
     return `Giữ vòi ${docked.name} để rót — xem thanh lượng trà`;
   }
-  if (!cup.tea) return 'Kéo ly dưới bình trà, rồi giữ vòi để rót';
-  return 'Kéo topping, đá, đường… thả thẳng vào ly';
+  if (!cup.tea) return 'Chạm bình trà để đặt ly dưới vòi, rồi giữ vòi để rót';
+  return 'Chạm topping, đá, đường… hoặc kéo thẳng vào ly';
 }

@@ -16,12 +16,14 @@ require.extensions['.ts'] = (module, filename) => {
 
 try {
   const { createInitialState, gameReducer } = require(path.join(__dirname, '../src/game/reducer.ts'));
-  const { drinkPrice } = require(path.join(__dirname, '../src/game/orders.ts'));
+  const { drinkPrice, evaluateDrink, generateOrder } = require(path.join(__dirname, '../src/game/orders.ts'));
+  const { createRng } = require(path.join(__dirname, '../src/game/random.ts'));
   const { getDayConfig, describeUnlocks } = require(path.join(__dirname, '../src/game/levels.ts'));
   const { parseGame, serializeGame } = require(path.join(__dirname, '../src/game/save.ts'));
   const { cupIceFillPath, cupFillPath, cupIcePosition, cupIceRestPosition, cupSurface } = require(path.join(__dirname, '../src/art/cupGeometry.ts'));
   const { createIceLayout, ICE_LAYOUT } = require(path.join(__dirname, '../src/art/iceLayout.ts'));
-  const { ICE_LEVELS } = require(path.join(__dirname, '../src/game/ingredients.ts'));
+  const { asksFor, BUILD_ORDER, CATEGORIES, DEFAULT_ID, ICE_LEVELS, SUGAR_STEPS, TEAS, TOPPINGS } =
+    require(path.join(__dirname, '../src/game/ingredients.ts'));
   assert.ok(ICE_LEVELS.find((level) => level.id === 'regular').cubes >
     ICE_LEVELS.find((level) => level.id === 'less').cubes * 2, 'The second scoop visibly fills out the ice cluster');
   assert.equal(ICE_LEVELS.find((level) => level.id === 'regular').cubes, ICE_LAYOUT.length,
@@ -59,8 +61,65 @@ try {
     assert.equal(rest.angle, cube.restAngle, 'Dry cubes retain their resting tilt');
     assert.equal(rest.cx, dry.cx, 'Dry ice keeps its fitted floor position');
   }
-  assert.ok(getDayConfig(1).categories.includes('ice'), 'Ice is available on the first day');
-  assert.ok(!describeUnlocks(2).some((line) => line.includes('Chọn đá')), 'Day two does not announce ice again');
+  // ------------------------------------------------------------------ the whole menu, from day one
+  // Nothing about what can go in a cup depends on the day any more: no category, no tea and no
+  // topping waits for a later shift, so day 1 is the same shelf as day 30.
+  const first = getDayConfig(1);
+  assert.deepEqual(first.categories, BUILD_ORDER, 'Day one cares about every category, in build order');
+  assert.deepEqual(first.options.tea, TEAS.map((tea) => tea.id), 'Every tea is on the rack on day one');
+  assert.deepEqual(first.options.toppings, TOPPINGS.map((topping) => topping.id), 'Every topping is in the stand on day one');
+  for (const category of BUILD_ORDER) {
+    assert.deepEqual(first.options[category], CATEGORIES[category].options.map((option) => option.id),
+      `Day one offers the whole ${category} catalogue`);
+  }
+  for (const day of [2, 3, 4, 5, 6, 10, 30]) {
+    const later = getDayConfig(day);
+    assert.deepEqual(later.categories, first.categories, `Day ${day} adds no category`);
+    assert.deepEqual(later.options, first.options, `Day ${day} adds no ingredient`);
+  }
+  // So the sign and the day-end screen can only ever announce the pace, never an ingredient.
+  const names = [...TEAS, ...TOPPINGS].map((option) => option.name)
+    .concat(BUILD_ORDER.map((category) => `Chọn ${CATEGORIES[category].label.toLowerCase()}`));
+  for (let day = 1; day <= 30; day++) {
+    for (const line of describeUnlocks(day)) {
+      assert.ok(!names.some((name) => line.includes(name)), `Day ${day} does not announce "${line}"`);
+    }
+  }
+  assert.deepEqual(describeUnlocks(2), ['🧍 Thêm một chỗ cho khách'], 'Day two still gains its third counter spot');
+  assert.deepEqual(describeUnlocks(5), ['✨ Tối đa 2 topping'], 'Day five still gains its second topping per drink');
+  assert.deepEqual(describeUnlocks(3), [], 'A day that changes nothing announces nothing');
+
+  // ------------------------------------------------------------------ what a customer asks for
+  // An order names a size and a tea, and then only what this customer felt like asking for. A
+  // category they said nothing about is left *unset* rather than set to its none/0 option: the two
+  // mean the same thing to the cup, and the difference is that the panel has nothing to list.
+  const OPTIONAL = ['toppings', 'sweetness', 'ice', 'milk', 'foam'];
+  const asked = Object.fromEntries(OPTIONAL.map((category) => [category, { named: 0, silent: 0 }]));
+  const shapes = new Set();
+  const orderRng = createRng(20261019);
+  for (let i = 0; i < 20_000; i++) {
+    const order = generateOrder(first, orderRng);
+    assert.ok(order.size, 'Every order names a cup size');
+    assert.ok(order.tea && asksFor(order, 'tea'), 'Every order names a tea');
+    for (const category of OPTIONAL) {
+      const names = asksFor(order, category);
+      asked[category][names ? 'named' : 'silent']++;
+      if (category === 'toppings') {
+        assert.equal(order.toppings.length > 0, names, 'Toppings are asked for by being listed');
+      } else if (names) {
+        assert.notEqual(order[category], DEFAULT_ID[category], `A named ${category} is never the none/0 option`);
+      } else {
+        assert.equal(order[category], null, `An order that says nothing about ${category} leaves it unset`);
+      }
+    }
+    shapes.add(OPTIONAL.filter((category) => asksFor(order, category)).join('+'));
+  }
+  for (const category of OPTIONAL) {
+    assert.ok(asked[category].named > 0, `${category} is sometimes asked for`);
+    assert.ok(asked[category].silent > 0, `${category} is sometimes left out altogether`);
+  }
+  assert.equal(shapes.size, 2 ** OPTIONAL.length, 'Every combination of the optional categories turns up');
+  assert.ok(shapes.has(''), 'A plain cup of tea is an order a customer can place');
   let ordered = gameReducer(createInitialState(123), { type: 'START_DAY', day: 1 });
   ordered = gameReducer(ordered, { type: 'TICK', dt: 5000 });
   const slot = ordered.slots.findIndex(Boolean);
@@ -68,25 +127,40 @@ try {
   ordered = gameReducer(ordered, { type: 'TAKE_ORDER', slot });
   const recipe = ordered.slots[slot].order;
 
-  function makeCup(amount) {
-    let state = gameReducer(ordered, { type: 'PICK_CUP', size: recipe.size });
-    state = gameReducer(state, { type: 'POUR', category: 'tea', optionId: recipe.tea, amount });
-    for (const optionId of recipe.toppings) {
+  /**
+   * Build the cup `order` asks for, pouring `amount` of tea. Every category is on the menu from day
+   * one now, so a first-day order can want milk, sugar and foam as well — a cup holding only tea,
+   * toppings and ice stopped being a perfect drink when the unlock schedule went. The milk is a
+   * splash, so the tea's own amount is still what decides whether the cup overflowed.
+   */
+  function buildCup(state, order, amount) {
+    state = gameReducer(state, { type: 'PICK_CUP', size: order.size });
+    for (const optionId of order.toppings) {
       state = gameReducer(state, { type: 'SCOOP', category: 'toppings', optionId });
     }
-    const scoops = recipe.ice === 'regular' ? 2 : recipe.ice === 'less' ? 1 : 0;
+    for (let i = SUGAR_STEPS.indexOf(order.sweetness) + 1; i > 0; i--) {
+      state = gameReducer(state, { type: 'SUGAR_PUMP' });
+    }
+    const scoops = order.ice === 'regular' ? 2 : order.ice === 'less' ? 1 : 0;
     for (let i = 0; i < scoops; i++) state = gameReducer(state, { type: 'ICE_SCOOP' });
+    state = gameReducer(state, { type: 'POUR', category: 'tea', optionId: order.tea, amount });
+    if (order.milk && order.milk !== 'none') {
+      state = gameReducer(state, { type: 'POUR', category: 'milk', optionId: order.milk, amount: 0.001 });
+    }
+    if (order.foam && order.foam !== 'none') {
+      state = gameReducer(state, { type: 'SCOOP', category: 'foam', optionId: order.foam });
+    }
     return state;
   }
 
+  const makeCup = (amount) => buildCup(ordered, recipe, amount);
+
   // First-day orders can request every ice level, and the station can satisfy all of them.
   for (const [level, scoops] of [['none', 0], ['less', 1], ['regular', 2]]) {
+    const order = { ...recipe, ice: level };
     let state = { ...ordered, slots: ordered.slots.map((customer, i) =>
-      i === slot ? { ...customer, order: { ...recipe, ice: level } } : customer) };
-    state = gameReducer(state, { type: 'PICK_CUP', size: recipe.size });
-    state = gameReducer(state, { type: 'POUR', category: 'tea', optionId: recipe.tea, amount: 0.5 });
-    for (const optionId of recipe.toppings) state = gameReducer(state, { type: 'SCOOP', category: 'toppings', optionId });
-    for (let i = 0; i < scoops; i++) state = gameReducer(state, { type: 'ICE_SCOOP' });
+      i === slot ? { ...customer, order } : customer) };
+    state = buildCup(state, order, 0.5);
     const restored = parseGame(serializeGame(state));
     assert.ok(restored.config.categories.includes('ice'), 'A restored first-day shop has ice');
     assert.equal(restored.build.iceScoops, scoops, 'Ice scoops survive a reload');
@@ -95,6 +169,18 @@ try {
     assert.equal(served.stats.perfect, 1, `A first-day ${level} ice order can be served perfectly`);
     assert.equal(served.build.iceScoops, 0, 'The new cup starts without ice');
   }
+
+  // Saying nothing about a category is still asking for none of it: the panel has no tile for it,
+  // but an ingredient nobody wanted spoils the drink exactly as a wrong one does.
+  const plain = { size: 'M', toppings: [], sweetness: null, ice: null, tea: 'black', milk: null, foam: null };
+  const plainOrdered = { ...ordered, slots: ordered.slots.map((customer, i) =>
+    i === slot ? { ...customer, order: plain } : customer) };
+  const asOrdered = buildCup(plainOrdered, plain, 0.6);
+  assert.equal(gameReducer(asOrdered, { type: 'SERVE' }).stats.perfect, 1, 'A plain cup of tea is served perfectly');
+  const unwanted = gameReducer(asOrdered, { type: 'SCOOP', category: 'foam', optionId: 'cheese' });
+  assert.deepEqual(evaluateDrink(unwanted.cup, plain, first.categories).mistakes, ['foam'],
+    'Foam nobody asked for is counted as a mistake');
+  assert.equal(gameReducer(unwanted, { type: 'SERVE' }).stats.perfect, 0, 'And costs the drink its perfect mark');
 
   const full = gameReducer(makeCup(0.99), { type: 'SERVE' });
   for (const amount of [0.0001, 0.03, 0.69, 0.7, 0.85, 0.99]) {
@@ -115,10 +201,9 @@ try {
   assert.equal(overflow.stats.served, 1, 'An overflowing cup can be served');
   assert.equal(overflow.stats.tips, 0, 'Overflow still loses its tip');
   assert.equal(overflow.coins, Math.ceil(drinkPrice(recipe) / 2), 'Overflow retains the existing spill penalty');
+  // The three newest toppings, played through on a day whose orders may hold two of them.
   for (const [optionId, day] of [['redbean', 6], ['aloe', 7], ['crystal', 8]]) {
-    assert.ok(!getDayConfig(day - 1).options.toppings.includes(optionId), 'New topping waits for its unlock day');
-    assert.ok(getDayConfig(day).options.toppings.includes(optionId), 'New topping unlocks with the next day');
-    assert.ok(describeUnlocks(day).length > 0, 'The new ingredient is announced');
+    assert.ok(getDayConfig(1).options.toppings.includes(optionId), 'Every topping is available from day one');
     let state = gameReducer(createInitialState(4242), { type: 'START_DAY', day });
     state = gameReducer(state, { type: 'TICK', dt: 5000 });
     const slot = state.slots.findIndex(Boolean);
@@ -174,7 +259,7 @@ try {
   assert.equal(gameReducer(nextDay, { type: 'SPEND', amount: 1 }).coins, nextDay.coins,
     "Spending comes out of the till, not out of the day's takings");
 
-  console.log('Passed: tiny pours serve; fill-independent payment and tips; tea/order guards; overflow behavior; new topping unlocks, saves and serving; money earned, carried and spent.');
+  console.log('Passed: tiny pours serve; fill-independent payment and tips; tea/order guards; overflow behavior; the whole menu open on day one; what an order asks for and leaves out; toppings saved and served; money earned, carried and spent.');
 } finally {
   if (previousLoader) require.extensions['.ts'] = previousLoader;
   else delete require.extensions['.ts'];

@@ -148,6 +148,7 @@ export interface GameState {
 export type GameAction =
   | { type: 'START_DAY'; day: number }
   | { type: 'GO_TO_TITLE' }
+  | { type: 'RESUME_DAY' }
   | { type: 'SET_PAUSED'; paused: boolean }
   | { type: 'SET_MODE'; mode: GameMode }
   /** Change one or both volumes. An out-of-range value is clamped, not refused. */
@@ -179,6 +180,17 @@ const FEEDBACK_MS = 1_400;
 const MAX_TIP = 3;
 /** How long a leaving customer keeps their spot while walking off. */
 const DEPARTURE_MS = 1_300;
+
+/**
+ * Whether the shop has a shift waiting at the menu to be taken up again. Everything a day is made
+ * of survives `GO_TO_TITLE`, so this is what tells the menu to offer that day back rather than
+ * build it over the top: a day is under way once its clock has moved, and — for the shift that is
+ * only a few frames old — once there is a cup out or a customer at the counter.
+ */
+export function suspendedShift(state: GameState): boolean {
+  return state.phase === 'title'
+    && (state.clock > 0 || state.cup.size !== null || state.slots.some(Boolean));
+}
 
 export function createInitialState(seed: number): GameState {
   return { ...buildDay(1, seed, 'standard', 0, DEFAULT_AUDIO), phase: 'title' };
@@ -217,7 +229,19 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
     case 'START_DAY':
       return buildDay(action.day, state.seed, state.mode, state.money, state.audio);
     case 'GO_TO_TITLE':
-      return { ...state, phase: 'title', paused: false };
+      // Going to the menu **puts the shift down, it does not end it**: the clock, the counter, the
+      // cup and the day's takings all stay in the state, so `RESUME_DAY` can hand them back. A day
+      // that is already *finished* has nothing to come back to, so leaving one builds the next day
+      // instead — un-started, ready for the menu to open.
+      return state.phase === 'dayEnd'
+        ? { ...buildDay(state.day + 1, state.seed, state.mode, state.money, state.audio), phase: 'title' }
+        : { ...state, phase: 'title', paused: false };
+    case 'RESUME_DAY':
+      // Straight back to the minute the player left, and running: the clock cannot tick at the
+      // menu (`tickable` is false there), so nothing ran down while they were away, and they have
+      // just pressed a button that says carry on. That is the difference between this and a shop
+      // reopened from a save, which comes back behind the pause card.
+      return suspendedShift(state) ? { ...state, phase: 'playing', paused: false } : state;
     case 'SET_PAUSED':
       return state.phase === 'playing' ? { ...state, paused: action.paused } : state;
     case 'SET_MODE':

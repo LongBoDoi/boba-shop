@@ -283,10 +283,12 @@ src/hooks.ts            useGame/useUi: the only way the HTML reads either store
 src/game/               the rules, and the canvas they run on
   reducer.ts            GameState + CupBuild, actions (START_DAY, TICK, TAKE_ORDER, POUR, SCOOP,
                         ICE_SCOOP, SUGAR_PUMP, SERVE, CLEAR_CUP, SET_MODE…), scoring
-  levels.ts             getDayConfig(day): unlock schedule, order/serve patience, spawn rate; describeUnlocks
+  levels.ts             getDayConfig(day): the whole menu, order/serve patience, spawn rate, slots;
+                        describeUnlocks (the pace, never an ingredient)
   ingredients.ts        all ingredients (Vietnamese names, colours, prices), Drink type, categories,
                         and the hands-on constants (POUR_RATE, DEFAULT_ID…)
-  orders.ts             random order generation, price, evaluateDrink (perfect/close/wrong)
+  orders.ts             random order generation (MENTION_CHANCE: what an order asks for and what it
+                        leaves out), price, evaluateDrink (perfect/close/wrong)
   customers.ts          random customer looks (hair, skin, shirt, accessory) and names
   random.ts             seeded RNG; the seed lives in state so the reducer stays pure
   money.ts              formatMoney: 1 game unit = 10.000 ₫, shown as "10k" / "3.180k"
@@ -360,8 +362,9 @@ re-litigating:
   it is not announced twice. The two rules meet at a day whose clock has *never* moved — saved while
   its sign was still up — and there the sign wins and the day is **not** paused: pausing it as well
   stacked two cards, and dismissing the sign left the day stopped behind the second one. Quitting to
-  the menu overwrites the save with a `title` state, which is how a run is abandoned — there is no
-  separate "clear save".
+  the menu overwrites the save with a `title` state, which keeps the shop: see "Which day the menu
+  opens" — the week is in `day`, and the menu is where a shop that has been closed down comes back
+  to. There is no "clear save", and no way from inside the game to start the week over.
 - **The seed is validated as any integer, not an int32.** A new shop is seeded off the clock
   (`createInitialState(Date.now())`) and `START_DAY` hands that seed straight on; only the first
   `TICK` reduces it to the RNG's own 32-bit state, and the tick loop is held by the opening sign.
@@ -390,8 +393,8 @@ re-litigating:
   than patched; a fresh shop is a better failure than a half-restored one. The save sits in
   `localStorage`, where it can be edited, and a save from an older build can name an ingredient
   that no longer exists. Ingredient *names* are checked against the catalogue; whether the day still
-  *offers* them is not, so a retuned unlock schedule leaves one customer asking for a tea that isn't
-  on the shelf rather than wiping the save. `cup.ice` and `cup.sweetness` are re-derived from the
+  *offers* them is not — every day offers everything now, and a save that named a tea since taken
+  out of the catalogue leaves one customer asking for it rather than wiping the save. `cup.ice` and `cup.sweetness` are re-derived from the
   build's scoops and pumps instead of being trusted, since the reducer treats those as the same fact.
 
 The writer is on a **2 s timer**, not on every state change — a day ticks several times a second —
@@ -400,6 +403,33 @@ visibility change). The most a crash can cost is the last couple of seconds.
 
 `tools/check-save.cjs` covers the round trip, the two non-playing phases, the saves that must be
 refused and the ones that are tidied up instead.
+
+### Going to the menu, and coming back
+
+**"Về menu chính" puts the shop down; it does not close it.** `GO_TO_TITLE` changes the phase and
+nothing else, so the clock, the counter, the half-built cup and the day's takings are all still in
+the state while the menu is up — and the menu's one button hands them straight back
+(`RESUME_DAY`). Leaving and returning costs the player nothing, which is the whole point: the day
+is where they were, not where the game would like to start them.
+
+The button used to dispatch `START_DAY, day: 1` outright. That rebuilt day 1 over the top of
+whatever was there, so a player who paused, went to the menu and came back lost both their week and
+the shift they were in the middle of — reported, accurately, as the game resetting itself. Four
+rules now, all of them in `tools/check-save.cjs`:
+
+- **A suspended shift is resumed, not rebuilt.** `suspendedShift(state)` is the test — a day is
+  under way once its clock has moved, or (for a shift only a few frames old) once there is a cup
+  out or a customer at the counter — and the button reads `Tiếp tục ngày 7` when it is true.
+- **It comes back running, not paused**, unlike a shop reopened from a save. The clock cannot tick
+  at the menu (`tickable` is false for any phase but `playing`), so nothing ran down while the
+  player was away, and they have just pressed a button that says carry on. Making them dismiss a
+  pause card after that is one press too many.
+- **`day` is the day the shop opens next**, and the button says which (`Mở cửa ngày 7`) once it is
+  past the first. A player has no other way to tell, before pressing, that their week survived —
+  and that uncertainty is what the bug left behind even once the day was right.
+- **Leaving a *finished* day builds the next one** (`phase === 'dayEnd'` → `buildDay(day + 1)`).
+  There is nothing to resume at the end of a day, and the alternative — keeping the finished shift
+  around — would offer the player their way back into a day that is already over.
 
 ### Opening the shop
 
@@ -544,8 +574,8 @@ refuses half of one, along with anything negative or not finite.
 
 Three decisions worth not re-litigating:
 
-- **The till survives going back to the menu.** `GO_TO_TITLE` only changes the phase and
-  `START_DAY` carries `money` through `buildDay`, so abandoning a run and starting again at day 1
+- **The till survives going back to the menu**, as the week does. `GO_TO_TITLE` changes the phase
+  and `START_DAY` carries `money` through `buildDay`, so leaving a day and opening the next one
   keeps the money. It is the player's, not the run's; anything they had bought with it would
   otherwise be confiscated for quitting.
 - **The stars rate the service now, not the money.** With no target there is nothing for the
@@ -556,6 +586,39 @@ Three decisions worth not re-litigating:
   `toLocaleString` — the locale data that needs is the one thing here a phone's JavaScript engine
   may not carry. A drink costs eight units and a tip is one, so nothing used to reach four digits;
   a till that keeps everything does so within a week.
+
+### What the day changes
+
+**The whole menu is open on day one.** Every category — tea, topping, ice, milk, sugar, foam — and
+every tea and topping in `ingredients.ts` is available from the first shift. There used to be an
+unlock schedule: `CATEGORY_UNLOCK_DAY` held milk back to day 3, sugar to day 4 and foam to day 5,
+and `getDayConfig` sliced `TEAS` and `TOPPINGS` down to `2 + day` and `1 + day`, so a week of play
+was spent filling the rack and the topping stand. That is gone. `getDayConfig` hands back all of
+`BUILD_ORDER` and every option in each category, whatever the day.
+
+What that changes beyond the shelf, since the day config feeds more than the room:
+
+- **A day-1 order can ask for anything**, because `generateOrder` walks `config.categories` and
+  picks out of `config.options`. The first drink of a new shop is as involved as the last — which
+  is also why an order asks for only some of what is on the shelf; see "What an order asks for".
+- **The kitchen is fully furnished from the start.** `layoutKitchen` gates the syrup, the cartons,
+  the foam tubs and the ice machine on `config.categories`, so all of them stand on the bench on
+  day 1, and no tea tank or topping bin is drawn empty.
+- **The serve window starts at its widest.** `patienceMs` still adds `categories.length * 4_000`,
+  which is now the constant 24 s rather than something that grew with the week — a full build needs
+  the full window on day 1, which is exactly what it gets.
+- **`describeUnlocks` is not removed, it is narrowed.** It reports only what the day still moves:
+  the third counter spot on day 2 and the second topping per drink on day 5. Everything that reads
+  it — the opening sign's "Mới hôm nay", the day-end screen's "Mở khóa cho ngày N" — already hides
+  itself on an empty list, so the quiet days simply say nothing.
+
+**The day is still a difficulty dial, just not a menu.** `slots` (2 on day 1, 3 after),
+`maxToppings` (1, then 2 from day 5), `orderPatienceMs`, `patienceMs` and the spawn rate all still
+tighten with the day. If the whole progression is ever wanted gone, those are the numbers to flatten
+— the ingredients no longer have anything to do with it.
+
+**Old saves need nothing.** The day config is not saved (see "Saving the shop"), so it is re-derived
+on every launch; a shop saved on day 2 of the old build reopens with the full shelf.
 
 ### The shop's sound
 
@@ -628,8 +691,8 @@ feels like turning around inside it. The counter's wall is SVG (`art/shopBackdro
 ### The room you work in
 
 **The drink is made by hand, not picked from a list.** `KitchenScene` is a room, not a menu, and
-**the cup is a physical object you drag around it**. A cup comes off the rack by tapping its size —
-it goes straight onto the mat — or by dragging it there; a drop anywhere on the mat counts.
+**the cup is a physical object you drag around it**. A cup comes off the rack by tapping its size or
+by dragging it to the mat, where a drop anywhere on the mat counts.
 `layoutKitchen(config, w, h)` (`kitchen/layout.ts`) places everything **on the surfaces the
 painting already has**: the tea dispensers in the shelf across the top, the toppings in their stand
 in the tiled alcove, the ice machine under the rack, the syrup, milk and foam on the bench nearer
@@ -642,33 +705,50 @@ boxes measured in the plate's own pixels — `ROOM_BG_TEA_SHELF`, `ROOM_BG_TOPPI
 is placed in the same space, and `findStation` tests a touch in that space too. The cup does not
 pan: it is the one thing that belongs to the player's hand.
 
-- **Pour by docking.** Drag the cup under a visible tank and release to snap beneath its spout; the
-  cup scales to the shelf gap and stands on the lowest shelf surface with a small contact shadow.
-  Hold the tap to raise the live level; releasing commits the amount and leaves the cup docked,
-  ready for another pour. Drag it away to undock. A tank cannot pour until the cup is docked
+- **Everything that can be dragged can be tapped, and a tap does the carrying.** The quick way is
+  never a shortcut past the room: whatever the drag would have moved, moves — the cup walks itself
+  from the rack to the mat, a tool takes itself over the cup and tips in there, and a tap on a tank
+  fetches the cup under its spout. Nothing is teleported and nothing lands on the mat out of thin
+  air, which is the whole reason these are carried and not chosen off a list. One thing a tap will
+  not do for the player is **hold the tap open**: how long it is held *is* the pour, so a tapped
+  tank docks the cup and stops there. `flightTime` sets how long a carry takes from how far it
+  goes, between the room's own two durations, so a cup let go of over its own mat settles at once
+  and one fetched from the rack takes the longer move.
+- **Pour by docking.** Tap a tank, or drag the cup under it and release to snap beneath its spout;
+  the cup scales to the shelf gap and stands on the lowest shelf surface with a small contact
+  shadow. Hold the tap to raise the live level; releasing commits the amount and leaves the cup
+  docked, ready for another pour. Drag it away to undock. A tank cannot pour until the cup is docked
   beneath it, and a cup holding a different tea locks every other tank
   (`Ly đã có trà khác — đổ bỏ để pha lại`). Panning returns a docked cup to its holder. The stream
-  draws behind and in front of the cup, split at its lip, and spills over the brim.
+  draws behind and in front of the cup, split at its lip, and spills over the brim. A tank tapped
+  while it is half off the edge of the room **slides the wall into place first** (`panForDock`),
+  because a cup fetched to it would otherwise hang off the same edge, reading a meter nobody can
+  see; the cup is aimed at where the wall is *going*, so the two travel together.
 - **Everything else is carried to the cup.** The topping containers, the ice machine's scoop, the
-  syrup bottle, the milk cartons and the foam tubs are dragged: what is in hand follows the finger
-  above everything else, and on release either tips into the cup (`SCOOP` / `ICE_SCOOP` /
-  `SUGAR_PUMP`, or `POUR` of `MILK_SPLASH` for a carton) or goes back. The cup does not move for
+  syrup bottle, the milk cartons and the foam tubs are dragged or tapped: what is in hand follows
+  the finger above everything else, and on release either tips into the cup (`SCOOP` / `ICE_SCOOP`
+  / `SUGAR_PUMP`, or `POUR` of `MILK_SPLASH` for a carton) or goes back. The cup does not move for
   these — drop onto it wherever it stands, and a drop counts over the cup's *home* as well as over
   the cup itself, because a scoop tipped onto the coaster it left behind went into a cup that was
-  not there. Syrup shows how many pumps went in on the machine itself. Milk takes room in the cup,
-  so a cup filled to the brim with tea has nowhere to put it.
+  not there. The refusals are one list (`refuseTool`) and the tipping in is one move
+  (`tipToolIn`), whichever way the tool got there: a tap is refused before it sets off, so nothing
+  crosses the room to be turned away at the cup. Syrup shows how many pumps went in on the machine
+  itself. Milk takes room in the cup, so a cup filled to the brim with tea has nowhere to put it.
 - **While the cup is docked under a tap, nothing can be picked up.** A touch on any tool answers
   `Ly đang ở dưới vòi … — kéo ly ra trước` rather than lifting, and still takes the touch, so the
   room does not pan out from under it. The cup is up at the shelf, nowhere near the bench.
 - **The slots are fixed.** Teas fill the rack left to right and then down, toppings fill their
   stand like a page — left to right along the back row, then the row in front — both in the
-  catalogue's own order, so the week unlocks them across the rack and across the tray. An
-  unavailable slot is drawn empty rather than closed up, so nothing moves when a day unlocks
-  something. Each one carries its Vietnamese name: a tank's above its lid, a container's on a cream
+  catalogue's own order. Every one of them is filled from day one (see "What the day changes"),
+  and a slot with no ingredient behind it is still drawn empty rather than closed up, so adding a
+  tea or a topping to the catalogue moves nothing that was already on the shelf. Each one carries
+  its Vietnamese name: a tank's above its lid, a container's on a cream
   card clipped to its near lip (`TOPPING_TAG` in `toppingArt.ts` places it, inside its own pan, so
   nine of them never touch).
 - **A gesture ends when the finger lifts**, never because it drifted or was held too long — that
-  cut pours short — and the room is held still for the duration. Equipment shows no "added ✓"
+  cut pours short — and the room is held still for the duration. What a release does depends on how
+  far the finger went: under 8px it is a tap, and that threshold is the only thing separating the
+  quick way from the drag. Equipment shows no "added ✓"
   badges: the order slip is the checklist, and machines only dim when they are locked out.
 
 A drink can be served once tea has been chosen by pouring any positive amount. Serving and tips do
@@ -890,6 +970,38 @@ Two things not to undo:
 The counter page has its own sideways form, which is a different question — `isWideLayout` alone,
 since the counter has no painting to crop, only customers to make bigger and to centre.
 
+### What an order asks for
+
+**A size and a tea, and then whatever this customer felt like.** Every other category —
+toppings, sugar, ice, milk, foam — is mentioned or left out on a roll of its own
+(`MENTION_CHANCE` in `orders.ts`), so an order is anything from a plain cup of tea to a
+seven-thing drink, and about a third of them name three of the five. That is the variety that had
+to come from somewhere once the whole menu was on the shelf from day one: an order that named
+every category named every category every time, and one order read much like the next.
+
+**A category that is left out is left unset, not set to its none/0 option.** This is the decision
+the rest of it hangs on, and the two halves of it are:
+
+- **To the cup they are the same thing.** `effectiveId` already reads an unset category as the
+  none/0 option, so an ingredient nobody asked for still has to arrive absent: tipping foam into a
+  drink that said nothing about foam is a mistake, counted exactly as a wrong tea is. Not asking
+  for foam *is* asking for no foam, and `evaluateDrink` never had to change for any of this.
+- **To the panel they are not.** `asksFor(drink, category)` (`ingredients.ts`) is the one place
+  that answers "did they actually ask for this?", and the card lists what it says yes to and
+  nothing else — so a drink with no milk in it has no milk tile, rather than a crossed-out one
+  reading "Không sữa". That crossed-out tile is gone: `generateOrder` never writes an explicit
+  `none` any more, and `asksFor` treats one in an older save as the silence it means, so no card
+  can show it.
+
+`askable()` is the other side of the same rule: the options a customer can pick are what the day
+offers *less* the one that means "none", because asking for the absence of a thing is what saying
+nothing already does.
+
+Two consequences worth knowing before retuning those chances: the count under the customer's name
+(`xong 2/4`) is out of what the order actually asks for, so it is now a different denominator from
+one order to the next; and a shorter order is a cheaper one, since `drinkPrice` sums what was
+asked for — the average drink is about 7% cheaper than when every category was named.
+
 ### The order, spoken back
 [OrderBubble.tsx](src/ui/OrderBubble.tsx) is the **panel docked across the top of the
 prep page** (it was a paper note clipped to a rail inside the room, then a bubble floating over
@@ -899,8 +1011,11 @@ customer's patience, emptying from the top and turning amber then red. A 40px po
 title, tiles up to 32px and a progress bar under the name; the empty state keeps the same box and
 centres a one-line prompt in it.
 
-Five things about it are deliberate:
+Six things about it are deliberate:
 
+- **it lists only what was asked for.** `chipsFor` keeps a category when `asksFor` says the order
+  names it, so the row is as long as the order is and anything missing from it goes in no cup. See
+  "What an order asks for";
 - it lists the drink in `SPOKEN` order — tea, milk, sugar, ice, toppings, foam — not `BUILD_ORDER`,
   which runs bottom of the cup upwards. The card is read, not built;
 - the tiles stand together at one size and the row runs out from the left. Sharing the card's whole
@@ -995,7 +1110,12 @@ stands plainly inside the shelf; divided across the board it laps over the ends 
   closing time.
 - Saving: the save is one key, `boba-shop.save.v1`, in plain `localStorage` —
   `localStorage.getItem('boba-shop.save.v1')` in the console shows the shop as it stands, and
-  removing it is how a first launch is tested. Reload mid-shift and you should come back to the
+  removing it is how a first launch is tested. **`localStorage` is per origin, and the port is part
+  of the origin**: a shop played at `localhost:5173` is not there at `localhost:5174` or at the LAN
+  address `--host` prints, and the game rightly opens a new one. So a second dev server — one left
+  running by someone else, which pushes `npm run dev` to 5174 — looks exactly like the save being
+  wiped, and it has already been reported as that. Check the address before believing a reset, and
+  move a shop between origins with the backup code rather than hunting for a bug. Reload mid-shift and you should come back to the
   same minute of the same day behind the pause card, with the opening sign *not* replayed.
 - The backup code: `tools/check-backup-code.cjs` covers the round trip and the refusals, all of
   which are pure. What it cannot cover is a real move between two installs — say so in the report.

@@ -9,6 +9,7 @@ import { playSound } from '../sound';
 import { dispatch } from '../store';
 import { ICON_CUP } from '../art/kitchenArt';
 import {
+  asksFor,
   CategoryId,
   describeSelection,
   Drink,
@@ -61,23 +62,29 @@ function fitTiles(count: number, room: number, budget: number) {
 interface Chip {
   key: string;
   category: CategoryId | 'size';
-  id: string | null;
+  id: string;
   label: string;
   done: boolean;
 }
 
-/** What the order asks for, one tile per thing — a cup with two toppings gets two. */
+/**
+ * What the order asks for, one tile per thing — a cup with two toppings gets two. Only what the
+ * customer actually asked for is listed: a category they said nothing about has no tile, rather
+ * than a crossed-out one reading "Không sữa". So the list is as long as the order is, the count
+ * under the name is out of what there is to do, and anything not on the card goes in no cup.
+ */
 function chipsFor(order: Drink, cup: Drink, config: DayConfig): Chip[] {
-  const ingredients = SPOKEN.filter((category) => config.categories.includes(category)).flatMap<Chip>((category) => {
+  const asked = SPOKEN.filter((category) => config.categories.includes(category) && asksFor(order, category));
+  const ingredients = asked.flatMap<Chip>((category) => {
     const done = categoryMatches(cup, order, category);
     if (category === 'toppings') {
-      const ids = selectedIds(order, category);
-      if (ids.length === 0) return [{ key: 'toppings', category, id: null, label: 'Không topping', done }];
-      return ids.map((id) => ({ key: `topping-${id}`, category, id, label: getIngredient(category, id)?.name ?? id, done }));
+      return selectedIds(order, category)
+        .map((id) => ({ key: `topping-${id}`, category, id, label: getIngredient(category, id)?.name ?? id, done }));
     }
-    return [{ key: category, category, id: effectiveId(order, category), label: describeSelection(order, category), done }];
+    const id = effectiveId(order, category) ?? '';
+    return [{ key: category, category, id, label: describeSelection(order, category), done }];
   });
-  return [{ key: 'size', category: 'size', id: order.size, label: `Ly ${order.size}`,
+  return [{ key: 'size', category: 'size', id: order.size ?? '', label: `Ly ${order.size}`,
     done: Boolean(cup.size && cup.size === order.size) }, ...ingredients];
 }
 
@@ -219,7 +226,7 @@ function Patience({ size }: { size: number }) {
 function ChipTile({ chip, width, tile, caption }: { chip: Chip; width: number; tile: number; caption: number }) {
   const icon = useMemo(() => {
     if (chip.category === 'size') return '';
-    return ingredientIconSvg(chip.category, chip.id ?? 'pearls', tile * 0.74);
+    return ingredientIconSvg(chip.category, chip.id, tile * 0.74);
   }, [chip.category, chip.id, tile]);
   return (
     <div
@@ -232,14 +239,8 @@ function ChipTile({ chip, width, tile, caption }: { chip: Chip; width: number; t
       <div class={`chip-tile ${chip.done ? 'done' : ''}`} style={{ width: tile, height: tile, borderRadius: tile * 0.3 }}>
         {chip.category === 'size' ? (
           <span class="chip-size" style={{ fontSize: tile * 0.57 }}>{chip.id}</span>
-        ) : chip.id ? (
-          <Svg markup={icon} />
         ) : (
-          // nothing of this kind was asked for: the thing, faded, with a line through it
-          <div class="chip-none">
-            <Svg markup={icon} />
-            <div class="chip-slash" style={{ width: tile * 0.74 }} />
-          </div>
+          <Svg markup={icon} />
         )}
         {chip.done && (
           <div class="chip-check" style={{ width: tile * 0.42, height: tile * 0.42, borderRadius: tile * 0.21 }}>

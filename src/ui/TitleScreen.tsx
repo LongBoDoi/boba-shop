@@ -1,4 +1,4 @@
-import { useMemo } from 'preact/hooks';
+import { useMemo, useRef } from 'preact/hooks';
 
 import { characterSvg } from '../art/character';
 import { titleAwningSvg, titlePearlsSvg, titleWallpaperSvg } from '../art/icons';
@@ -8,7 +8,7 @@ import { dispatch } from '../store';
 import { uiState } from '../ui-state';
 import { CustomerLook } from '../game/customers';
 import { Drink } from '../game/ingredients';
-import { GameMode } from '../game/reducer';
+import { GameMode, suspendedShift } from '../game/reducer';
 import { Button } from './Button';
 import { CupArt, Svg } from './Svg';
 import { useViewport } from './viewport';
@@ -42,6 +42,19 @@ function stepsFor(mode: GameMode) {
 export function TitleScreen() {
   const { width, height } = useViewport();
   const mode = useGame((state) => state.mode);
+  // What the one button does, which is not always the same thing. The menu is where a shop waits
+  // while it is put down — the day it is on, and the shift inside that day if there is one — so
+  // the button comes back to whatever is there rather than building a day over the top of it.
+  const phase = useGame((state) => state.phase);
+  const day = useGame((state) => state.day);
+  const waiting = useGame(suspendedShift);
+  // Held, because this screen outlives the press. The wipe keeps the menu up for a moment after
+  // the shop has left the title phase, and a live reading would spend that moment saying
+  // "Mở cửa tiệm" — the shop announcing the very reset the player was afraid of, over a shift
+  // that is in fact already back on screen behind the wipe.
+  const offer = useRef({ day, waiting });
+  if (phase === 'title') offer.current = { day, waiting };
+  const { day: openDay, waiting: resuming } = offer.current;
   const cupWidth = Math.min(130, width * 0.32);
 
   const wallpaper = useMemo(() => titleWallpaperSvg(width, height, false), [width, height]);
@@ -76,7 +89,10 @@ export function TitleScreen() {
               {stepsFor(mode).map((step) => (
                 <div key={step} class="title-step">{step}</div>
               ))}
-              <Button label="Mở cửa tiệm" onPress={() => dispatch({ type: 'START_DAY', day: 1 })} class="title-start" />
+              <Button
+                label={resuming ? `Tiếp tục ngày ${openDay}` : openDay > 1 ? `Mở cửa ngày ${openDay}` : 'Mở cửa tiệm'}
+                onPress={() => dispatch(resuming ? { type: 'RESUME_DAY' } : { type: 'START_DAY', day: openDay })}
+                class="title-start" />
               <Button label="⚙️ Cài đặt" variant="secondary" onPress={() => uiState.set({ settings: true })} />
             </div>
           </div>

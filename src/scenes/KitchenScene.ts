@@ -29,9 +29,14 @@ import { cupShadowTexture, Spill, Stream } from '../kitchen/pourEffects';
  *   runs in, with the meter over the kitchen showing the live amount;
  * - **drag a topping, a scoop of ice, the syrup bottle or a spoon of foam straight onto the cup**.
  *
- * Plus the rack of cups, tapped (or dragged onto the mat) to start one, and the painted room itself,
- * swiped to pan along the wall. Every rule of what may go in is the reducer's; this scene checks the
- * same things first only so it can put a tool back and say why.
+ * **Everything that can be dragged can be tapped instead**, and a tap does the carrying: the cup
+ * walks itself from the rack to the mat, a tool takes itself over the cup and tips in there, and a
+ * tap on a tank fetches the cup under its spout. Nothing is ever teleported — the quick way is the
+ * same move, performed for the player — and the one thing a tap will not do for them is hold the
+ * tap open, because how long it is held is the pour.
+ *
+ * Plus the painted room itself, swiped to pan along the wall. Every rule of what may go in is the
+ * reducer's; this scene checks the same things first only so it can put a tool back and say why.
  *
  * Depth, back to front: the room (panned), the mat, the docked cup's shadow, the stream's lower
  * half, the cup, the tool in hand, the cup off the rack, the stream's upper half.
@@ -41,7 +46,7 @@ const DEPTH = { room: 0, holder: 10, shadow: 15, streamBack: 18, cup: 20, tool: 
 type Gesture =
   | { kind: 'cup'; startX: number; startY: number; grabX: number; grabY: number; owned: boolean }
   | { kind: 'pour'; station: Station; enabled: boolean; startedAt: number; startX: number }
-  | { kind: 'carry'; station: Station; startX: number; startY: number; target: Phaser.GameObjects.Container }
+  | { kind: 'carry'; station: Station; startX: number; startY: number; distance: number; target: Phaser.GameObjects.Container }
   | { kind: 'refused'; station?: Station }
   | { kind: 'rack'; size: CupSize; startX: number; startY: number; originX: number; originY: number; distance: number }
   | { kind: 'pan'; startX: number; startPan: number; lastX: number; lastT: number; velocity: number };
@@ -63,12 +68,17 @@ export class KitchenScene extends Phaser.Scene {
 
   private pan = 0;
   private panVelocity = 0;
+  /** Where the wall is heading while it slides itself to a tapped tap; otherwise where it is. */
+  private panTarget = 0;
+  private panTween: Phaser.Tweens.Tween | null = null;
 
   private cup: CupView | null = null;
   private cupKey = '';
   private cupPos: Placed = { x: 0, y: 0, scale: 1 };
   private cupTweens: Phaser.Tweens.Tween[] = [];
   private appear = 1;
+  /** Set while a cup that has just flown to the mat is handed over, so it is not dropped in twice. */
+  private flewIn = false;
   private cupShadow!: Phaser.GameObjects.Image;
   private dock: string | null = null;
   private dockCupId = -1;
@@ -373,8 +383,9 @@ export class KitchenScene extends Phaser.Scene {
     this.spill = null;
     this.dock = null;
     this.cupPos = { x: layout.homeX, y: layout.homeY, scale: 1 };
-    // A new cup drops onto the mat; one that is merely re-sized or re-laid-out just stands there.
-    this.appear = freshCup ? 0 : 1;
+    // A new cup drops onto the mat; one that is merely re-sized or re-laid-out just stands there,
+    // and one that flew there has been on screen the whole way and must not be dropped in on top.
+    this.appear = freshCup && !this.flewIn ? 0 : 1;
     if (this.appear === 0) this.tweens.add({ targets: this, appear: 1, duration: DURATION.slow, ease: EASE });
   }
 
@@ -478,6 +489,7 @@ export class KitchenScene extends Phaser.Scene {
     const { x, y } = this.worldPoint(pointer);
     if (x < 0 || y < 0 || x > this.W || y > this.H) return;
     this.pointerId = pointer.id;
+    this.settlePan();
     const layout = this.layout;
 
     // 1. The cup itself.
@@ -534,6 +546,7 @@ export class KitchenScene extends Phaser.Scene {
         break;
       }
       case 'carry':
+        gesture.distance = Math.max(gesture.distance, Math.hypot(x - gesture.startX, y - gesture.startY));
         this.toolState.x = this.toolState.originX + (x - gesture.startX);
         this.toolState.y = this.toolState.originY + (y - gesture.startY);
         break;
@@ -574,7 +587,7 @@ export class KitchenScene extends Phaser.Scene {
       case 'pour': return this.releaseTap(gesture);
       case 'carry':
         this.pressStation(gesture.station, false);
-        return this.dropTool(gesture.station);
+        return this.dropTool(gesture);
       case 'rack': return this.releaseRack(gesture);
       case 'pan':
         this.panVelocity = gesture.velocity;
@@ -587,10 +600,61 @@ export class KitchenScene extends Phaser.Scene {
     }
   }
 
-  private setPan(value: number) {
+  private applyPan(value: number) {
     if (!this.layout) return;
     this.pan = Math.max(0, Math.min(this.layout.room.maxPan, value));
     this.room.setX(-this.pan);
+  }
+
+  private setPan(value: number) {
+    this.applyPan(value);
+    this.panTarget = this.pan;
+  }
+
+  /**
+   * Where the wall has to stand for a cup docked under this tap to be wholly on screen. A tank can
+   * be tapped while it is half off the edge of the room, and the cup fetched to it would hang off
+   * the same edge with its meter reading a cup nobody can see.
+   */
+  private panForDock(station: Station) {
+    const layout = this.layout!;
+    const margin = layout.cupW * station.dockScale / 2 + 8;
+    const near = station.cx - this.W + margin;
+    const far = station.cx - margin;
+    return Math.max(0, Math.min(layout.room.maxPan, Math.max(near, Math.min(far, this.pan))));
+  }
+
+  /** Slide the wall there, alongside whatever is being carried to it. */
+  private tweenPan(to: number, duration: number) {
+    this.panTween?.stop();
+    this.panTween = null;
+    this.panVelocity = 0;
+    this.panTarget = to;
+    if (Math.abs(to - this.pan) < 0.5) return this.applyPan(to);
+    const from = { value: this.pan };
+    this.panTween = this.tweens.add({
+      targets: from, value: to, duration, ease: EASE,
+      onUpdate: () => this.applyPan(from.value),
+      onComplete: () => { this.panTween = null; },
+    });
+  }
+
+  /** A wall still sliding is put where it was going at once: the next touch reads a settled room. */
+  private settlePan() {
+    if (!this.panTween) return;
+    this.panTween.stop();
+    this.panTween = null;
+    this.applyPan(this.panTarget);
+  }
+
+  /**
+   * How long something takes to carry itself across the room: the length of the move, bounded by
+   * the two the rest of the kitchen moves in. A cup let go of over its own mat settles at once; one
+   * fetched from the rack, or a tool from the far end of the bench, takes the longer move. Neither
+   * end of that range is quick enough to read as a jump, which is the whole point of carrying it.
+   */
+  private flightTime(dx: number, dy: number) {
+    return Math.round(Phaser.Math.Clamp(Math.hypot(dx, dy) * 1.6, DURATION.fast, DURATION.slow));
   }
 
   /** The game is put down mid-gesture: empty the hands, and let go of the tap without pouring. */
@@ -600,6 +664,11 @@ export class KitchenScene extends Phaser.Scene {
       this.stopPour(false);
     }
     this.cancelGesture();
+    // A tool still carrying itself to the cup is holding a dispatch: it is not a gesture, so
+    // cancelGesture does not reach it.
+    this.cancelTool();
+    this.dropRackCup();
+    this.settlePan();
     this.standCupDown();
   }
 
@@ -637,21 +706,28 @@ export class KitchenScene extends Phaser.Scene {
     const found = findStation(layout.stations, this.cupPos.x, this.cupPos.y, layout.cupW * scale, layout.cupH * scale, this.pan, this.W);
     if (found) {
       playSound('cupDown', DURATION.base);
-      this.dock = found.key;
-      this.dockCupId = store.state.cupId;
-      const dockScale = found.dockScale;
-      this.tweenCup({
-        scale: dockScale,
-        x: found.cx - this.pan - layout.cupW * dockScale / 2,
-        y: found.dockY - layout.cupH * dockScale,
-      }, DURATION.base);
-      this.cup?.setDrink(this.drinkShown(), store.state.cupId);
-      this.refreshEquipment();
+      this.dockCup(found, DURATION.base);
     } else {
       playSound('cupDown', DURATION.slow);
       this.standCupDown();
       this.cup?.setDrink(this.drinkShown(), store.state.cupId);
     }
+  }
+
+  /** Stand the cup under a tap and leave it there, ready for the tap to be held. */
+  private dockCup(station: Station, duration: number) {
+    const layout = this.layout!;
+    const scale = station.dockScale;
+    this.dock = station.key;
+    this.dockCupId = store.state.cupId;
+    this.tweenCup({
+      scale,
+      // Against where the wall is *going*, not where it is: the two slide there together.
+      x: station.cx - this.panTarget - layout.cupW * scale / 2,
+      y: station.dockY - layout.cupH * scale,
+    }, duration);
+    this.cup?.setDrink(this.drinkShown(), store.state.cupId);
+    this.refreshEquipment();
   }
 
   // ------------------------------------------------------------------ the taps
@@ -681,9 +757,29 @@ export class KitchenScene extends Phaser.Scene {
     const { station } = gesture;
     if (!gesture.enabled) {
       const { cup } = store.state;
-      const locked = cup.tea !== null && cup.tea !== station.id;
-      playSound('nudge');
-      nudge(locked ? 'Ly đã có trà khác — đổ bỏ để pha lại' : `Kéo ly dưới bình ${station.name} trước`);
+      if (!cup.size) {
+        playSound('nudge');
+        nudge('Chạm ly S / M / L trên kệ để lấy ly trước');
+        return;
+      }
+      if (cup.tea !== null && cup.tea !== station.id) {
+        playSound('nudge');
+        nudge('Ly đã có trà khác — đổ bỏ để pha lại');
+        return;
+      }
+      // Touching a tank fetches the cup under its spout, which is the drag the player would have
+      // made. It does not pour: how long the tap is held is the pour, and that stays in their hand.
+      const layout = this.layout!;
+      const scale = station.dockScale;
+      const to = this.panForDock(station);
+      const duration = this.flightTime(
+        station.cx - to - layout.cupW * scale / 2 - this.cupPos.x,
+        station.dockY - layout.cupH * scale - this.cupPos.y);
+      this.tweenPan(to, duration);
+      playSound('cupPickup');
+      playSound('cupDown', duration);
+      this.dockCup(station, duration);
+      // No word about it: docking is what sets the hint line to how the tap is held.
       return;
     }
     if (!this.pouring?.running) return;
@@ -754,16 +850,21 @@ export class KitchenScene extends Phaser.Scene {
     this.toolState.y = this.toolState.originY;
     playSound('pickup');
     if (station.kind === 'topping') nudge(getIngredient('toppings', station.id)?.name ?? station.name);
-    else if (station.kind === 'ice') nudge('Kéo muỗng đá vào ly · 1 muỗng: ít đá · 2 muỗng: đá thường');
-    this.gesture = { kind: 'carry', station, startX: x, startY: y, target: this.tool };
+    else if (station.kind === 'ice') nudge('1 muỗng: ít đá · 2 muỗng: đá thường');
+    this.gesture = { kind: 'carry', station, startX: x, startY: y, distance: 0, target: this.tool };
   }
 
-  private dropTool(station: Station) {
-    const state = store.state;
-    const { cup: now, build: made, config } = state;
+  /**
+   * The tool is let go of. Over the cup it tips in, and dropped anywhere else it goes back on its
+   * shelf. A touch that never moved is the quick way to the same thing: the tool carries itself
+   * over the cup and tips in there, so the common case is one touch rather than a drag across the
+   * room. Either way it is the same refusal and the same pour — only the carrying differs.
+   */
+  private dropTool(gesture: Extract<Gesture, { kind: 'carry' }>) {
+    const { station } = gesture;
     const layout = this.layout!;
     const s = this.toolState.size;
-    if (!now.size) {
+    if (!store.state.cup.size) {
       this.toolState.show = 0;
       nudge('Lấy ly từ kệ trước khi thêm nguyên liệu');
       return;
@@ -775,56 +876,88 @@ export class KitchenScene extends Phaser.Scene {
     const cupH = layout.cupH;
     const overBox = (left: number, top: number) =>
       px > left - cupW * 0.45 && px < left + cupW * 1.45 && py > top - cupH * 0.35 && py < top + cupH * 1.1;
-    const over = overBox(this.cupPos.x, this.cupPos.y) || overBox(layout.homeX, layout.homeY);
-
-    const putBack = (message?: string) => {
-      if (message) {
-        playSound('nudge');
-        nudge(message);
-      }
-      this.toolTweens = [
-        this.tweens.add({ targets: this.toolState, x: this.toolState.originX, y: this.toolState.originY, duration: DURATION.base, ease: EASE }),
-        this.tweens.add({ targets: this.toolState, show: 0, delay: DURATION.base, duration: 1 }),
-      ];
-    };
-    if (!over) {
-      const moved = Math.abs(this.toolState.x - this.toolState.originX) + Math.abs(this.toolState.y - this.toolState.originY);
-      putBack(moved < 8 ? `Kéo ${station.name.toLowerCase()} thả vào ly` : undefined);
-      return;
+    const tapped = gesture.distance < 8;
+    if (!tapped && !overBox(this.cupPos.x, this.cupPos.y) && !overBox(layout.homeX, layout.homeY)) {
+      return this.putToolBack();
     }
+    const refusal = this.refuseTool(station);
+    if (refusal) return this.putToolBack(refusal);
+    if (!tapped) return this.tipToolIn(station);
+
+    // Tapped: carry it over the cup first, and tip it in when it gets there.
+    const toX = this.cupPos.x + cupW / 2 - s / 2;
+    const toY = this.cupPos.y + cupH * 0.12 - s * 0.7;
+    const duration = this.flightTime(toX - this.toolState.x, toY - this.toolState.y);
+    for (const tween of this.toolTweens) tween.stop();
+    this.toolTweens = [this.tweens.add({
+      targets: this.toolState, x: toX, y: toY, duration, ease: EASE,
+      onComplete: () => this.tipToolIn(station),
+    })];
+  }
+
+  /** What stops this tool going into the cup, said the way the cup would say it. */
+  private refuseTool(station: Station): string | null {
+    const { cup, build, config } = store.state;
     switch (station.kind) {
       case 'topping':
-        if (now.toppings.includes(station.id)) return putBack(`Ly đã có ${station.name}`);
-        if (now.toppings.length >= config.maxToppings) return putBack(config.maxToppings === 1 ? 'Ly chỉ được 1 topping' : `Tối đa ${config.maxToppings} topping`);
+        if (cup.toppings.includes(station.id)) return `Ly đã có ${station.name}`;
+        if (cup.toppings.length >= config.maxToppings) {
+          return config.maxToppings === 1 ? 'Ly chỉ được 1 topping' : `Tối đa ${config.maxToppings} topping`;
+        }
+        return null;
+      case 'foam':
+        return cup.foam ? 'Ly đã có kem' : null;
+      case 'milk':
+        if (cup.milk && cup.milk !== station.id) return 'Ly đã có loại sữa khác';
+        return build.fill >= 1 ? 'Ly đầy rồi — chừa chỗ cho sữa' : null;
+      case 'ice':
+        return build.iceScoops >= MAX_ICE_SCOOPS ? 'Đá đã đầy ly' : null;
+      default:
+        return build.sugarPumps >= SUGAR_STEPS.length ? 'Ngọt tối đa rồi' : null;
+    }
+  }
+
+  /** Tip it in over the cup, then it's gone. */
+  private tipToolIn(station: Station) {
+    switch (station.kind) {
+      case 'topping':
         playSound('scoop');
         dispatch({ type: 'SCOOP', category: 'toppings', optionId: station.id });
         break;
       case 'foam':
-        if (now.foam) return putBack('Ly đã có kem');
         playSound('foam');
         dispatch({ type: 'SCOOP', category: 'foam', optionId: station.id });
         break;
       case 'milk':
-        if (now.milk && now.milk !== station.id) return putBack('Ly đã có loại sữa khác');
-        if (made.fill >= 1) return putBack('Ly đầy rồi — chừa chỗ cho sữa');
         playSound('milk');
         dispatch({ type: 'POUR', category: 'milk', optionId: station.id, amount: MILK_SPLASH });
         break;
       case 'ice':
-        if (made.iceScoops >= MAX_ICE_SCOOPS) return putBack('Đá đã đầy ly');
         playSound('ice');
         dispatch({ type: 'ICE_SCOOP' });
         break;
       default:
-        if (made.sugarPumps >= SUGAR_STEPS.length) return putBack('Ngọt tối đa rồi');
         playSound('sugar');
         dispatch({ type: 'SUGAR_PUMP' });
         break;
     }
-    // Tip it in over the cup, then it's gone.
+    for (const tween of this.toolTweens) tween.stop();
     this.toolTweens = [
       this.tweens.add({ targets: this.toolState, tip: 1, duration: 320, ease: EASE }),
       this.tweens.add({ targets: this.toolState, show: 0, delay: 300, duration: 1 }),
+    ];
+  }
+
+  /** Back on its shelf, with a word about why if there is one. */
+  private putToolBack(message?: string) {
+    if (message) {
+      playSound('nudge');
+      nudge(message);
+    }
+    for (const tween of this.toolTweens) tween.stop();
+    this.toolTweens = [
+      this.tweens.add({ targets: this.toolState, x: this.toolState.originX, y: this.toolState.originY, duration: DURATION.base, ease: EASE }),
+      this.tweens.add({ targets: this.toolState, show: 0, delay: DURATION.base, duration: 1 }),
     ];
   }
 
@@ -861,24 +994,43 @@ export class KitchenScene extends Phaser.Scene {
     this.rackCup = null;
   }
 
-  private takeCup(size: CupSize) {
+  /**
+   * The cup carries itself to the mat and is the shop's the moment it lands. The one the shop makes
+   * stands exactly where this one came to rest — same size, same place — so the handover is not
+   * seen; that is what {@link flewIn} is for, since a cup that arrives this way must not then be
+   * dropped in on top of itself.
+   */
+  private flyCupToMat(size: CupSize) {
+    const rack = this.rackCup;
+    const layout = this.layout;
+    if (!rack || !layout) return;
     if (store.state.cup.size) {
+      this.dropRackCup();
+      playSound('nudge');
       nudge('Đổ bỏ ly đang pha trước khi lấy ly mới');
       return;
     }
-    playSound('cupDown');
-    dispatch({ type: 'PICK_CUP', size });
+    const cup = cupSizeFor(this.W, this.H, size);
+    const toX = layout.holder.left + (layout.holder.width - cup.width) / 2;
+    const toY = layout.holder.top + layout.holder.height / 2 - cup.height * CUP_FOOT / CUP_ART.h;
+    const duration = this.flightTime(toX - rack.x, toY - rack.y);
+    playSound('cupDown', duration);
+    this.tweens.add({
+      targets: rack, x: toX, y: toY, duration, ease: EASE,
+      onComplete: () => {
+        this.flewIn = true;
+        dispatch({ type: 'PICK_CUP', size });
+        this.flewIn = false;
+        this.dropRackCup();
+      },
+    });
   }
 
   private releaseRack(gesture: Extract<Gesture, { kind: 'rack' }>) {
     const rack = this.rackCup;
     if (!rack) return;
-    // A tap is the quick way: the cup goes straight onto the mat, as if it had been carried.
-    if (gesture.distance < 8) {
-      this.dropRackCup();
-      this.takeCup(gesture.size);
-      return;
-    }
+    // A tap is the quick way: the cup takes itself to the mat, the same journey a drag makes.
+    if (gesture.distance < 8) return this.flyCupToMat(gesture.size);
     // Anywhere on the mat counts: the cup is tested by the point it would stand on.
     const holder = this.layout!.holder;
     const cup = cupSizeFor(this.W, this.H, gesture.size);
@@ -888,11 +1040,7 @@ export class KitchenScene extends Phaser.Scene {
     const padY = 24 + cup.height * 0.45;
     const overMat = footX >= holder.left - padX && footX <= holder.left + holder.width + padX
       && footY >= holder.top - padY && footY <= holder.top + holder.height + padY;
-    if (overMat && !store.state.cup.size) {
-      this.dropRackCup();
-      this.takeCup(gesture.size);
-      return;
-    }
+    if (overMat && !store.state.cup.size) return this.flyCupToMat(gesture.size);
     this.tweens.add({ targets: rack, x: gesture.originX, y: gesture.originY, duration: DURATION.base, ease: EASE });
     this.tweens.add({ targets: rack, alpha: 0, delay: 220, duration: 100, onComplete: () => this.dropRackCup() });
     nudge('Thả ly lên thảm — hoặc chỉ cần chạm vào ly trên kệ');

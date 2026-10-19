@@ -562,8 +562,6 @@ button:focus-visible { outline: 2px solid var(--primary-dark); outline-offset: 2
 }
 .chip-tile.done { border-color: #8C9A57; background: #F0F2DC; }
 .chip-size { font-weight: 800; color: #795331; line-height: normal; }
-.chip-none { position: relative; display: flex; align-items: center; justify-content: center; opacity: 0.45; }
-.chip-slash { position: absolute; height: 2.5px; border-radius: 2px; background: var(--bad); transform: rotate(-45deg); }
 .chip-check {
   position: absolute;
   right: -3px;

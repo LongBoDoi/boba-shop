@@ -52,7 +52,8 @@ export const EMPTY_DRINK: Drink = {
   foam: null,
 };
 
-// Teas and toppings unlock in array order as the days go on.
+// Array order is slot order: teas fill the rack and toppings fill their stand in the order they
+// are listed here. Nothing waits for a later day — every one of them is on the shelf from day one.
 export const TEAS: Tea[] = [
   // Hồng trà, Trà lài and Trà Thái are the bodies of the three dispensers on
   // `tools/sheets/kitchen.png`, read between their highlight and shadow sides; Hồng trà's milky
@@ -156,6 +157,19 @@ export const DEFAULT_ID: Partial<Record<CategoryId, string>> = {
 export function effectiveId(drink: Drink, category: CategoryId): string | null {
   if (category === 'toppings') return null;
   return drink[category] ?? DEFAULT_ID[category] ?? null;
+}
+
+/**
+ * Whether a drink names anything at all in a category. An order mentions only what the customer
+ * actually asked for and leaves the rest unset, so this is what the order panel lists: the none/0
+ * options are the same answer spelled out and count as not asking, and tea is the one category
+ * every order names. An unasked-for category still has to arrive empty — not asking for foam is
+ * asking for no foam — which is `effectiveId`'s job, not this one's.
+ */
+export function asksFor(drink: Drink, category: CategoryId): boolean {
+  if (category === 'toppings') return drink.toppings.length > 0;
+  const id = effectiveId(drink, category);
+  return id !== null && id !== (DEFAULT_ID[category] ?? null);
 }
 
 /** How much of the cup one second of holding a spigot pours. */

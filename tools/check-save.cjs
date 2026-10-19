@@ -15,7 +15,7 @@ require.extensions['.ts'] = (module, filename) => {
 };
 
 try {
-  const { createInitialState, gameReducer } = require(path.join(__dirname, '../src/game/reducer.ts'));
+  const { createInitialState, gameReducer, suspendedShift } = require(path.join(__dirname, '../src/game/reducer.ts'));
   const { parseGame, serializeGame, SAVE_VERSION } = require(path.join(__dirname, '../src/game/save.ts'));
   const { getDayConfig } = require(path.join(__dirname, '../src/game/levels.ts'));
 
@@ -112,6 +112,40 @@ try {
   const atEnd = parseGame(serializeGame(ending));
   assert.equal(atEnd.phase, 'dayEnd', 'The day-end screen comes back');
   assert.deepEqual(atEnd.stats, ending.stats, 'With the numbers it is reporting');
+
+  // ---------------------------------------------------------------- putting the shop down
+  // "Về menu chính" suspends the shift, it does not end it: the menu's one button has to hand back
+  // the minute the player left. It used to dispatch `START_DAY, day: 1` outright, which threw away
+  // both the week and the day in progress — reported, accurately, as the game resetting itself.
+  let week = gameReducer(createInitialState(77), { type: 'START_DAY', day: 7 });
+  week = gameReducer(week, { type: 'TICK', dt: 30_000 });
+  week = gameReducer(week, { type: 'PICK_CUP', size: 'L' });
+  week = gameReducer(week, { type: 'POUR', category: 'tea', optionId: week.config.options.tea[0], amount: 0.5 });
+  assert.ok(week.clock > 0 && week.cup.size === 'L', 'A shift is under way');
+  const putDown = gameReducer(week, { type: 'GO_TO_TITLE' });
+  assert.equal(putDown.phase, 'title', 'Quitting mid-shift goes to the menu');
+  assert.ok(suspendedShift(putDown), 'And leaves a shift there to be taken up again');
+  assert.equal(putDown.day, 7, 'On the day it was being played');
+  for (const [name, at] of [['in the same session', putDown], ['after a reload', parseGame(serializeGame(putDown))]]) {
+    assert.ok(suspendedShift(at), `The shift is still waiting ${name}`);
+    const back = gameReducer(at, { type: 'RESUME_DAY' });
+    assert.equal(back.phase, 'playing', `Coming back ${name} is the same shift`);
+    assert.equal(back.day, 7, 'On the same day');
+    assert.equal(back.cup.size, 'L', 'With the same cup on the mat');
+    assert.equal(back.cup.tea, week.cup.tea, 'Holding the same tea');
+    assert.equal(Math.round(back.clock), Math.round(week.clock), 'At the same minute of the day');
+    assert.deepEqual(back.slots.map((c) => c && c.id), week.slots.map((c) => c && c.id), 'With the same customers at the counter');
+  }
+  // A day that is *finished* has nothing to come back to: leaving it prepares the next one instead.
+  const closedUp = gameReducer(ending, { type: 'GO_TO_TITLE' });
+  assert.equal(closedUp.day, ending.day + 1, 'Leaving a finished day moves the shop on');
+  assert.equal(closedUp.clock, 0, 'The next day has not started');
+  assert.equal(closedUp.cup.size, null, 'And starts with a clean bench');
+  assert.ok(!suspendedShift(closedUp), 'So the menu opens it rather than resuming it');
+  assert.equal(gameReducer(closedUp, { type: 'RESUME_DAY' }), closedUp, 'There is nothing to resume');
+  assert.equal(parseGame(serializeGame(closedUp)).day, ending.day + 1, 'Which is the day the menu comes back to');
+  assert.equal(closedUp.money, ending.money, 'The till is the shop\'s either way');
+  assert.ok(!suspendedShift(createInitialState(5)), 'A brand new shop has no shift waiting');
 
   // ------------------------------------------------------------------ saves that must be refused
   const good = JSON.parse(serializeGame(state));
