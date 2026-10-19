@@ -1,4 +1,4 @@
-import { Capacitor, WebView } from '@capacitor/core';
+import { Capacitor, CapacitorHttp, WebView } from '@capacitor/core';
 import { Directory, Encoding, Filesystem } from '@capacitor/filesystem';
 
 import { directories, isWhole, parseManifest, plan, UpdateManifest } from './manifest';
@@ -36,12 +36,48 @@ const DEADLINE_MS = 10 * 60_000;
 
 export const isApp = () => Capacitor.isNativePlatform();
 
+/**
+ * Read one file off the site — and **not with `fetch`**, which cannot do it at all.
+ *
+ * This is the only thing in the game that reaches outside the app, and the app is not where the
+ * site is: the WebView is served from `https://localhost` (`capacitor://localhost` on iOS), so
+ * every request to the site is cross-origin, and the host sends no `Access-Control-Allow-Origin`
+ * on a static file — its CORS defaults are for API routes, and a static deploy has none. The
+ * browser therefore refuses the response before any of this code sees it, with a bare
+ * `TypeError: Failed to fetch`. That is exactly the shape of a site that cannot be asked, which
+ * `fetchManifest` reads as nothing to report, so the check was **silent rather than broken**: the
+ * card never appeared and no app ever updated itself.
+ *
+ * `CapacitorHttp` makes the request in native code instead, where there is no origin to be wrong
+ * about. Two things about it are worth knowing before it is swapped for something else:
+ *
+ * - it is **part of Capacitor's core** on both platforms, not a plugin to install, so this needs
+ *   no change to the native shell and `NATIVE_VERSION` does not move for it;
+ * - calling it is **not** gated on the `CapacitorHttp.enabled` config, which only decides whether
+ *   `window.fetch` is patched to go through it. Turning that on would have fixed this in one line
+ *   and sent Phaser's twenty megabytes of artwork through a native round trip as well, so it
+ *   stays off and the two requests that need native HTTP ask for it by name.
+ *
+ * Android hands a JSON response back already parsed and everything else as a string, iOS hands
+ * back a string, so both shapes arrive here and neither is the one to count on.
+ */
+async function readSite(file: string): Promise<unknown> {
+  const { status, data } = await CapacitorHttp.get({
+    url: `${SITE}/${file}`,
+    headers: { 'Cache-Control': 'no-cache' },
+    responseType: 'text',
+  });
+  if (status < 200 || status >= 300) throw new Error(`${file} answered ${status}`);
+  return data;
+}
+
+const asText = (data: unknown): string => (typeof data === 'string' ? data : JSON.stringify(data));
+const asJson = (data: unknown): unknown => (typeof data === 'string' ? JSON.parse(data) : data);
+
 /** The build the site is serving, or null if it cannot be read or does not hang together. */
 export async function fetchManifest(): Promise<UpdateManifest | null> {
   try {
-    const response = await fetch(`${SITE}/update.json`, { cache: 'no-store' });
-    if (!response.ok) return null;
-    const manifest = parseManifest(await response.json());
+    const manifest = parseManifest(asJson(await readSite('update.json')));
     return manifest && (await servedPageMatches(manifest)) ? manifest : null;
   } catch (error: unknown) {
     console.warn('[update] the site could not be asked:', error);
@@ -55,12 +91,11 @@ export async function fetchManifest(): Promise<UpdateManifest | null> {
  */
 async function servedPageMatches(manifest: UpdateManifest): Promise<boolean> {
   try {
-    const response = await fetch(`${SITE}/index.html`, { cache: 'no-store' });
-    if (!response.ok) return false;
-    const whole = isWhole(await response.text(), manifest);
+    const whole = isWhole(asText(await readSite('index.html')), manifest);
     if (!whole) console.warn('[update] the site is mid-deploy; waiting for the next launch');
     return whole;
-  } catch {
+  } catch (error: unknown) {
+    console.warn('[update] the page could not be read:', error);
     return false;
   }
 }
@@ -71,6 +106,9 @@ async function servedPageMatches(manifest: UpdateManifest): Promise<boolean> {
  * For an app still running what it was installed with, those files are inside the package and
  * `basePath` is empty — nothing of it can be copied, so this returns null and the first update is
  * a full download.
+ *
+ * This one is a plain `fetch` and should stay one: it reads the app's **own** page, off the local
+ * server, on the WebView's own origin. `readSite` above is for the site, which is somewhere else.
  */
 async function running(): Promise<{ basePath: string; manifest: UpdateManifest | null }> {
   const { path } = await WebView.getServerBasePath();

@@ -164,5 +164,96 @@ assert.equal(parseRelease({ html_url: 'u' }), null, 'A release with no tag is no
 assert.equal(parseRelease({ tag_name: 'v3.58', html_url: 'u' }).apkUrl, null, 'A release with no .apk says so');
 assert.ok(compareVersions('2.10', '2.9') > 0, 'Versions order by number, not by text');
 
-console.log(`check-updates: the shell is ${now} at native version ${NATIVE_VERSION}; ` +
-  'updates, new files and what each costs.');
+// ============================================================ asking the site, from inside the app
+let siteChecks = Promise.resolve();
+/**
+ * The site is read in **native** code, and this is the check that keeps it that way.
+ *
+ * `fetch` cannot read it from inside the app: the WebView's origin is `https://localhost`, every
+ * request to the site is therefore cross-origin, and a static file on the host carries no
+ * `Access-Control-Allow-Origin`. The browser refuses the response, `fetchManifest` catches the
+ * `TypeError` and answers "nothing to report" — which is indistinguishable from an app that is
+ * up to date, and is why two releases went by with no card on anybody's phone and nothing in any
+ * log. There is no test a browser can run that would have caught it, so what is pinned here is
+ * the shape of the fix: the request goes through `CapacitorHttp`, and both of the response shapes
+ * the two platforms hand back are read.
+ */
+const liveSource = fs.readFileSync(path.join(root, 'src/updates/live.ts'), 'utf8');
+assert.match(liveSource, /CapacitorHttp\.get\(/, 'The site is asked through native HTTP');
+assert.doesNotMatch(liveSource, /fetch\(\s*`\$\{SITE\}/,
+  'A site read through `fetch` is blocked by CORS in the app and fails silently — use `readSite`.');
+
+{
+  const Module = require('node:module');
+  const served = {
+    'update.json': { status: 200, data: { webBuild: 'commit-2', nativeVersion: 2, files: { 'index.html': 1, 'assets/index-aaa.js': 2 } } },
+    'index.html': { status: 200, data: '<script type="module" src="/assets/index-aaa.js"></script>' },
+  };
+  const asked = [];
+  const core = {
+    Capacitor: { isNativePlatform: () => true },
+    CapacitorHttp: {
+      get: async ({ url }) => {
+        const file = url.replace(/^.*\//, '');
+        asked.push(file);
+        // Anything not laid out above is a 404, the same as it would be off the real host.
+        return served[file] ?? { status: 404, data: '' };
+      },
+    },
+    WebView: { getServerBasePath: async () => ({ path: '' }) },
+  };
+  const filesystem = { Directory: { Data: 'DATA' }, Encoding: { UTF8: 'utf8' }, Filesystem: {} };
+  const load = Module._load;
+  Module._load = (request, ...rest) => {
+    if (request === '@capacitor/core') return core;
+    if (request === '@capacitor/filesystem') return filesystem;
+    return load(request, ...rest);
+  };
+  let live;
+  try {
+    live = require(path.join(root, 'src/updates/live.ts'));
+  } finally {
+    Module._load = load;
+  }
+
+  // Its own complaints are part of what it does: a check that goes quiet has to say why, because
+  // the quiet itself is what cannot be told apart from an app that is up to date.
+  const said = [];
+  const read = async () => {
+    const warn = console.warn;
+    console.warn = (...parts) => said.push(parts.join(' '));
+    try {
+      const found = await live.fetchManifest();
+      return found && found.webBuild;
+    } finally {
+      console.warn = warn;
+    }
+  };
+
+  siteChecks = (async () => {
+    // Android parses a JSON response before it reaches the page; iOS hands back the text. The
+    // manifest has to read the same either way, and only one of the two can be tried on a desk.
+    assert.equal(await read(), 'commit-2', 'The manifest reads when the response arrives parsed');
+    served['update.json'].data = JSON.stringify(served['update.json'].data);
+    assert.equal(await read(), 'commit-2', 'and when it arrives as text');
+    assert.deepEqual(asked.slice(0, 2), ['update.json', 'index.html'], 'The page is held against the manifest');
+
+    // The two silences that are not an update, told apart from each other only in the log.
+    served['index.html'].data = '<script type="module" src="/assets/index-bbb.js"></script>';
+    assert.equal(await read(), null, 'A site caught mid-deploy is a wait, not an update');
+    served['index.html'].data = '<script type="module" src="/assets/index-aaa.js"></script>';
+    served['update.json'] = { status: 503, data: '' };
+    assert.equal(await read(), null, 'A site that answers badly is nothing to report');
+
+    assert.match(said.join('\n'), /mid-deploy/, 'and a deploy in flight says so');
+    assert.match(said.join('\n'), /answered 503/, 'as does a host that will not answer');
+  })();
+}
+
+siteChecks.then(() => {
+  console.log(`check-updates: the shell is ${now} at native version ${NATIVE_VERSION}; ` +
+    'updates, new files and what each costs.');
+}, (error) => {
+  console.error(error);
+  process.exit(1);
+});

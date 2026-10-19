@@ -141,8 +141,22 @@ directory in the app's data instead and reloads it. So an update is: fetch the f
 down, point the server at them. The page's **origin does not change**, which is why the shop
 survives — the save is `localStorage` on that origin.
 
-Four rules, each of which is the difference between an update and an unusable app:
+These rules are each the difference between an update and an unusable app:
 
+- **The site is read in native code, not with `fetch`.** The WebView's origin is
+  `https://localhost` (`capacitor://localhost` on iOS), so asking the site is a cross-origin
+  request, and a static file on EAS Hosting carries no `Access-Control-Allow-Origin` — its CORS
+  defaults are for API routes, and a static deploy has none. The browser refuses the response
+  before the game sees it, the check reads the `TypeError` as "the site could not be asked", and
+  the result is not an error anybody notices: it is **silence**, which is indistinguishable from
+  an app that is up to date. Two releases shipped with a check that could never find anything and
+  nothing in any log said so. `readSite` in `live.ts` asks through `CapacitorHttp`, which is part
+  of Capacitor's core on both platforms — so it costs no shell change — and which works without
+  `CapacitorHttp.enabled`, the config that patches `window.fetch` and would send the twenty
+  megabytes of artwork through a native round trip as well. The app's **own** `update.json`, read
+  back off the local server, is same-origin and stays a `fetch`. The GitHub releases API is the
+  other way round: it sends `Access-Control-Allow-Origin: *`, so the new-file half is a plain
+  `fetch` and works.
 - **Nothing is swapped until every file is written.** A half-written directory served to the
   WebView is a white screen with no way back.
 - **A build is made permanent only once it has booted.** `setServerBasePath` lasts for the launch;
@@ -1155,7 +1169,11 @@ stands plainly inside the shelf; divided across the board it laps over the ends 
   `NATIVE_VERSION` moves with it. A real build needs the **Build apps** workflow or a local
   Android SDK / Xcode; neither is here, so say in the report that the app shell was not built.
 - Updating an app: the pure half — which kind of new version it is, what it costs, what a tag and a
-  manifest mean — is `tools/check-updates.cjs`. The rest is phone-only and a browser cannot fake
+  manifest mean — is `tools/check-updates.cjs`, which also drives `fetchManifest` against a stub of
+  `CapacitorHttp`. One thing more a desk can check, and it is the one that was missed: whether the
+  app is allowed to read the site at all. Serve a page on `http://localhost:<port>` — any origin
+  that is not the site — and `fetch` the site's `update.json` from it; blocked there is blocked in
+  the app, for the same reason. The rest is phone-only and a browser cannot fake
   it: downloading a build into the app, pointing the WebView at it, the rollback when one does not
   boot, and Android's installer prompt all need two real builds on a real device. Say so in the
   report.
