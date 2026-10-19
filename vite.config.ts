@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 import preact from '@preact/preset-vite';
 import { defineConfig, Plugin } from 'vite';
 
-import { NATIVE_VERSION } from './src/updates/native';
+import { NATIVE_VERSION } from './src/updates/native.ts';
 
 /**
  * Which build this is. CI passes the commit; a local build gets a timestamp, so a phone pointed at

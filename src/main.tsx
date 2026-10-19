@@ -3,7 +3,9 @@ import './styles.css';
 import { render } from 'preact';
 
 import { startClock } from './clock';
-import { createGame } from './game/game';
+import { createGame, getGame } from './game/game';
+import { goToPage } from './game/pager';
+import { parseGame } from './game/save';
 import { readSavedGame, startSaving } from './persist';
 import { startSound } from './sound';
 import { isApp } from './updates/live';
@@ -47,8 +49,6 @@ async function boot() {
   // Tests drive the shop through this: always in development, and in a build only when the page is
   // opened with `?test` (it only reaches the player's own shop in their own browser).
   if (import.meta.env.DEV || new URLSearchParams(location.search).has('test')) {
-    const { goToPage } = await import('./game/pager');
-    const { parseGame } = await import('./game/save');
     /** Put a saved shop on screen, exactly as a launch would read it. */
     const load = (json: string) => {
       const state = parseGame(json);
@@ -56,7 +56,6 @@ async function boot() {
       store.reset(state);
       uiState.set({ opening: state.phase === 'playing' && state.clock === 0 });
     };
-    const { getGame } = await import('./game/game');
     Object.assign(window, { __shop: { store, uiState, goToPage, load, game: getGame } });
   }
 }
