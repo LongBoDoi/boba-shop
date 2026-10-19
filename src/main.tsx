@@ -6,6 +6,7 @@ import { startClock } from './clock';
 import { createGame } from './game/game';
 import { readSavedGame, startSaving } from './persist';
 import { startSound } from './sound';
+import { isApp } from './updates/live';
 import { store } from './store';
 import { App } from './ui/App';
 import { uiState } from './ui-state';
@@ -64,8 +65,11 @@ void boot();
 
 // The shop is kept on the phone (see public/sw.js). Registered after load so it never competes with
 // the artwork the loading screen is waiting on; never in development, where it would cache the dev
-// server's modules.
-if (import.meta.env.PROD && 'serviceWorker' in navigator) {
+// server's modules; and **never in the app**, which already has every file inside it and serves
+// them from its own local server. There, a worker would copy twenty-six megabytes of artwork into
+// a second cache to no end — and on iOS, whose WebView has no service workers at all, it only ever
+// logged a failure.
+if (import.meta.env.PROD && !isApp() && 'serviceWorker' in navigator) {
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('/sw.js').catch((error: unknown) => console.warn('Không đăng ký được service worker:', error));
   });
