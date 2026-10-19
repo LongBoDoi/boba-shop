@@ -34,8 +34,8 @@ npm run sync         # cap sync: copy dist/ into android/ and ios/
 
 Run `npm run typecheck` and `npm test` before calling a change done. The regression scripts check
 serving behaviour, saving and restoring, the cup sizes, the sound (its assets, its catalogue and
-its whole lifecycle against a fake audio context), the topping tray's geometry and the backup
-code; see "Verifying changes" below. There is **no lint step** — the old one was
+its whole lifecycle against a fake audio context), the topping tray's geometry, the sideways
+layouts and the backup code; see "Verifying changes" below. There is **no lint step** — the old one was
 `eslint-config-expo` and went with Expo; `tsc` is strict and is the gate.
 
 `/art-test.html` on the dev server draws every piece of SVG art in `src/art/` with a spread of
@@ -346,6 +346,7 @@ tools/                  make-music.cjs: music only; audio/build-foley.cjs: recor
                         make-web-icons.cjs: the home-screen icons, off the app's own
 tools/check-audio.cjs   loop seams, cue wiring, and the volumes through a save
 tools/check-audio-engine.cjs  the scheduler and the whole browser lifecycle, against a fake context
+tools/check-prep-layout.cjs   the sideways layouts, against the painting's own band
 tools/check-backup-code.cjs   the backup code's round trip and its refusals
 tools/check-updates.cjs       the native shell's fingerprint, and which new version is which
 ```
@@ -709,8 +710,8 @@ feels like turning around inside it. The counter's wall is SVG (`art/shopBackdro
 by dragging it to the mat, where a drop anywhere on the mat counts.
 `layoutKitchen(config, w, h)` (`kitchen/layout.ts`) places everything **on the surfaces the
 painting already has**: the tea dispensers in the shelf across the top, the toppings in their stand
-in the tiled alcove, the ice machine under the rack, the syrup, milk and foam on the bench nearer
-the viewer, and the cup on its holder through the middle of the work top. Each dispenser gets a
+in the tiled alcove, the ice box, sugar jar, milk and foam on the rear counter,
+and the cup on its holder through the middle of the work top. Each dispenser gets a
 **dock**: where the cup is held while that tap runs into it.
 
 Everything is anchored to the painting rather than to the screen, through `fitBackground` and the
@@ -739,15 +740,15 @@ pan: it is the one thing that belongs to the player's hand.
   because a cup fetched to it would otherwise hang off the same edge, reading a meter nobody can
   see; the cup is aimed at where the wall is *going*, so the two travel together.
 - **Everything else is carried to the cup.** The topping containers, the ice machine's scoop, the
-  syrup bottle, the milk cartons and the foam tubs are dragged or tapped: what is in hand follows
+  sugar jar, the milk bottles and the foam tubs are dragged or tapped: what is in hand follows
   the finger above everything else, and on release either tips into the cup (`SCOOP` / `ICE_SCOOP`
   / `SUGAR_PUMP`, or `POUR` of `MILK_SPLASH` for a carton) or goes back. The cup does not move for
   these — drop onto it wherever it stands, and a drop counts over the cup's *home* as well as over
   the cup itself, because a scoop tipped onto the coaster it left behind went into a cup that was
   not there. The refusals are one list (`refuseTool`) and the tipping in is one move
   (`tipToolIn`), whichever way the tool got there: a tap is refused before it sets off, so nothing
-  crosses the room to be turned away at the cup. Syrup shows how many pumps went in on the machine
-  itself. Milk takes room in the cup, so a cup filled to the brim with tea has nowhere to put it.
+  crosses the room to be turned away at the cup. Sugar carries a spoonful while its jar stays on
+  the counter. Milk takes room in the cup, so a cup filled to the brim with tea has nowhere to put it.
 - **While the cup is docked under a tap, nothing can be picked up.** A touch on any tool answers
   `Ly đang ở dưới vòi … — kéo ly ra trước` rather than lifting, and still takes the touch, so the
   room does not pan out from under it. The cup is up at the shelf, nowhere near the bench.
@@ -793,17 +794,18 @@ means không đá. One scoop is three cubes, two is twelve.
 cup's id — so the arrangement is stable through pours, ticks and reloads, while a fresh cup gets a
 different one. It lays out the whole tray rather than the cubes currently in the cup, so adding the
 second scoop cannot move the first, and an index means the same thing however many scoops have gone
-in. Placements are fitted, not guessed: `cupIceRestPosition` fits the actual rounded cube outline
-to the curved floor, `cupIcePosition` seats a floating cube against the front edge of the shared
-tea oval with its own immersion and depth, and samples that land too close after fitting are
-retried. Dry ice rests on the ingredient bed; tea lifts it to the surface, where four cubes sit
-across the waterline with varied immersion and tilt and the rest scatter below it with room
-between their centres. Cubes settle briefly when they land, then stay put.
+in. The first three retain their fitted floor positions and float at the tea's front waterline.
+The second scoop is a single seeded pass over nine regions across the drink, with small offsets
+and varied tilts: no collision search, retries or absolute submerged-depth offsets.
+`cupIceSpreadPosition` maps those fractions into the current liquid height, so shallow tea cannot
+leave extra cubes suspended in clear air halfway up the glass. Whole rotated cube outlines are
+fitted against the mouth, tapered sides and curved floor; dry ice still rests on the ingredient
+bed. Cubes settle briefly when they land, then stay put.
 
 The waterline is where the drawing gets its care: the submerged body is softened and tinted by the
 tea (more so with milk), with a small meniscus to anchor it to the surface, and the exposed crown
-is drawn over the glass's front wall so it is as crisp as a cube on the floor. Crowns are allowed
-up into the clear space below the lip, so a full cup does not trim them into a flat cap.
+remains behind the glass's front wall and rim. Crowns can rise into the clear space below the lip,
+but the shared `CUP_CONTENTS` clip contains every ingredient, including settling frames.
 
 Sources and the imagegen prompts for the ice art are in `tools/ice-art-prompts.md`; repackage them
 with `python3 tools/cut-ice-art.py`, preserving the source transparency.
@@ -811,11 +813,13 @@ with `python3 tools/cut-ice-art.py`, preserving the source transparency.
 ### Liquid and glass layers
 
 The cup is painted in one pass by `kitchen/cupPainter.ts`, in the design's own 113×174 sprite
-space, in this order: the faint cool glass backing, the tea inside the traced `CUP_WELL`, the
-submerged ice and the pile of toppings, the exposed ice, foam, then the glass's front reflections,
-its edge highlights and the cat decal. Every moving boundary — the tea's surface, the waterline the
+space, in this order: the faint cool glass backing, liquid inside the traced `CUP_WELL`, rear floor
+detail, submerged ice, the pile of toppings, exposed ice, the glass's front wall, opaque whipped
+cream, then the front reflections, edge highlights and cat decal. Every moving boundary — the tea's surface, the waterline the
 ice is split at, the wash over each band of the pile — is a **canvas clip**, which costs nothing
-and can move freely.
+and can move freely. The shared `CUP_CONTENTS` boundary contains every ingredient pass **but the
+cream**, which is allowed over the rim; the cup's edge and rim artwork stays in front. `check-cup-contents.cjs` checks whole
+ice and topping outlines against the glass across fills, portions and cup seeds.
 
 What the painting is allowed to decide, and what the geometry is:
 
@@ -826,12 +830,25 @@ What the painting is allowed to decide, and what the geometry is:
 - **The glass's painted detail is split by depth**: the inner-floor detail is drawn behind the
   contents, the front wall, rim and near base edge in front — so a pile of toppings occludes the
   rear base rings instead of having a bright oval painted over it.
-- **Glass opacity follows the tea and nothing else.** Adding toppings never changes it. The veil
+- **Glass opacity follows the liquid.** Adding toppings never changes it. The veil
   the old build laid over the liquid at 22% is off here (`GLASS_FILLED_ALPHA = 0`): the web players
   knew never saw it, and the saturated tea is the look that was kept.
-- **Milk tints the tea** rather than being a layer of its own, and the wash over the toppings is
+- **Milk tints the tea**, or paints a visible milk-only portion when added first. The same liquid
+  colour washes submerged ice and toppings. The wash over the toppings is
   drawn once per row of the pile — three rows, which is the grain that keeps the gradient from the
   back of the pile to the front while a near piece still covers a far one's wash.
+- **Cream is an upright piped spiral** (`kitchen/creamPainter.ts`): three narrowing coils,
+  nozzle ridges and a curled peak, with warm toasted accents for brûlée. Each flavour is baked
+  once into a small canvas and scaled uniformly, so its height is never flattened into a surface
+  oval. **Nothing shortens it to fit the glass**: it is piped to its full height onto wherever the
+  tea stands, so a mound on a full cup stands over the rim, and that is why the painted texture is
+  `CUP_OVERFLOW` taller than the cup's own box with the extra above it (`CupView` draws it lifted by
+  the same amount). It used to be kept inside: the liquid was dropped to three quarters to make room
+  — a full cup visibly lost tea when the cream went on — and the mound itself was clipped to
+  `CUP_CONTENTS`. Both are gone; the clip is the one place an ingredient is not held inside the
+  glass, and the headroom is what stops the canvas edge shearing the peak flat. Cream covers the ice
+  and rear glass, with the cup's rim and edge still in front, and the texture is never rebuilt on
+  each pouring frame.
 - **The dispenser's tea** is drawn into the tank's transparent chamber with the same shading, more
   strongly: it is a big volume behind glass, and the raster texture that works in a cup softens it.
   The tank's own glass and hardware are the painted sprite, untouched.
@@ -849,13 +866,17 @@ fifth of the glass left clear for its lid, and the well was traced to it. Taking
 brim made the meter lie: it ran to the end of its track, and then warned of tea going over the
 side, while the glass plainly still had room in it. The surface now stops where the painted rim
 stops it (y 36, its far edge reaching into the mouth of the cup), and `CUP_WELL` is carried up the
-glass's own taper to meet it — so `CUP_RX_BOTTOM`/`CUP_RX_TOP` and `CUP_TAPER` are where the inside
-of the glass is measured, and the oval, the floating ice and the ice well all read their widths off
-that one line. The painted drink texture only has pixels from y 48 down; above it the body is the
+glass's own taper to meet it. `CUP_RX_BOTTOM`/`CUP_RX_TOP` measure the liquid; the mouth and curved
+floor also bound the solid ingredients through `cupInteriorAt`. The painted drink texture only
+has pixels from y 48 down; above it the body is the
 gradient alone, which is why nothing in there may depend on the sprite to carry a shape.
 
 
 ### The kitchen's artwork
+The active room is `kitchen-sugar-counter.png`, with a separate painted `sugar-jar.png` cutout
+standing beside its utensil caddy. See [sugar counter artwork](docs/sugar-counter-art.md) for
+sources, prompts, packaging and the remeasured room geometry.
+
 Nearly everything in the prep room is a **painted sprite**. `tools/cut-sheets.py` cuts
 `tools/sheets/*.png` into `src/assets/kitchen/`; `tools/cut-topping-boxes.py` cuts the new
 upright shelf containers. The generated sheet and prompt are kept in `tools/`.
@@ -939,16 +960,24 @@ and they cost the room a band the height of a dispenser.
 
 The game is drawn upright, and the painting is what decides what happens when it is not.
 `ROOM_BG_KEEP` is the band of the plate the room cannot do without — the crown of a tank on the
-upper shelf (y 113) down to the front of the cup's holder (y 909), with the taps, the toppings,
-the ice machine, the work top and the cup between them. `fitBackground` draws the plate `cover`
-and centred, so **a kitchen wider than 1.93 times its own height starts losing that band from
-both ends at once**: the dispensers lose their lids and the counter falls off the bottom. That
-one ratio, `ROOM_KEEP_ASPECT`, is the whole of the sideways problem.
+upper shelf (y 101) down to the front of the cup's holder (y 723) of a plate 814 deep, with the
+taps, the toppings, the ice machine, the work top and the cup between them. `fitBackground` draws
+the plate `cover` and centred, so **a kitchen wider than about 3.06 times its own height starts
+losing that band**: the dispensers lose their lids and the counter falls off the bottom. That one
+ratio, `ROOM_KEEP_ASPECT`, is the whole of the sideways problem.
+
+`roomAspect` is where it is worked out, and the easy way to work it out is wrong. The plate is
+centred **on itself**, not on the band, and the band is not in the middle of the plate — there is
+more painting above the shelf than there is below the work top. So what a short room can hold is
+twice the band's farther edge from the middle of the plate, not the band's own height; measured
+the other way the limit comes out a fifth too generous, and a room exactly at it still loses the
+front of the cup's mat.
 
 There is a second, narrower line as well. `ROOM_BG_REACH` is what the room needs to still be
 *workable* rather than whole — a tank's name tag down to the line the cup's foot stands on. What
 lies between the two bands is the crowns of the tanks' lids and the front lip of the cup's mat:
-paint, not furniture. A layout can be worth having at the price of a lid.
+paint, not furniture. Nothing settles for it by choice any more; it is the floor a window too
+squat for anything else is held to.
 
 `src/responsive.ts` is the only place that answers it, and `prepLayoutFor` gives one of three:
 
@@ -956,14 +985,22 @@ paint, not furniture. A layout can be worth having at the price of a lid.
 - **`band`** — the same arrangement sideways, with every spare pixel taken out of it. The order
   stays across the top and the buttons stay along the bottom, both where the player already looks
   for them; the card is shorter to match (`ORDER_BAND_HEIGHT`, tiles moved up beside the name)
-  and the buttons give back a few pixels of height. **This one is measured against
-  `ROOM_REACH_ASPECT`, not `ROOM_KEEP_ASPECT`, and that is the trade it is**: two bands cost
-  about 180px, which only a 12.9" tablet can give up whole, so below that the tanks are cropped
-  to the top of their name tags. Keeping the whole painting would mean moving the buttons, and
-  they were wanted where they are.
+  and the buttons give back a few pixels of height. **It is taken only while it costs the
+  painting nothing** — `ROOM_KEEP_ASPECT`, measured against what is left after the two bands'
+  ~180px. Tablets have that height to spare and keep the arrangement the game is drawn for; a
+  short landscape window does not. It used to be allowed down to `ROOM_REACH_ASPECT`, and what
+  that looked like in a 1284x610 window was the order panel sitting on top of the tea tanks with
+  their lids cut off — reported as exactly that.
 - **`column`** — sideways and short with it. The order and the buttons stand *beside* the
-  kitchen, which spends width instead of height. A phone on its side gets this, and so does an
-  iPad mini: there the two bands leave the room a strip no deeper than a dispenser.
+  kitchen, which spends width the wall can pan back instead of height it cannot. A phone on its
+  side gets this, and so does any window too short for the band.
+  **The column is as narrow as the card can be read at** (`panelWidthFor`: about a quarter of the
+  screen, between 248 and 340px), because every pixel of it is a pixel of room. The card is built
+  to shrink — `fitTiles` sizes its tiles from the width it is given and its two lines of text
+  ellipsise — so the floor is reading comfort and nothing else. The one thing that widens it back
+  out is the room: if the room left over would be squatter than its workable band, the card takes
+  the difference, up to two fifths of the screen. Past that the window is past helping and the
+  cure is worse.
 
 Two things not to undo:
 
@@ -973,13 +1010,17 @@ Two things not to undo:
   on laying the room out for the box it had under the other layout — a room at the wrong scale with
   its hint pill below the bottom of the screen.
 - **`PREP_BAND_HEIGHT` and `PREP_ACTIONS_HEIGHT` count their own rules and padding, exactly.**
-  Every pixel of both comes off the room, and the room is already down to its reach band on an
-  11" tablet; a couple of pixels of border unaccounted for is another row of the painting gone.
+  Every pixel of both comes off the room, and they are what decides whether a screen gets the band
+  at all; a couple of pixels of border unaccounted for is a tablet dropped into the column.
   If the crop ever needs buying back, the levers in order of how much they return are: the HUD
   and the tab indicator sharing one row sideways (~26px, and the tabs are a navigation
   affordance, so that is a design call), the card's progress track (18px, but it is the only
   thing that shows progress at a glance), and the card's two-line tile captions (12px, and they
   become unreadable at one line).
+
+`tools/check-prep-layout.cjs` holds all of it: it lays out every shape the game is played at,
+works the cover fit out the way `fitBackground` does, and fails if the room that falls out of it
+has lost the painting's band. It fails on the old rule, naming the window it was reported from.
 
 The counter page has its own sideways form, which is a different question — `isWideLayout` alone,
 since the counter has no painting to crop, only customers to make bigger and to centre.
@@ -1160,7 +1201,8 @@ stands plainly inside the shelf; divided across the board it laps over the ends 
   the shop" — and the thing to assert afterwards is that the save is still there, byte for byte,
   after several write intervals of play.
 - UI: `npm run build`, serve `dist/` (`npm run preview`), and look at it at phone sizes (390×844
-  and the small 375×667). The Prep page is reached by swiping left or tapping the "Pha chế" tab. To
+  and the small 375×667) and sideways (932×430, and a short desktop window like 1284×610, which is
+  where the order panel last went wrong — `tools/check-prep-layout.cjs` is the desk half of that). The Prep page is reached by swiping left or tapping the "Pha chế" tab. To
   reach a later day quickly, load a save with `window.__shop.load`. The money shows in three places
   (the HUD and the opening sign, both the till; the day-end screen, which is the only one that
   reports a single day's takings).

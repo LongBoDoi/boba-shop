@@ -4,7 +4,7 @@ import {
   CupSize, Drink, EMPTY_DRINK, getIngredient, MAX_ICE_SCOOPS, MAX_POUR, MILK_SPLASH, POUR_RATE, SUGAR_STEPS, Topping,
 } from '../game/ingredients';
 import { GameState } from '../game/reducer';
-import { CUP_HOLDER, ROOM_BG, TEA_DISPENSER_ART, TEA_DISPENSERS } from '../art/kitchenArt';
+import { CUP_HOLDER, ROOM_BG, SUGAR_JAR, TEA_DISPENSER_ART, TEA_DISPENSERS } from '../art/kitchenArt';
 import { TOPPING_PANS, TOPPING_TAG } from '../art/toppingArt';
 import { CUP_ART, CUP_FOOT } from '../art/cupGeometry';
 import { gameArea } from '../game/host';
@@ -14,7 +14,7 @@ import { dispatch, store } from '../store';
 import { nudge, uiState } from '../ui-state';
 import { CupView } from '../kitchen/CupView';
 import {
-  addTool, bottleColor, bottleTexture, card, drawPan, drawShadow, fitText, foamTexture, measure, panExtent, plaque, roundRect, SHOP, sourceImage,
+  addTool, bottleColor, bottleTexture, card, drawPan, drawShadow, fitText, foamTexture, measure, panExtent, plaque, roundRect, SHOP, sourceImage, sugarSpoonTexture,
 } from '../kitchen/equipment';
 import { Atlas } from '../kitchen/atlas';
 import { cupSizeFor, findStation, hintFor, KitchenLayout, layoutKitchen, Station } from '../kitchen/layout';
@@ -27,7 +27,7 @@ import { cupShadowTexture, Spill, Stream } from '../kitchen/pourEffects';
  * Two gestures, both held in the hand:
  * - **drag the cup** up under a tea dispenser and **hold the tap** — how long you hold is how much
  *   runs in, with the meter over the kitchen showing the live amount;
- * - **drag a topping, a scoop of ice, the syrup bottle or a spoon of foam straight onto the cup**.
+ * - **drag a topping, ice, milk or a spoon of sugar or foam straight onto the cup**.
  *
  * **Everything that can be dragged can be tapped instead**, and a tap does the carrying: the cup
  * walks itself from the rack to the mat, a tool takes itself over the cup and tips in there, and a
@@ -64,7 +64,6 @@ export class KitchenScene extends Phaser.Scene {
   private matLabel: Phaser.GameObjects.Image | null = null;
   private stationViews = new Map<string, { container: Phaser.GameObjects.Container; art: Phaser.GameObjects.Container; locked?: boolean }>();
   private teaLabels = new Map<string, Phaser.GameObjects.Image>();
-  private syrupLabel: { container: Phaser.GameObjects.Container; art: Phaser.GameObjects.Container; pumps: number } | null = null;
 
   private pan = 0;
   private panVelocity = 0;
@@ -107,10 +106,10 @@ export class KitchenScene extends Phaser.Scene {
     this.cupShadow = this.add.image(0, 0, cupShadowTexture(this)).setOrigin(0).setDepth(DEPTH.shadow).setVisible(false);
     this.level = store.state.build.fill;
 
-    // Bottles are vector art, rasterised once; the room is rebuilt when they are ready.
-    void Promise.all(['#C88D54', '#EBD4A7', '#FFF2D3'].map((color) => bottleTexture(this, color)))
+    // Vector equipment is rasterised once; the room is rebuilt when it is ready.
+    void Promise.all([sugarSpoonTexture(this), ...['#EBD4A7', '#FFF2D3'].map((color) => bottleTexture(this, color))])
       .then(() => this.relayout(true))
-      .catch((error: unknown) => console.warn('[kitchen] bottles could not be drawn', error));
+      .catch((error: unknown) => console.warn('[kitchen] equipment could not be drawn', error));
 
     const offStore = store.subscribe((state, previous) => this.onState(state, previous));
     const offUi = uiState.subscribe((ui, was) => {
@@ -167,7 +166,7 @@ export class KitchenScene extends Phaser.Scene {
   /**
    * The room: the painting, and everything standing in it drawn into one atlas (see `atlas.ts`), so
    * the whole wall is two textures however much is on it. What changes while playing — a station
-   * dimmed, pressed or ringed, the syrup's count — is a different frame of that atlas or an alpha,
+   * dimmed, pressed or ringed — is a different frame of that atlas or an alpha,
    * never a redraw.
    */
   private buildRoom() {
@@ -175,7 +174,6 @@ export class KitchenScene extends Phaser.Scene {
     this.room.removeAll(true);
     this.stationViews.clear();
     this.teaLabels.clear();
-    this.syrupLabel = null;
     const { room } = layout;
     this.room.add(this.add.image(0, room.top, tex(ROOM_BG)).setOrigin(0).setDisplaySize(room.width, room.height));
 
@@ -243,44 +241,37 @@ export class KitchenScene extends Phaser.Scene {
           c.fill();
         });
         items.push({ frame, x, y, w, h: gh, name: 'glow', visible: false });
+      } else if (station.kind === 'sugar') {
+        const jar = sourceImage(this, SUGAR_JAR);
+        const label = { x: w * 0.09, y: h * 0.74, w: w * 0.82, h: h * 0.2 };
+        const tag = plaque(station.name, label.w, label);
+        const frame = atlas.add(`sugar-jar:${sized(w, h)}`, w, h, (c) => {
+          c.drawImage(jar, 0, 0, w, h);
+          c.save();
+          c.translate(label.x, label.y);
+          tag.draw(c);
+          c.restore();
+        });
+        items.push({ frame, x, y, w, h, dims: true });
       } else {
         const rx = w * 0.46;
         const ry = Math.max(3, w * 0.11);
         const shadow = atlas.add(`shadow:${sized(rx, ry)}`, rx * 2, ry * 2, (c) => drawShadow(c, rx, ry));
-        items.push({ frame: shadow, x: station.cx - rx, y: y + h - ry, w: rx * 2, h: ry * 2 });
+        const foot = station.kind === 'milk' ? h * 146 / 150 : h;
+        items.push({ frame: shadow, x: station.cx - rx, y: y + foot - ry, w: rx * 2, h: ry * 2 });
+        const equipmentKey = `bottle-${bottleColor(station)}`;
         const art = station.kind === 'foam' ? sourceImage(this, foamTexture(station.id))
-          : this.textures.exists(`bottle-${bottleColor(station)}`) ? sourceImage(this, `bottle-${bottleColor(station)}`) : null;
+          : this.textures.exists(equipmentKey) ? sourceImage(this, equipmentKey) : null;
         if (art) {
           const frame = atlas.add(`${station.key}:${sized(w, h)}`, w, h, (c) => c.drawImage(art, 0, 0, w, h));
           items.push({ frame, x, y, w, h, dims: true });
         }
-        const labels = station.kind === 'sugar'
-          ? ['Đường', ...SUGAR_STEPS.map((step) => `${step}%`)]
-          : [station.kind === 'milk' ? (station.id === 'oat' ? 'Yến mạch' : 'Sữa tươi') : (station.id === 'cheese' ? 'Phô mai' : 'Brûlée')];
+        const labels = [station.kind === 'milk' ? (station.id === 'oat' ? 'Yến mạch' : 'Sữa tươi') : (station.id === 'cheese' ? 'Phô mai' : 'Brûlée')];
         labels.forEach((text, i) => {
           const p = plaque(text, station.labelW);
           const frame = atlas.add(`plaque:${text}:${p.w.toFixed(1)}`, p.w, p.h, p.draw);
           items.push({ frame, x: station.cx - p.w / 2, y: y + h + 1, w: p.w, h: p.h, name: `plaque${i}`, visible: i === 0 });
         });
-        if (station.kind === 'sugar') {
-          // How sweet the cup already is, in three pips: one frame per count.
-          const d = w * 0.14;
-          const total = d * 3 + 6;
-          for (let pumps = 0; pumps <= 3; pumps++) {
-            const frame = atlas.add(`pips:${pumps}:${d.toFixed(2)}`, total + 2, d + 2, (c) => {
-              for (let i = 0; i < 3; i++) {
-                c.beginPath();
-                c.arc(1 + i * (d + 3) + d / 2, 1 + d / 2, d / 2 - 0.5, 0, Math.PI * 2);
-                c.fillStyle = i < pumps ? '#C98A1E' : '#FFF3D9';
-                c.fill();
-                c.lineWidth = 1;
-                c.strokeStyle = SHOP.woodEdge;
-                c.stroke();
-              }
-            });
-            items.push({ frame, x: station.cx - (total + 2) / 2, y: y + h * 0.92, w: total + 2, h: d + 2, dims: true, name: `pips${pumps}`, visible: pumps === 0 });
-          }
-        }
       }
       pieces.push({ station, items });
     }
@@ -307,7 +298,6 @@ export class KitchenScene extends Phaser.Scene {
       container.add(art);
       this.room.add(container);
       this.stationViews.set(station.key, { container, art });
-      if (station.kind === 'sugar') this.syrupLabel = { container, art, pumps: -1 };
     }
     this.room.setX(-this.pan);
 
@@ -319,7 +309,7 @@ export class KitchenScene extends Phaser.Scene {
   private refreshEquipment() {
     const layout = this.layout;
     if (!layout) return;
-    const { cup, build, config } = store.state;
+    const { cup, config } = store.state;
     const docked = this.docked();
     const busy = Boolean(!cup.size || docked);
     for (const station of layout.stations) {
@@ -335,16 +325,6 @@ export class KitchenScene extends Phaser.Scene {
       view.locked = locked;
     }
     for (const [key, border] of this.teaLabels) border.setVisible(docked?.key === key);
-    // The bottle says how sweet the cup already is: on its plaque, and in three pips.
-    if (this.syrupLabel && this.syrupLabel.pumps !== build.sugarPumps) {
-      const { container, art } = this.syrupLabel;
-      const pumps = build.sugarPumps;
-      this.syrupLabel.pumps = pumps;
-      for (let i = 0; i <= 3; i++) {
-        (container.getByName(`plaque${i}`) as Phaser.GameObjects.Image | null)?.setVisible(i === pumps);
-        (art.getByName(`pips${i}`) as Phaser.GameObjects.Image | null)?.setVisible(i === pumps);
-      }
-    }
     uiState.set({ hint: hintFor(cup, docked ?? undefined) });
   }
 

@@ -147,17 +147,18 @@ export function layoutKitchen(config: DayConfig, W: number, H: number, size: Cup
     ...(config.categories.includes('sweetness') ? [{ kind: 'sugar' as const, id: 'sugar' }] : []),
     ...(config.categories.includes('foam') ? [{ kind: 'foam' as const, id: 'cheese' }, { kind: 'foam' as const, id: 'brulee' }] : []),
   ];
-  const bottles = extras.filter((item) => item.kind !== 'foam');
   const extrasArt = ROOM_BG_EXTRAS;
-  const bottleSlot = Math.max(extrasArt.bottleSlot, 44 / scale);
-  bottles.forEach(({ kind, id }, i) => {
-    const w = Math.max(extrasArt.bottleWidth, 28 / scale);
-    const h = Math.max(extrasArt.bottleHeight, 64 / scale);
-    const cx = extrasArt.bottleCenter + (i - (bottles.length - 1) / 2) * bottleSlot;
-    add(kind, id, cx - w / 2, extrasArt.bottleBase - h, w, h);
+  extras.filter((item) => item.kind === 'milk').forEach(({ kind, id }, i) => {
+    const w = extrasArt.milkWidth;
+    const h = extrasArt.milkHeight;
+    add(kind, id, extrasArt.milkCenters[i] - w / 2, extrasArt.milkBase - h, w, h);
   });
+  if (config.categories.includes('sweetness')) {
+    const jar = extrasArt.sugar;
+    add('sugar', 'sugar', jar.x, jar.y, jar.width, jar.height);
+  }
   extras.filter((item) => item.kind === 'foam').forEach(({ kind, id }, i) => {
-    const w = Math.max(extrasArt.foamWidth, 40 / scale);
+    const w = extrasArt.foamWidth;
     const h = w / ART.foam;
     add(kind, id, extrasArt.foamCenters[i] - w / 2, extrasArt.foamBase - h, w, h);
   });
@@ -169,7 +170,7 @@ export function layoutKitchen(config: DayConfig, W: number, H: number, size: Cup
   // The rack of cups is painted into the room; these are the three stacks' touch targets.
   const rackArt = ROOM_BG_CUP_STATION;
   const rack = (['S', 'M', 'L'] as CupSize[]).map((cupSize, index) => {
-    const stackTop = [282, 249, 214][index];
+    const stackTop = rackArt.stackTops[index];
     return {
       size: cupSize,
       x: (rackArt.x + rackArt.width * index / 3) * scale,

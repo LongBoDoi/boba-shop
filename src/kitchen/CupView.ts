@@ -10,6 +10,7 @@ import { ICE_LEVELS } from '../game/ingredients';
 import { bakeCanvas, canvasFont, DPR, tex } from '../game/view';
 import { card, measure } from './equipment';
 import { CupImages, CupPainter, glintsCanvas } from './cupPainter';
+import { CUP_OVERFLOW } from './creamPainter';
 import { easeOut } from './motion';
 
 /** The glass backing: cool grey plastic, see-through enough to show the room behind it. */
@@ -64,7 +65,10 @@ export class CupView {
 
     const base = scene.add.image(0, 0, tex(CUP_BASE)).setOrigin(0).setDisplaySize(width, height)
       .setTint(GLASS).setAlpha(GLASS_TINT);
-    const drawn = scene.add.image(0, 0, this.key).setOrigin(0).setDisplaySize(width, height);
+    // The painted drink is taller than the cup's box and hangs above it, for cream over the rim.
+    const overflow = height * CUP_OVERFLOW;
+    const drawn = scene.add.image(0, -overflow, this.key).setOrigin(0)
+      .setDisplaySize(width, height + overflow);
     const glintKey = `cup-glints-${Math.round(width * DPR)}`;
     if (!scene.textures.exists(glintKey)) {
       scene.textures.addCanvas(glintKey, glintsCanvas(scene.textures.get(tex(CUP_SPRITE)).getSourceImage() as CanvasImageSource,

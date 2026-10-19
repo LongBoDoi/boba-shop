@@ -1,7 +1,5 @@
 /**
- * The cup sprite's own box. Everything in the glass is drawn in these units, and a mask that has to
- * cover the whole drink is measured in them — see "Drawing on a phone" in CLAUDE.md for why the
- * live boundaries in here are masks and not clips.
+ * The cup sprite's own box. Every ingredient and Canvas 2D clip uses these same coordinates.
  */
 export const CUP_ART = { w: 113, h: 174 };
 /**
@@ -31,7 +29,6 @@ export const CUP_SURFACE_RUN = CUP_SURFACE_BOTTOM - CUP_SURFACE_TOP;
  */
 const CUP_RX_BOTTOM = 33.5;
 const CUP_RX_TOP = 42.4;
-const CUP_TAPER = (CUP_RX_TOP - CUP_RX_BOTTOM) / CUP_SURFACE_RUN;
 /** How deep the surface oval is for its width: the perspective the painted rim is drawn in. */
 const SURFACE_RATIO = 0.235;
 const FLOOR_RY = 9;
@@ -40,8 +37,11 @@ const CUP_FLOOR = `L90 ${CUP_SURFACE_BOTTOM} A${CUP_RX_BOTTOM} ${FLOOR_RY} 0 0 1
 export const CUP_FLOOR_EDGE = `M23 ${CUP_SURFACE_BOTTOM} A${CUP_RX_BOTTOM} ${FLOOR_RY} 0 0 0 90 ${CUP_SURFACE_BOTTOM}`;
 /** Inner glass traced from cup-design.png, carried up its own taper to that brim. */
 export const CUP_WELL = `M${56.5 - CUP_RX_TOP} ${CUP_SURFACE_TOP} A${CUP_RX_TOP} ${(CUP_RX_TOP * SURFACE_RATIO).toFixed(2)} 0 0 1 ${56.5 + CUP_RX_TOP} ${CUP_SURFACE_TOP} ${CUP_FLOOR}`;
-/** Floating crowns can rise into the clear air beneath the lip; liquid keeps its own lower well. */
-export const CUP_ICE_WELL = `M13.6 28 A42.9 10.1 0 0 1 99.4 28 ${CUP_FLOOR}`;
+const MOUTH_Y = 28;
+const MOUTH_RX = 42.9;
+const MOUTH_RY = 10.1;
+/** All contents stay behind the inner mouth, tapered walls and curved floor of the painted glass. */
+export const CUP_CONTENTS = `M13.6 ${MOUTH_Y} A${MOUTH_RX} ${MOUTH_RY} 0 0 1 99.4 ${MOUTH_Y} ${CUP_FLOOR}`;
 /** The inner floor painting is behind the ingredients; its front edge and wall glints are in front. */
 export const CUP_REAR_FLOOR_GLASS = `M21.3 132H91.7 ${CUP_FLOOR}`;
 /** Original vertical highlights on the near wall, continuing across the ingredient pile. */
@@ -67,6 +67,48 @@ const ICE_OUTLINE = [
   [18, 14], [18, 16], [16, 17], [9, 22], [8, 23], [6, 22], [-19, 15],
   [-22, 14], [-22, 11], [-22, -8], [-22, -10],
 ];
+
+/** The upper and lower inside edges of the glass at a given horizontal coordinate. */
+export function cupInteriorAt(x: number) {
+  const dx = Math.abs(x - CUP_ART.w / 2);
+  const top = MOUTH_Y - MOUTH_RY * Math.sqrt(Math.max(0, 1 - (dx / MOUTH_RX) ** 2));
+  const bottom = dx <= CUP_RX_BOTTOM
+    ? CUP_SURFACE_BOTTOM + FLOOR_RY * Math.sqrt(Math.max(0, 1 - (dx / CUP_RX_BOTTOM) ** 2))
+    : MOUTH_Y + (MOUTH_RX - dx) * (CUP_SURFACE_BOTTOM - MOUTH_Y) / (MOUTH_RX - CUP_RX_BOTTOM);
+  return { top, bottom };
+}
+
+/** Fit the whole rotated, stroked cube inside the glass, including the mouth and curved base. */
+function fitIceInsideCup(x: number, y: number, r: number, angle: number) {
+  const radians = angle * Math.PI / 180;
+  const cos = Math.cos(radians), sin = Math.sin(radians);
+  const points = ICE_OUTLINE.map(([px, py]) => ({
+    x: (px * cos - py * sin) * r / 24,
+    y: (px * sin + py * cos) * r / 24,
+  }));
+  const margin = 0.8 * r / 24 + 0.4;
+  let cx = x, cy = y;
+  // Resolve wall clearance, then ceiling/floor clearance; a second pass handles the tapered sides.
+  for (let pass = 0; pass < 2; pass++) {
+    let left = -Infinity, right = Infinity;
+    for (const p of points) {
+      const wallY = Math.max(MOUTH_Y, Math.min(CUP_SURFACE_BOTTOM, cy + p.y));
+      const halfWidth = MOUTH_RX - (wallY - MOUTH_Y) *
+        (MOUTH_RX - CUP_RX_BOTTOM) / (CUP_SURFACE_BOTTOM - MOUTH_Y);
+      left = Math.max(left, 56.5 - halfWidth - p.x + margin);
+      right = Math.min(right, 56.5 + halfWidth - p.x - margin);
+    }
+    cx = Math.max(left, Math.min(right, cx));
+    let top = -Infinity, bottom = Infinity;
+    for (const p of points) {
+      const inside = cupInteriorAt(cx + p.x);
+      top = Math.max(top, inside.top - p.y + margin);
+      bottom = Math.min(bottom, inside.bottom - p.y - margin);
+    }
+    cy = Math.max(top, Math.min(bottom, cy));
+  }
+  return { cx, cy };
+}
 
 /** Fit the actual rotated ice outline onto the curved floor, rather than its oversized image box. */
 export function cupIceRestPosition(x: number, r: number, angle: number, lift: number) {
@@ -110,45 +152,31 @@ export function cupSurface(raw: number) {
 
 /** Seat cubes at the near side of the shared oval, so their crowns sit in front of its rear edge. */
 export function cupIcePosition(raw: number, x: number, r: number, angle: number, depth: number,
-  dryX: number, dryY: number, dryAngle = angle, submergedDepth = 0, immersion = 0.42) {
+  dryX: number, dryY: number, dryAngle = angle, immersion = 0.42) {
   'worklet';
   const surface = cupSurface(raw);
   const across = Math.max(-1, Math.min(1, (x - 56.5) / surface.rx));
   const waterY = surface.y + surface.ry * Math.sqrt(1 - across * across);
   const seating = r * (0.22 + immersion * 0.35) + surface.ry * depth * 0.15;
-  const cy = Math.min(dryY, waterY + seating + submergedDepth);
+  const cy = Math.min(dryY, waterY + seating);
   const rise = Math.max(0, Math.min(1, (dryY - cy) / (r * 1.5)));
   const tilt = dryAngle + (angle - dryAngle) * rise;
   if (!rise) return { cx: dryX, cy: dryY, angle: dryAngle, waterY, floating: false, rise: 0 };
-  const radians = tilt * Math.PI / 180;
-  const cos = Math.cos(radians);
-  const sin = Math.sin(radians);
-  const margin = 0.8 * r / 24 + 0.4;
-  let left = -Infinity;
-  let right = Infinity;
-  // Fit the painted outline, not a rotated square that pushes chunky cubes into the center.
-  for (const point of ICE_OUTLINE) {
-    const px = (point[0] * cos - point[1] * sin) * r / 24;
-    const py = (point[0] * sin + point[1] * cos) * r / 24;
-    const halfWidth = CUP_RX_BOTTOM
-      + (CUP_SURFACE_BOTTOM - Math.max(CUP_SURFACE_TOP, Math.min(CUP_SURFACE_BOTTOM, cy + py))) * CUP_TAPER;
-    left = Math.max(left, 56.5 - halfWidth - px + margin);
-    right = Math.min(right, 56.5 + halfWidth - px - margin);
-  }
   const targetX = dryX + (x - dryX) * rise;
-  const cx = Math.max(left, Math.min(right, targetX));
-  return { cx, cy, angle: tilt, waterY, floating: raw > 0 && cy < dryY - 0.1, rise };
+  const fitted = fitIceInsideCup(targetX, cy, r, tilt);
+  return { ...fitted, angle: tilt, waterY, floating: raw > 0 && fitted.cy < dryY - 0.1, rise };
+}
+
+/** Second-scoop cubes spread through the actual liquid height instead of searching for a stack. */
+export function cupIceSpreadPosition(raw: number, x: number, r: number, angle: number, liquidDepth: number) {
+  const surface = cupSurface(raw);
+  const y = surface.y + surface.ry + (CUP_FLOOR_FRONT - surface.y - surface.ry) * liquidDepth;
+  return { ...fitIceInsideCup(x, y, r, angle), angle, rise: 1 };
 }
 
 /**
- * The cube's own silhouette where it stands, as a path of its own.
- *
- * The art is drawn in the cube's local space and carried into the cup by a transform, but a clip
- * cannot be carried that way on a phone: `transform` is turned into a `matrix` by JavaScript, which
- * an animated prop never passes through. So anything that has to follow a cube every frame — the
- * meniscus that anchors it to the surface — is given the outline already standing where the cube
- * stands. The rounded corners are taken as their control points, which is a hair wide of the
- * painted shape and nothing to a hairline clipped by it.
+ * The cube silhouette in cup coordinates, for the meniscus and containment checks. Rounded-corner
+ * control points conservatively enclose the art; the fit also leaves clearance for its stroke.
  */
 export function cupIceOutlinePath(cx: number, cy: number, angle: number, r: number) {
   'worklet';

@@ -33,7 +33,7 @@ interface PrepPageProps {
  * It slides with the pager: translated by `(1 - pageOffset) × width`, written straight onto the
  * element as the offset moves, so a swipe never renders anything.
  */
-export const PrepPage = memo(function PrepPage({ layout, width }: PrepPageProps) {
+export const PrepPage = memo(function PrepPage({ layout, width, height }: PrepPageProps) {
   const page = useRef<HTMLDivElement>(null);
   const scene = useRef<HTMLDivElement>(null);
   const orderSpaceRef = useRef<HTMLDivElement>(null);
@@ -73,7 +73,8 @@ export const PrepPage = memo(function PrepPage({ layout, width }: PrepPageProps)
 
   const column = layout === 'column';
   const band = layout === 'band';
-  const panelWidth = panelWidthFor(width);
+  // The column's width is read against the room's own height: see `panelWidthFor`.
+  const panelWidth = panelWidthFor(width, height);
   // In the column the card stands inside the column's padding and its 2px rule; the original made
   // it the column's width less the gutters and clipped its right edge by those 2px.
   const orderWidth = column ? panelWidth - GUTTER * 2 - 2 : width - GUTTER * 2;

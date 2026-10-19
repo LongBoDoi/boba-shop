@@ -69,7 +69,8 @@ import pieceLychee from '../assets/kitchen/piece-lychee.png';
 import pieceGrass from '../assets/kitchen/piece-grass.png';
 import pieceIceV2 from '../assets/kitchen/piece-ice-v2.png';
 import pieceIceClear from '../assets/kitchen/piece-ice-clear.png';
-import kitchenWarmExtended from '../assets/kitchen/kitchen-warm-extended.png';
+import kitchenSugarCounter from '../assets/kitchen/kitchen-sugar-counter.png';
+import sugarJar from '../assets/kitchen/sugar-jar.png';
 import cupHolder from '../assets/kitchen/cup-holder.png';
 import teaRoom from '../assets/kitchen/tea-room.png';
 import teaFrontLeft from '../assets/kitchen/tea-front-left.png';
@@ -293,7 +294,8 @@ export const BIN_HEAD = 0.1713;
 
 // ------------------------------------------------------------------ the room around it
 /** Warm watercolor room; interactive equipment is anchored in this plate's coordinates. */
-export const ROOM_BG = kitchenWarmExtended;
+export const ROOM_BG = kitchenSugarCounter;
+export const SUGAR_JAR = sugarJar;
 /**
  * The painted holder, lifted off the original room so the wall can pan behind it. It is cut to
  * twice its original room box and displayed at the extended counter's scale below — see
@@ -301,27 +303,30 @@ export const ROOM_BG = kitchenWarmExtended;
  * returned it.
  */
 export const CUP_HOLDER = cupHolder;
-export const ROOM_BG_SIZE = { width: 1933, height: 814 };
-export const ROOM_BG_TABLE = { top: 585, base: 752 };
+export const ROOM_BG_SIZE = { width: 2253, height: 814 };
+export const ROOM_BG_TABLE = { top: 631, base: 767 };
 export const ROOM_BG_TEA_SHELF = {
-  x0: 397, x1: 875, tankWidth: 153,
+  x0: 361, x1: 797, tankWidth: 140,
   // The feet sit on the lit wooden faces; the tap hangs over the front edge.
-  bases: [251, 416],
+  bases: [276, 453],
   // The catalogue's own order, so the week fills the rack left to right and then down a shelf.
   slots: ['black', 'green', 'thai', 'oolong', 'taro', 'matcha'],
 };
 /** Painted stations share the room's scrolling coordinates and counter surface. */
-export const ROOM_BG_CUP_STATION = { x: 20, y: 214, width: 345, height: 272 };
-export const ROOM_BG_ICE_MACHINE = { x: 1526, y: 308, width: 402, height: 216 };
+export const ROOM_BG_CUP_STATION = { x: 22, y: 242, width: 300, height: 291, stackTops: [312, 278, 242] };
+export const ROOM_BG_ICE_MACHINE = { x: 1818, y: 339, width: 430, height: 230 };
 export const ROOM_BG_EXTRAS = {
-  bottleCenter: 1040, bottleBase: 414, bottleSlot: 54, bottleWidth: 46, bottleHeight: 115,
-  foamCenters: [938, 1168], foamBase: 539, foamWidth: 64,
+  // Bottle artwork ends at 146/150 of its box; its painted feet meet the jar's 541px base.
+  milkCenters: [880, 951], milkBase: 545, milkWidth: 60, milkHeight: 150,
+  foamCenters: [1022, 1093], foamBase: 541, foamWidth: 64,
+  // The reference jar's 141×182 silhouette, on the counter just left of the utensil caddy.
+  sugar: { x: 1166, y: 359, width: 141, height: 182 },
 };
 /**
  * Where the lifted cup holder fits on the extended work top. It does not pan with the room:
  * the cup stays on it, centred on screen. Its size and height follow the painted counter.
  */
-export const ROOM_BG_CUP_HOLDER = { x: 798, y: 622, width: 337, height: 101 };
+export const ROOM_BG_CUP_HOLDER = { x: 958, y: 650, width: 337, height: 101 };
 /**
  * The rows of the plate that have to stay on screen whatever shape the room is given: the crown
  * of a tank standing on the upper shelf, down to the front edge of the cup's holder. Between them
@@ -349,7 +354,9 @@ export const ROOM_BG_KEEP = {
  * see what you are dropping things into. The taps are lower than the tags and the toppings, the
  * ice and the bench are lower still, so all of those come with it.
  *
- * It exists because a layout can be worth having at the price of a lid. See `prepLayoutFor`.
+ * Nothing settles for it by choice: the sideways layouts are chosen to keep `ROOM_BG_KEEP`
+ * whole. It is the floor a window too squat for that is held to, by widening the order column
+ * until the room beside it fits this much. See `panelWidthFor`.
  */
 const TANK_HEIGHT = ROOM_BG_TEA_SHELF.tankWidth
   * (TEA_DISPENSER_ART.height / TEA_DISPENSER_ART.width);
@@ -556,6 +563,7 @@ export const SCOOP_BOWL = { cx: 0.34, cy: 0.57, r: 0.17 };
 export const PRELOAD: Sprite[] = [
   // the room itself, and what stands in it
   ROOM_BG,
+  SUGAR_JAR,
   TEA_DISPENSERS,
   CUP_HOLDER,
   TOPPING_PANS,

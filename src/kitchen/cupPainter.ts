@@ -1,10 +1,10 @@
 import { Drink, getIngredient, ICE_LEVELS, Tea, Topping } from '../game/ingredients';
 import {
   CUP_ART,
+  CUP_CONTENTS,
   CUP_FLOOR_EDGE,
   CUP_FLOOR_FRONT,
   CUP_FRONT_GLINTS,
-  CUP_ICE_WELL,
   CUP_REAR_FLOOR_GLASS,
   CUP_WELL,
   cupFillPath,
@@ -12,6 +12,7 @@ import {
   cupIceOutlinePath,
   cupIcePosition,
   cupIceRestPosition,
+  cupIceSpreadPosition,
   cupLiquidPath,
   cupSurface,
   cupToppingPosition,
@@ -19,6 +20,7 @@ import {
 import { IcePlacement } from '../art/iceLayout';
 import { TOPPING_PIECE_ART } from '../art/toppingArt';
 import { blend, shade } from './color';
+import { CUP_OVERFLOW, paintCupCream } from './creamPainter';
 
 /**
  * The drink in the cup, painted with the browser's 2D canvas into one texture.
@@ -60,6 +62,8 @@ export interface CupFrame {
 const W = CUP_ART.w;
 const H = CUP_ART.h;
 const BOX = `M0 0H${W}V${H}H0Z`;
+/** The texture is taller than the cup's box, the extra above the rim: see `CUP_OVERFLOW`. */
+const PAINT_H = H * (1 + CUP_OVERFLOW);
 /**
  * How much of the painted glass reads through the tea. `KitchenCup` asks for 22%, but the web build
  * players know drew none — its filled-glass mask never painted in a browser — and the tea there is
@@ -80,8 +84,7 @@ function path(d: string): Path2D {
   return p;
 }
 const WELL = new Path2D(CUP_WELL);
-const ICE_WELL = new Path2D(CUP_ICE_WELL);
-const REAR_FLOOR = new Path2D(CUP_REAR_FLOOR_GLASS);
+const CONTENTS = new Path2D(CUP_CONTENTS);
 const FLOOR_EDGE = new Path2D(CUP_FLOOR_EDGE);
 
 // ------------------------------------------------------------------ the toppings' bed
@@ -260,7 +263,7 @@ export class CupPainter {
   constructor(private readonly images: CupImages, width: number, height: number) {
     this.canvas = document.createElement('canvas');
     this.canvas.width = Math.max(1, Math.round(width));
-    this.canvas.height = Math.max(1, Math.round(height));
+    this.canvas.height = Math.max(1, Math.round(height * (1 + CUP_OVERFLOW)));
     this.c = this.canvas.getContext('2d')!;
   }
 
@@ -268,63 +271,44 @@ export class CupPainter {
     const { c, canvas } = this;
     c.setTransform(1, 0, 0, 1, 0, 0);
     c.clearRect(0, 0, canvas.width, canvas.height);
-    c.setTransform(canvas.width / W, 0, 0, canvas.height / H, 0, 0);
+    // The cup's own coordinates, with the headroom above `y = 0` left to whatever stands over the rim.
+    c.setTransform(canvas.width / W, 0, 0, canvas.height / PAINT_H, 0, 0);
+    c.translate(0, H * CUP_OVERFLOW);
 
     const { drink, level } = frame;
     const tea = drink.tea ? (getIngredient('tea', drink.tea) as Tea) : undefined;
     const milk = drink.milk && drink.milk !== 'none' ? getIngredient('milk', drink.milk) : undefined;
     const foam = drink.foam && drink.foam !== 'none' ? getIngredient('foam', drink.foam) : undefined;
     const ice = ICE_LEVELS.find((option) => option.id === drink.ice);
-    const hasTea = Boolean(tea);
-    const raw = hasTea ? level : 0;
+    const raw = tea || milk ? level : 0;
     const filled = cupFillPath(raw);
+    const tint = tea ? (milk ? blend(tea.color, milk.color, 0.6) : tea.color) : milk?.color;
 
-    if (tea) this.liquid(tea, milk?.color, level, frame.phase, frame.agitation);
+    // Shared interior bounds contain every ingredient, including settling frames and composites.
+    c.save();
+    c.clip(CONTENTS);
+    if (tint) this.liquid(tea, milk?.color, raw, frame.phase, frame.agitation);
     this.glass(filled, path(CUP_REAR_FLOOR_GLASS), false);
+
+    const poses = ice ? this.icePoses(frame, raw) : null;
+    if (ice && poses) this.ice('submerged', frame, poses, ice.cubes, raw, tint, Boolean(milk));
 
     // The pile, inside the well.
     if (drink.toppings.length) {
       c.save();
       c.clip(WELL);
-      this.toppings(drink.toppings, frame.portionSettle, filled, milk?.color ?? tea?.color, Boolean(milk));
+      this.toppings(drink.toppings, frame.portionSettle, filled, tint, Boolean(milk));
       c.restore();
     }
 
-    // Ice under the tea, and the foam.
-    const poses = ice ? this.icePoses(frame, raw) : null;
-    if (ice && poses) {
-      c.save();
-      c.clip(ICE_WELL);
-      this.ice('submerged', frame, poses, ice.cubes, raw, tea?.color, milk?.color);
-      c.restore();
-    }
-    if (foam) {
-      const surface = cupSurface(level);
-      c.save();
-      c.clip(WELL);
-      c.beginPath();
-      c.ellipse(56.5, surface.y - 0.2, Math.max(0.1, surface.rx - 0.5), 4.4, 0, 0, Math.PI * 2);
-      c.fillStyle = foam.color;
-      c.fill();
-      c.lineWidth = 0.9;
-      c.strokeStyle = shade(foam.color, -16);
-      c.stroke();
-      c.beginPath();
-      c.ellipse(47, surface.y - 1.1, 15, 2, 0, 0, Math.PI * 2);
-      c.globalAlpha = 0.5;
-      c.fillStyle = '#FFFFFF';
-      c.fill();
-      c.restore();
-    }
+    if (ice && poses) this.ice('exposed', frame, poses, ice.cubes, raw, tint, Boolean(milk));
+    c.restore();
 
-    // The front of the glass, then the crowns standing out of the tea over it.
+    // The front rim and glass remain in front even when a floating crown reaches the mouth.
     this.glass(filled, path(`${BOX} ${CUP_REAR_FLOOR_GLASS}`), true);
-    if (ice && poses) {
-      c.save();
-      c.clip(ICE_WELL);
-      this.ice('exposed', frame, poses, ice.cubes, raw, tea?.color, milk?.color);
-      c.restore();
-    }
+    // Opaque whipped cream hides the painted rear glass. CupView's rim/edge layer stays in front.
+    // It is the one ingredient not held inside `CONTENTS`: a mound is allowed to stand over the rim.
+    if (foam) paintCupCream(c, raw, foam.id, foam.color);
   }
 
   // ---------------------------------------------------------------- the painted glass
@@ -352,11 +336,11 @@ export class CupPainter {
   }
 
   // ---------------------------------------------------------------- the tea
-  private liquid(tea: Tea, milkColor: string | undefined, level: number, phase: number, agitation: number) {
+  private liquid(tea: Tea | undefined, milkColor: string | undefined, level: number, phase: number, agitation: number) {
     if (level <= 0) return;
     const { c } = this;
-    const tint = milkColor ? blend(tea.color, milkColor, 0.6) : tea.color;
-    const art = this.images.drink(tea.id, Boolean(milkColor));
+    const tint = tea ? (milkColor ? blend(tea.color, milkColor, 0.6) : tea.color) : milkColor!;
+    const art = tea ? this.images.drink(tea.id, Boolean(milkColor)) : {};
     const s = cupSurface(level);
     const body = path(cupLiquidPath(s.y, s.rx, s.ry));
     const cx = W / 2;
@@ -525,21 +509,23 @@ export class CupPainter {
     const toppingLayers = frame.drink.toppings.length;
     return frame.iceLayout.map((cube) => {
       const dry = cupIceRestPosition(cube.restX, cube.r, cube.restAngle, cube.restLift + toppingLayers * 10);
-      const pose = cupIcePosition(raw, cube.x, cube.r, cube.angle, cube.depth, dry.cx, dry.cy, cube.restAngle,
-        cube.submergedDepth ?? 0, cube.immersion ?? 0.42);
+      const pose = raw > 0 && cube.liquidDepth !== undefined
+        ? cupIceSpreadPosition(raw, cube.x, cube.r, cube.angle, cube.liquidDepth)
+        : cupIcePosition(raw, cube.x, cube.r, cube.angle, cube.depth, dry.cx, dry.cy, cube.restAngle,
+          cube.immersion ?? 0.42);
       return { dry, pose };
     });
   }
 
   private ice(layer: 'submerged' | 'exposed', frame: CupFrame, poses: ReturnType<CupPainter['icePoses']>,
-    cubes: number, raw: number, teaColor?: string, milkColor?: string) {
+    cubes: number, raw: number, liquidTint?: string, milky = false) {
     const { c } = this;
     const submerged = layer === 'submerged';
     const water = cupIceFillPath(raw);
     const standing = frame.iceLayout.slice(0, cubes).map((cube, at) => ({ cube, at }))
-      .sort((a, b) => a.cube.depth - b.cube.depth);
-    const tint = submerged ? milkColor ?? teaColor : undefined;
-    const soften = submerged ? (milkColor ? 0.65 : 0.62) : 1;
+      .sort((a, b) => poses[a.at].pose.cy - poses[b.at].pose.cy);
+    const tint = submerged ? liquidTint : undefined;
+    const soften = submerged ? (milky ? 0.65 : 0.62) : 1;
     const fade = tint ? 1 - (1 - TINT) * (1 - soften) : soften;
     const sprite = tint ? tintedCube(this.images.ice, tint, TINT / fade) : cubeSprite(this.images.ice);
 
@@ -591,7 +577,7 @@ export class CupPainter {
 
     // Every cube breaking the surface is anchored to it by the tea's own near arc.
     if (!submerged && raw > 0) {
-      const surfacing = standing.filter(({ cube }) => !cube.submergedDepth);
+      const surfacing = standing.filter(({ cube }) => cube.liquidDepth === undefined);
       if (!surfacing.length) return;
       const surface = cupSurface(raw);
       c.save();
@@ -603,7 +589,7 @@ export class CupPainter {
       c.clip(path(outlines));
       c.globalAlpha = surface.opacity * 0.55;
       c.lineWidth = 0.8;
-      c.strokeStyle = teaColor ?? '#769FAC';
+      c.strokeStyle = liquidTint ?? '#769FAC';
       c.stroke(path(`M${56.5 - surface.rx} ${surface.y} A${surface.rx} ${surface.ry} 0 0 0 ${56.5 + surface.rx} ${surface.y}`));
       c.restore();
     }

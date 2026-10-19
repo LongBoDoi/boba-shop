@@ -18,13 +18,40 @@ export function isWideLayout(width: number, height: number) {
   return width >= 760 && width > height * 1.15;
 }
 
-/** How wide the side column is in the `column` layout. */
-export function panelWidthFor(width: number) {
-  return Math.round(Math.min(420, Math.max(280, width * 0.3)));
+/**
+ * How wide the room may be against its own height before the painting is cropped through a band.
+ *
+ * `fitBackground` covers the box with the plate centred **on itself**, and neither band is centred
+ * there — the shelf has more painting above it than the work top has below. So what a short room
+ * can hold is twice the band's farther edge from the middle of the plate, not the band's own
+ * height: measured the other way, a room exactly at the limit still loses the front of the cup's
+ * mat.
+ */
+function roomAspect(band: { top: number; bottom: number }) {
+  const middle = ROOM_BG_SIZE.height / 2;
+  return ROOM_BG_SIZE.width / (2 * Math.max(middle - band.top, band.bottom - middle));
 }
 
-export const ROOM_KEEP_ASPECT = ROOM_BG_SIZE.width / (ROOM_BG_KEEP.bottom - ROOM_BG_KEEP.top);
-export const ROOM_REACH_ASPECT = ROOM_BG_SIZE.width / (ROOM_BG_REACH.bottom - ROOM_BG_REACH.top);
+export const ROOM_KEEP_ASPECT = roomAspect(ROOM_BG_KEEP);
+export const ROOM_REACH_ASPECT = roomAspect(ROOM_BG_REACH);
+
+/**
+ * How wide the side column is in the `column` layout: **as narrow as the card can be read at**,
+ * because every pixel of it is a pixel of room.
+ *
+ * The card shrinks to fit whatever it is given — its tiles are sized from the width it has
+ * (`fitTiles`) and its two lines of text ellipsise — so the floor here is reading comfort and
+ * nothing else. The one thing that can push it back out is the room itself: if a room this wide
+ * would be squatter than its *workable* band (`ROOM_REACH_ASPECT`, the tanks' name tags down to
+ * the line the cup stands on) the painting is cropped through the part of it the shift needs, and
+ * taking the width off the room is what buys that band back. It never takes more than two fifths
+ * of the screen doing it — past that the cure is worse.
+ */
+export function panelWidthFor(width: number, height = 0) {
+  const card = Math.min(340, Math.max(248, width * 0.24));
+  const workable = height > 0 ? width - height * ROOM_REACH_ASPECT : 0;
+  return Math.round(Math.max(card, Math.min(workable, width * 0.4)));
+}
 
 /**
  * What the sideways chrome costs the room, counted exactly: the card plus the air and the rule
@@ -35,9 +62,19 @@ export const PREP_ACTIONS_HEIGHT = 48 + 6 + 6 + 2;
 
 export type PrepLayout = 'stacked' | 'band' | 'column';
 
-/** Where the order and the buttons go. `pageHeight` is the pager's measured height (0 until measured). */
+/**
+ * Where the order and the buttons go. `pageHeight` is the pager's measured height (0 until
+ * measured).
+ *
+ * **The band is only worth having while the room under it is still whole.** Two bands cost about
+ * 180px of height, and what a room that short loses is taken off the top and the bottom of the
+ * painting at once — the crowns of the tea tanks and the front of the cup's mat. A tablet has the
+ * height to spare and keeps the arrangement the game is drawn for; a short landscape window does
+ * not, and there the order stands beside the room instead, where it costs width the wall can pan
+ * back and no height at all.
+ */
 export function prepLayoutFor(width: number, height: number, pageHeight: number): PrepLayout {
   if (!isWideLayout(width, height)) return 'stacked';
   const kitchen = pageHeight - PREP_BAND_HEIGHT - PREP_ACTIONS_HEIGHT;
-  return kitchen > 0 && width / kitchen <= ROOM_REACH_ASPECT ? 'band' : 'column';
+  return kitchen > 0 && width / kitchen <= ROOM_KEEP_ASPECT ? 'band' : 'column';
 }

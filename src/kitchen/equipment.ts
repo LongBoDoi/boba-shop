@@ -3,7 +3,7 @@ import Phaser from 'phaser';
 import { ART, FOAM, SCOOP, SCOOP_ART, SCOOP_BOWL, SCOOPFUL, TEA_DISPENSER_ART, TEA_DISPENSERS } from '../art/kitchenArt';
 import { TOPPING_PAN_ART, TOPPING_PANS, TOPPING_SCOOP_ART, TOPPING_SCOOPS } from '../art/toppingArt';
 import { toppingPanBands, ToppingPanShape } from '../art/toppingGeometry';
-import { kitchenBottleSvg } from '../art/kitchenEquipment';
+import { kitchenBottleSvg, kitchenSugarSpoonSvg } from '../art/kitchenEquipment';
 import { bakeCanvas, canvasFont, svgTexture, tex } from '../game/view';
 import { Station } from './layout';
 
@@ -130,11 +130,11 @@ export function drawShadow(c: CanvasRenderingContext2D, rx: number, ry: number) 
 
 const PLAQUE_FONT = canvasFont(9, 600);
 /** A name on a little wooden plaque (9px, two lines at most): its size, and how to draw it. */
-export function plaque(label: string, maxWidth: number) {
+export function plaque(label: string, maxWidth: number, box?: { w: number; h: number }) {
   // The plaque may be as wide as its slot; its 5px padding and border come out of that.
   const lines = wrap(label, PLAQUE_FONT, maxWidth - 10);
-  const w = Math.min(maxWidth, Math.max(...lines.map((line) => measure(line, PLAQUE_FONT))) + 13);
-  const h = lines.length * 12 + 3;
+  const w = box?.w ?? Math.min(maxWidth, Math.max(...lines.map((line) => measure(line, PLAQUE_FONT))) + 13);
+  const h = box?.h ?? lines.length * 12 + 3;
   return {
     w, h,
     draw: (c: CanvasRenderingContext2D) => {
@@ -143,7 +143,7 @@ export function plaque(label: string, maxWidth: number) {
       c.fillStyle = '#6B4422';
       c.textAlign = 'center';
       c.textBaseline = 'middle';
-      lines.forEach((line, i) => c.fillText(line, w / 2, 1.5 + 6.5 + i * 12));
+      lines.forEach((line, i) => c.fillText(line, w / 2, (h - lines.length * 12) / 2 + 6.5 + i * 12));
     },
   };
 }
@@ -161,7 +161,7 @@ export function fitText(c: CanvasRenderingContext2D, text: string, size: number,
   c.fillText(text, x, y + size * 0.06);
 }
 
-/** A bottle (milk or syrup): the vector `KitchenBottle`, rasterised once per colour. */
+/** Milk bottles, rasterised once per colour. */
 const BOTTLE_ART = { width: 120, height: 300 };
 export function bottleTexture(scene: Phaser.Scene, color: string): Promise<string> {
   return svgTexture(scene, `bottle-${color}`, kitchenBottleSvg(BOTTLE_ART.width, BOTTLE_ART.height, color),
@@ -169,17 +169,24 @@ export function bottleTexture(scene: Phaser.Scene, color: string): Promise<strin
 }
 
 export function bottleColor(station: Pick<Station, 'kind' | 'id'>) {
-  if (station.kind === 'sugar') return '#C88D54';
   return station.id === 'oat' ? '#EBD4A7' : '#FFF2D3';
 }
 
+export function sugarSpoonTexture(scene: Phaser.Scene): Promise<string> {
+  return svgTexture(scene, 'sugar-spoon', kitchenSugarSpoonSvg(200, 128), 200, 128);
+}
+
 /**
- * What a station puts in your hand — a scoopful, a carton, the syrup bottle or a spoon of foam —
+ * What a station puts in your hand — a scoopful, milk, a spoon of sugar or foam —
  * laid out in a `size`×`size` box from its top-left, as `Tool` in KitchenStation.
  */
 export function addTool(scene: Phaser.Scene, station: Station, size: number): Phaser.GameObjects.GameObject[] {
   const S = size;
-  if (station.kind === 'sugar' || station.kind === 'milk') {
+  if (station.kind === 'sugar') {
+    if (!scene.textures.exists('sugar-spoon')) return [];
+    return [scene.add.image(0, 0, 'sugar-spoon').setOrigin(0).setDisplaySize(S, S * 0.64)];
+  }
+  if (station.kind === 'milk') {
     const key = `bottle-${bottleColor(station)}`;
     if (!scene.textures.exists(key)) return [];
     return [scene.add.image(0, 0, key).setOrigin(0).setDisplaySize(S * 0.45, S * 1.1)];
