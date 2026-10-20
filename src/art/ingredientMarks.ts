@@ -1,0 +1,21 @@
+import { svgDoc } from './svg';
+
+/** Shared pictorial identities on the kitchen equipment and its order-panel miniature. */
+export function ingredientMarkSvg(category: 'tea' | 'foam' | 'sweetness' | 'ice', id: string, size = 40): string {
+  let art = '';
+  if (category === 'tea') {
+    const leaves = (fill: string) => `<path d="M20 32Q18 14 7 9Q3 24 19 28 M20 27Q21 10 34 8Q36 23 20 27" fill="${fill}" stroke="#677138" stroke-width="1.5"/><path d="M10 14L20 31L30 13" fill="none" stroke="#F0CB78" stroke-width="1.3"/>`;
+    if (id === 'black') art = leaves('#A96035');
+    if (id === 'green') art = leaves('#839947') + '<g fill="#FFFDF0" stroke="#B1A16D" stroke-width="1"><ellipse cx="20" cy="12" rx="4" ry="8"/><ellipse cx="20" cy="12" rx="4" ry="8" transform="rotate(72 20 20)"/><ellipse cx="20" cy="12" rx="4" ry="8" transform="rotate(144 20 20)"/><ellipse cx="20" cy="12" rx="4" ry="8" transform="rotate(216 20 20)"/><ellipse cx="20" cy="12" rx="4" ry="8" transform="rotate(288 20 20)"/></g><circle cx="20" cy="20" r="4" fill="#E8B342" stroke="#A87935"/>';
+    if (id === 'thai') art = '<g fill="#B97230" stroke="#815125" stroke-width="1.2">' + Array.from({length: 8}, (_, i) => `<path d="M20 21Q12 12 20 4Q28 12 20 21Z" transform="rotate(${i * 45} 20 20)"/>`).join('') + '</g><circle cx="20" cy="20" r="4" fill="#F5C96E" stroke="#815125"/>';
+    if (id === 'oolong') art = '<g fill="#6F763C" stroke="#56592D" stroke-width="1.4"><ellipse cx="14" cy="23" rx="8" ry="10" transform="rotate(-30 14 23)"/><ellipse cx="27" cy="25" rx="7" ry="9" transform="rotate(25 27 25)"/><ellipse cx="22" cy="12" rx="6" ry="8"/></g><g fill="none" stroke="#D5C175" stroke-width="1.3"><path d="M12 17Q22 26 12 30 M26 19Q19 25 28 31 M21 7Q27 13 20 16"/></g>';
+    if (id === 'taro') art = '<path d="M10 30Q1 21 12 9Q25 0 31 14L32 29Z" fill="#B399BE" stroke="#806887" stroke-width="1.5"/><path d="M9 13L17 16 M7 19L13 21" stroke="#806887" stroke-width="1.5"/><ellipse cx="23" cy="27" rx="12" ry="9" fill="#EBD9EF" stroke="#806887" stroke-width="1.5"/><g fill="#A174AD"><ellipse cx="18" cy="24" rx="1" ry="2"/><ellipse cx="25" cy="28" rx="1" ry="2"/><ellipse cx="29" cy="24" rx="1" ry="1.5"/><ellipse cx="19" cy="30" rx="1" ry="1.5"/></g>';
+    if (id === 'matcha') art = '<path d="M5 24H31Q30 36 18 36Q6 35 5 24Z" fill="#81965C" stroke="#4F6637" stroke-width="1.5"/><ellipse cx="18" cy="24" rx="13" ry="4" fill="#C5D78A" stroke="#4F6637"/><path d="M10 23L18 15L26 23Z" fill="#7EAB3D"/><g stroke="#A77637" stroke-width="1.5" stroke-linecap="round"><path d="M28 23L32 4 M25 21L28 13 M28 23L31 14 M31 23L34 14 M27 12L35 14"/></g>';
+  }
+  if (category === 'foam') art = id === 'cheese'
+    ? '<path d="M5 20L26 9L35 18V31L5 33Z" fill="#F5D36E" stroke="#A77B39" stroke-width="1.5"/><path d="M5 20L35 18V31L5 33Z" fill="#FFE8A0" stroke="#A77B39" stroke-width="1.5"/><path d="M5 20L26 9L35 18Z" fill="#FFF0B6" stroke="#A77B39" stroke-width="1.3"/><g fill="#DBAB4C"><circle cx="12" cy="26" r="2.3"/><circle cx="24" cy="23" r="2.5"/><circle cx="30" cy="28" r="1.6"/></g>'
+    : '<path d="M5 30Q4 25 10 24Q6 19 15 16Q12 12 22 9Q27 7 24 3Q36 10 28 16Q36 18 31 23Q39 27 34 31Q19 37 5 30Z" fill="#EBC18A" stroke="#A66C35" stroke-width="1.5"/><path d="M11 25Q20 29 31 23 M15 17Q23 21 29 16 M20 11Q25 13 28 10" fill="none" stroke="#FFF0C8" stroke-width="2.4" stroke-linecap="round"/><path d="M8 30Q19 34 32 29 M17 18Q20 21 25 20" fill="none" stroke="#B66D2E" stroke-width="1.4"/>';
+  if (category === 'sweetness') art = '<g stroke="#C0A17B" stroke-width="1.3" stroke-linejoin="round"><path d="M4 17L14 12L24 17L14 22Z" fill="#FFFDF4"/><path d="M4 17V28L14 34V22Z" fill="#E7DBBF"/><path d="M14 22L24 17V28L14 34Z" fill="#F7EEDB"/><path d="M19 10L28 6L37 11L28 16Z" fill="#FFFDF4"/><path d="M19 10V20L28 25V16Z" fill="#E7DBBF"/><path d="M28 16L37 11V21L28 25Z" fill="#F7EEDB"/></g>';
+  if (category === 'ice') art = '<g stroke="#8EABB2" stroke-width="1.3" stroke-linejoin="round"><path d="M4 16L15 11L26 16L15 22Z" fill="#F5FCFF"/><path d="M4 16V29L15 35V22Z" fill="#BBD7E0"/><path d="M15 22L26 16V29L15 35Z" fill="#DEEEF3"/><path d="M19 8L28 4L37 9L28 14Z" fill="#F5FCFF"/><path d="M19 8V19L28 24V14Z" fill="#BBD7E0"/><path d="M28 14L37 9V20L28 24Z" fill="#DEEEF3"/></g>';
+  return svgDoc(size, size, art, '0 0 40 40');
+}

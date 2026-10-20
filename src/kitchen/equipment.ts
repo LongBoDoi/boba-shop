@@ -1,18 +1,14 @@
 import Phaser from 'phaser';
 
-import { ART, FOAM, SCOOP, SCOOP_ART, SCOOP_BOWL, SCOOPFUL, SUGAR_SCOOP, SUGAR_SCOOP_ART, TEA_DISPENSER_ART, TEA_DISPENSERS } from '../art/kitchenArt';
+import { CREAM_CAN_ART, SCOOP_ART, SCOOPFUL, SUGAR_SCOOP, SUGAR_SCOOP_ART, TEA_DISPENSER_ART, TEA_DISPENSERS } from '../art/kitchenArt';
 import { TOPPING_PAN_ART, TOPPING_PANS, TOPPING_SCOOP_ART, TOPPING_SCOOPS } from '../art/toppingArt';
 import { toppingPanBands, ToppingPanShape } from '../art/toppingGeometry';
-import { kitchenBottleSvg } from '../art/kitchenEquipment';
-import { bakeCanvas, canvasFont, svgTexture, tex } from '../game/view';
+import { kitchenCreamCanSvg, kitchenMilkCartonSvg, MILK_CARTON_ART } from '../art/kitchenEquipment';
+import { canvasFont, svgTexture, tex } from '../game/view';
 import { Station } from './layout';
-
-/** Warm tones the hand-drawn bits borrow so they sit with the painted ones (`SHOP` in KitchenRoom). */
-export const SHOP = {
-  plaque: '#F7DCAE',
-  woodEdge: '#C9924F',
-  ink: '#5C5660',
-};
+import { ingredientMarkSvg } from '../art/ingredientMarks';
+import { TEAS } from '../game/ingredients';
+import { CREAM_ART_SCALE_MIN, KITCHEN_TEXT_MIN, MILK_ART_SCALE_MIN } from './typography';
 
 /** One tea's dispenser, as a frame of the shared atlas. */
 export function teaFrame(scene: Phaser.Scene, teaId: string): string {
@@ -128,48 +124,30 @@ export function drawShadow(c: CanvasRenderingContext2D, rx: number, ry: number) 
   }
 }
 
-const PLAQUE_FONT = canvasFont(9, 600);
-/** A name on a little wooden plaque (9px, two lines at most): its size, and how to draw it. */
-export function plaque(label: string, maxWidth: number, box?: { w: number; h: number }) {
-  // The plaque may be as wide as its slot; its 5px padding and border come out of that.
-  const lines = wrap(label, PLAQUE_FONT, maxWidth - 10);
-  const w = box?.w ?? Math.min(maxWidth, Math.max(...lines.map((line) => measure(line, PLAQUE_FONT))) + 13);
-  const h = box?.h ?? lines.length * 12 + 3;
-  return {
-    w, h,
-    draw: (c: CanvasRenderingContext2D) => {
-      card(c, w, h, 4, SHOP.plaque, 1.5, SHOP.woodEdge);
-      c.font = PLAQUE_FONT;
-      c.fillStyle = '#6B4422';
-      c.textAlign = 'center';
-      c.textBaseline = 'middle';
-      lines.forEach((line, i) => c.fillText(line, w / 2, (h - lines.length * 12) / 2 + 6.5 + i * 12));
-    },
-  };
-}
-
-/** Text centred on (x, y), shrunk (to 70% at most) if it would not fit across `width`. */
+/** Centred text at or above the shared minimum. Callers wrap long labels instead of shrinking. */
 export function fitText(c: CanvasRenderingContext2D, text: string, size: number, weight: 500 | 600 | 700 | 800, color: string,
-  x: number, y: number, width: number) {
-  let font = canvasFont(size, weight);
-  const natural = measure(text, font);
-  if (natural > width) font = canvasFont(size * Math.max(0.7, width / natural), weight);
-  c.font = font;
+  x: number, y: number, _width: number) {
+  const actualSize = Math.max(KITCHEN_TEXT_MIN, size);
+  c.font = canvasFont(actualSize, weight);
   c.fillStyle = color;
   c.textAlign = 'center';
   c.textBaseline = 'middle';
-  c.fillText(text, x, y + size * 0.06);
+  c.fillText(text, x, y + actualSize * 0.06);
 }
 
-/** Milk bottles, rasterised once per colour. */
-const BOTTLE_ART = { width: 120, height: 300 };
-export function bottleTexture(scene: Phaser.Scene, color: string): Promise<string> {
-  return svgTexture(scene, `bottle-${color}`, kitchenBottleSvg(BOTTLE_ART.width, BOTTLE_ART.height, color),
-    BOTTLE_ART.width, BOTTLE_ART.height);
-}
-
-export function bottleColor(station: Pick<Station, 'kind' | 'id'>) {
-  return station.id === 'oat' ? '#EBD4A7' : '#FFF2D3';
+/** Equipment pictures and emblems are shared with the order-panel illustrations. */
+export async function prepareEquipmentTextures(scene: Phaser.Scene): Promise<void> {
+  const { width, height } = MILK_CARTON_ART;
+  await Promise.all([
+    ...(['whole', 'oat'] as const).map(kind => svgTexture(scene, `milk-carton-${kind}`,
+      kitchenMilkCartonSvg(width * 2, height * 2, kind), width * 2, height * 2)),
+    ...['cheese', 'brulee'].map(id => svgTexture(scene, `cream-can-${id}`,
+      kitchenCreamCanSvg(128, 300, id), 128, 300)),
+    ...TEAS.map(tea => svgTexture(scene, `ingredient-mark-tea-${tea.id}`,
+      ingredientMarkSvg('tea', tea.id, 96), 96, 96)),
+    ...(['ice', 'sweetness'] as const).map(category => svgTexture(scene, `ingredient-mark-${category}`,
+      ingredientMarkSvg(category, '', 96), 96, 96)),
+  ]);
 }
 
 /**
@@ -183,9 +161,10 @@ export function addTool(scene: Phaser.Scene, station: Station, size: number): Ph
       .setDisplaySize(S, S * SUGAR_SCOOP_ART.height / SUGAR_SCOOP_ART.width)];
   }
   if (station.kind === 'milk') {
-    const key = `bottle-${bottleColor(station)}`;
+    const key = `milk-carton-${station.id}`;
     if (!scene.textures.exists(key)) return [];
-    return [scene.add.image(0, 0, key).setOrigin(0).setDisplaySize(S * 0.45, S * 1.1)];
+    const scale = Math.max(MILK_ART_SCALE_MIN, S * 1.1 / MILK_CARTON_ART.height);
+    return [scene.add.image(0, 0, key).setOrigin(0).setDisplaySize(MILK_CARTON_ART.width * scale, MILK_CARTON_ART.height * scale)];
   }
   if (station.kind === 'ice') {
     const height = S * 0.9;
@@ -197,16 +176,10 @@ export function addTool(scene: Phaser.Scene, station: Station, size: number): Ph
     if (!frame || !cell) return [];
     return [scene.add.image(0, 0, tex(TOPPING_SCOOPS), frame).setOrigin(0).setDisplaySize(S, S * cell.height / cell.width)];
   }
-  // Foam: the empty scoop with the cream drawn into its bowl.
-  const SH = S / ART.scoop;
-  const scoop = scene.add.image(0, 0, tex(SCOOP)).setOrigin(0).setDisplaySize(S, SH);
-  const bowl = { x: S * SCOOP_BOWL.cx, y: SH * SCOOP_BOWL.cy, r: S * SCOOP_BOWL.r };
-  const w = bowl.r * 2;
-  const h = bowl.r * 1.5;
-  const key = bakeCanvas(scene, `foam-cream:${station.color}:${w.toFixed(1)}`, w, h, (c) => card(c, w, h, bowl.r, station.color, 1.4, SHOP.ink));
-  return [scoop, scene.add.image(bowl.x - bowl.r, bowl.y - bowl.r * 0.95, key).setOrigin(0).setDisplaySize(w, h)];
+  // The cream canister is carried whole, using the same artwork as the counter option.
+  const key = `cream-can-${station.id}`;
+  if (!scene.textures.exists(key)) return [];
+  const scale = Math.max(CREAM_ART_SCALE_MIN, S * 1.1 / CREAM_CAN_ART.height);
+  return [scene.add.image(0, 0, key).setOrigin(0).setDisplaySize(CREAM_CAN_ART.width * scale, CREAM_CAN_ART.height * scale)];
 }
 
-export function foamTexture(id: string): string {
-  return tex(FOAM[id] ?? FOAM.cheese);
-}

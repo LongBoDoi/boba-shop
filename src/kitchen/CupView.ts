@@ -11,6 +11,7 @@ import { bakeCanvas, canvasFont, DPR, tex } from '../game/view';
 import { card, measure } from './equipment';
 import { CupImages, CupPainter, glintsCanvas } from './cupPainter';
 import { CUP_OVERFLOW } from './creamPainter';
+import { KITCHEN_TEXT_MIN } from './typography';
 import { easeOut } from './motion';
 
 /** The glass backing: cool grey plastic, see-through enough to show the room behind it. */
@@ -123,6 +124,8 @@ export class CupView {
 
   /** Advance whatever is moving, and repaint if anything did. Called once a frame. */
   update(time: number, delta: number) {
+    const tagScale = 1 / Math.max(0.01, Math.min(1, this.container.scaleX));
+    if (this.sizeTag.scaleX !== tagScale) this.sizeTag.setScale(tagScale);
     const settling = (start: number) => start > -Infinity && time - start < SETTLE_MS + 20;
     const moving = this.iceStart.some(settling) || this.portionStart.some(settling);
     const target = this.pouring ? 1 : 0;
@@ -154,7 +157,7 @@ export class CupView {
   private drawSizeTag(size: Drink['size']) {
     this.sizeTag.setVisible(Boolean(size));
     if (!size) return;
-    const font = canvasFont(11, 700);
+    const font = canvasFont(KITCHEN_TEXT_MIN, 700);
     const w = measure(size, font) + 12;
     const h = 17;
     const key = bakeCanvas(this.scene, `size-tag:${size}`, w, h, (c) => {

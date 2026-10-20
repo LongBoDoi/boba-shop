@@ -3,7 +3,7 @@ import { useMemo } from 'preact/hooks';
 
 import { characterSvg } from '../art/character';
 import { patienceHeartSvg } from '../art/icons';
-import { ingredientIconSvg } from '../art/ingredientIcon';
+import { cupSizeIconSvg, ingredientIconSvg, ingredientLocatorSvg } from '../art/ingredientIcon';
 import { useGame } from '../hooks';
 import { playSound } from '../sound';
 import { dispatch } from '../store';
@@ -42,19 +42,18 @@ const SPOKEN: CategoryId[] = ['tea', 'milk', 'sweetness', 'ice', 'toppings', 'fo
 
 const CARD_BORDER = 2;
 const TRACK_HEIGHT = 18;
-const QUEUE_HEIGHT = 44;
 const HEAD_RESERVE = 232;
 
 /** The biggest tile column that still stands a whole order inside a short side column's height. */
 function fitTiles(count: number, room: number, budget: number) {
-  let grid = { column: Math.min(room, 86) };
-  for (let column = 86; column >= 38; column -= 4) {
+  let grid = { column: Math.min(room, 74) };
+  for (let column = 74; column >= 34; column -= 4) {
     const perRow = Math.max(1, Math.floor(room / column));
-    const tile = Math.max(24, Math.min(column - 16, 44));
-    const caption = Math.max(9, Math.min(column * 0.2, 12));
-    const rowHeight = tile + caption * 2.5 + 10;
+    const tile = Math.max(28, Math.min(column - 6, 60));
+    const rows = Math.ceil(count / perRow);
+    const height = rows * tile + Math.max(0, rows - 1) * 8;
     grid = { column: Math.min(room / Math.max(1, Math.min(count, perRow)), column) };
-    if (budget <= 0 || Math.ceil(count / perRow) * rowHeight <= budget) break;
+    if (budget <= 0 || height <= budget) break;
   }
   return grid;
 }
@@ -79,7 +78,8 @@ function chipsFor(order: Drink, cup: Drink, config: DayConfig): Chip[] {
     const done = categoryMatches(cup, order, category);
     if (category === 'toppings') {
       return selectedIds(order, category)
-        .map((id) => ({ key: `topping-${id}`, category, id, label: getIngredient(category, id)?.name ?? id, done }));
+        .map((id) => ({ key: `topping-${id}`, category, id, label: getIngredient(category, id)?.name ?? id,
+          done: cup.toppings.includes(id) }));
     }
     const id = effectiveId(order, category) ?? '';
     return [{ key: category, category, id, label: describeSelection(order, category), done }];
@@ -130,6 +130,7 @@ export const OrderBubble = memo(function OrderBubble({ width: W, form, maxHeight
   const inline = form === 'band';
   const avatar = tall ? 44 : 40;
   const others = tickets.filter((ticket) => ticket.slot !== selectedSlot);
+  const compactQueue = tall && others.length > 0;
 
   const chips = customer ? chipsFor(customer.order, cup, config) : [];
   const done = chips.filter((chip) => chip.done).length;
@@ -138,15 +139,14 @@ export const OrderBubble = memo(function OrderBubble({ width: W, form, maxHeight
   const band = { column: chips.length > 0 ? Math.min((inline ? headRoom : room) / chips.length, 56) : 0 };
   const grid = tall
     ? fitTiles(chips.length, room, (maxHeight || 0) - pad * 2 - CARD_BORDER * 2
-      - Math.max(avatar, 30) - TRACK_HEIGHT - (others.length > 0 ? QUEUE_HEIGHT : 0))
+      - Math.max(avatar, compactQueue ? 48 : 30) - TRACK_HEIGHT)
     : band;
   const column = grid.column;
-  const tile = Math.round(Math.max(24, Math.min(column - 16, tall ? 44 : 32)));
-  const caption = Math.round(Math.max(9, Math.min(column * 0.2, tall ? 12 : 10.5)) * 2) / 2;
+  const tile = Math.floor(Math.max(24, Math.min(column - 6, tall ? 60 : 48)));
 
-  const tiles = chips.map((chip) => <ChipTile key={chip.key} chip={chip} width={column} tile={tile} caption={caption} />);
+  const tiles = chips.map((chip) => <ChipTile key={chip.key} chip={chip} width={column} tile={tile} />);
   const queue = others.map(({ slot, customer: waiting }) => (
-    <OrderPin key={waiting.id} slot={slot} customer={waiting} cup={cup} config={config} size={tall ? 36 : 32} />
+    <OrderPin key={waiting.id} slot={slot} customer={waiting} cup={cup} config={config} size={tall ? 24 : 32} />
   ));
 
   const face = useMemo(
@@ -169,9 +169,13 @@ export const OrderBubble = memo(function OrderBubble({ width: W, form, maxHeight
         </div>
         <div class="order-name">
           <div class="order-title">{customer ? drinkName(customer.order) : 'Chưa có order'}</div>
-          <div class="order-subtitle">
+          <div class={`order-subtitle ${compactQueue ? 'visually-hidden' : ''}`}>
             {customer ? `Cho ${customer.name} · xong ${done}/${chips.length}` : 'Vuốt sang Quầy để nhận order'}
           </div>
+          {compactQueue && <div class="order-queue-compact">
+            <span class="order-waiting-label">Chờ</span>
+            <div class="order-queue">{queue}</div>
+          </div>}
         </div>
         {customer && <Patience size={26} />}
         {inline && customer && (
@@ -191,13 +195,6 @@ export const OrderBubble = memo(function OrderBubble({ width: W, form, maxHeight
       <div class="order-track">
         <div class="order-fill" style={{ width: `${chips.length > 0 ? (done / chips.length) * 100 : 0}%` }} />
       </div>
-
-      {tall && queue.length > 0 && (
-        <div class="order-waiting">
-          <span class="order-waiting-label">Đang chờ</span>
-          <div class="order-queue">{queue}</div>
-        </div>
-      )}
 
       {inline ? null : customer ? (
         <div class={`order-chips ${tall ? 'wrap' : ''}`}>{tiles}</div>
@@ -223,33 +220,32 @@ function Patience({ size }: { size: number }) {
   return <Svg markup={markup} />;
 }
 
-function ChipTile({ chip, width, tile, caption }: { chip: Chip; width: number; tile: number; caption: number }) {
+function ChipTile({ chip, width, tile }: { chip: Chip; width: number; tile: number }) {
   const icon = useMemo(() => {
-    if (chip.category === 'size') return '';
-    return ingredientIconSvg(chip.category, chip.id, tile * 0.74);
+    if (chip.category === 'size') return cupSizeIconSvg(chip.id, tile - 2);
+    return ingredientIconSvg(chip.category, chip.id, tile - 2);
   }, [chip.category, chip.id, tile]);
+  const locator = useMemo(() => ingredientLocatorSvg(chip.category, chip.id, 16), [chip.category, chip.id]);
+  const quantity = chip.category === 'size' ? chip.id : chip.category === 'sweetness' ? `${chip.id}%`
+    : chip.category === 'ice' ? `×${chip.id === 'less' ? 1 : 2}` : null;
   return (
     <div
       class="chip"
       role="img"
       aria-label={`${chip.label} — ${chip.done ? 'đã đúng' : 'chưa đúng'}`}
+      data-ingredient={`${chip.category}:${chip.id}`}
       data-testid={chip.category === 'size' ? 'order-cup-size' : undefined}
       style={{ width }}
     >
       <div class={`chip-tile ${chip.done ? 'done' : ''}`} style={{ width: tile, height: tile, borderRadius: tile * 0.3 }}>
-        {chip.category === 'size' ? (
-          <span class="chip-size" style={{ fontSize: tile * 0.57 }}>{chip.id}</span>
-        ) : (
-          <Svg markup={icon} />
-        )}
+        <Svg markup={icon} />
+        {locator && <Svg class="chip-locator" markup={locator} />}
+        {quantity && <span class="chip-quantity">{quantity}</span>}
         {chip.done && (
           <div class="chip-check" style={{ width: tile * 0.42, height: tile * 0.42, borderRadius: tile * 0.21 }}>
             <span class="chip-check-mark" style={{ fontSize: tile * 0.26 }}>✓</span>
           </div>
         )}
-      </div>
-      <div class={`chip-caption ${chip.done ? 'done' : ''}`} style={{ fontSize: caption, lineHeight: `${caption * 1.25}px` }}>
-        {chip.label}
       </div>
     </div>
   );

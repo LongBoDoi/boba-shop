@@ -5,7 +5,10 @@ import {
   CUP_FLOOR_EDGE,
   CUP_FLOOR_FRONT,
   CUP_FRONT_GLINTS,
+  CUP_NEAR_GLASS,
+  CUP_NEAR_LIP_BAND,
   CUP_REAR_FLOOR_GLASS,
+  CUP_SURFACE_TOP,
   CUP_WELL,
   cupFillPath,
   cupIceFillPath,
@@ -66,6 +69,8 @@ const H = CUP_ART.h;
 const BOX = `M0 0H${W}V${H}H0Z`;
 /** The texture includes space above the rim for the cream peak. */
 const PAINT_H = H * (1 + CUP_OVERFLOW);
+/** The painted body begins at the original design's fill line, below the current full level. */
+const BODY_ART_TOP = 48;
 /**
  * How much of the painted glass reads through the tea. `KitchenCup` asks for 22%, but the web build
  * players know drew none — its filled-glass mask never painted in a browser — and the tea there is
@@ -91,7 +96,7 @@ const CONTENTS = new Path2D(CUP_CONTENTS);
 const CREAM_CONTENTS = new Path2D(CUP_CONTENTS);
 CREAM_CONTENTS.rect(0, -H * CUP_OVERFLOW, W, 28 + H * CUP_OVERFLOW);
 /** Near half of the mouth and the front wall. The far half stays behind the contents. */
-const FRONT_GLASS = 'M0 28H13.6 A42.9 7.5 0 0 0 99.4 28H113V174H0Z';
+const FRONT_GLASS = CUP_NEAR_GLASS;
 const FRONT = new Path2D(FRONT_GLASS);
 const REAR = new Path2D(`${BOX} ${FRONT_GLASS}`);
 const FLOOR_EDGE = new Path2D(CUP_FLOOR_EDGE);
@@ -312,13 +317,15 @@ export class CupPainter {
 
     if (ice && poses) this.ice('exposed', frame, poses, ice.cubes, raw, tint, Boolean(milk));
     c.restore();
+    const glass = ice && ice.cubes > 0 && poses
+      ? this.glassAroundIce(frame, poses, ice.cubes, raw) : this.images.sprite;
 
     // Split the cup into a rear and a near wall. Cream belongs between them, just
     // like the tea: painting it after both walls makes it look pasted on the glass.
     const walls = path(`${BOX} ${CUP_REAR_FLOOR_GLASS}`);
     c.save();
     c.clip(REAR, 'evenodd');
-    this.glass(filled, walls, true);
+    this.glass(filled, walls, true, glass);
     c.restore();
     if (foam) {
       c.save();
@@ -328,12 +335,12 @@ export class CupPainter {
     }
     c.save();
     c.clip(FRONT);
-    this.glass(filled, walls, true);
+    this.glass(filled, walls, true, glass);
     if (foam) {
       // The near lip is solid glass even where the liquid mask reaches the brim.
       // It must cross in front of the cream, rather than disappear under its base.
       c.save();
-      c.clip(new Path2D('M0 25H113V45H0Z'));
+      c.clip(path(CUP_NEAR_LIP_BAND));
       c.drawImage(this.images.sprite, 0, 0, W, H);
       c.restore();
     }
@@ -342,24 +349,24 @@ export class CupPainter {
 
   // ---------------------------------------------------------------- the painted glass
   /** Full where the glass has air behind it, faint where the drink stands behind it. */
-  private glass(filled: string, side: Path2D, evenOdd: boolean) {
+  private glass(filled: string, side: Path2D, evenOdd: boolean, sprite = this.images.sprite) {
     const { c } = this;
     c.save();
     c.clip(side, evenOdd ? 'evenodd' : 'nonzero');
     if (filled) {
       c.save();
       c.clip(path(`${BOX} ${filled}`), 'evenodd');
-      c.drawImage(this.images.sprite, 0, 0, W, H);
+      c.drawImage(sprite, 0, 0, W, H);
       c.restore();
       if (GLASS_FILLED_ALPHA > 0) {
         c.save();
         c.clip(path(filled));
         c.globalAlpha = GLASS_FILLED_ALPHA;
-        c.drawImage(this.images.sprite, 0, 0, W, H);
+        c.drawImage(sprite, 0, 0, W, H);
         c.restore();
       }
     } else {
-      c.drawImage(this.images.sprite, 0, 0, W, H);
+      c.drawImage(sprite, 0, 0, W, H);
     }
     c.restore();
   }
@@ -394,7 +401,10 @@ export class CupPainter {
     c.clip(body);
     if (art.body) {
       c.globalAlpha = 0.5;
-      c.drawImage(art.body, 0, 0, W, H);
+      // Map only the painted body into the current well; its transparent upper padding would
+      // otherwise leave a second horizontal edge below a raised liquid surface.
+      c.drawImage(art.body, 0, BODY_ART_TOP, W, CUP_FLOOR_FRONT - BODY_ART_TOP,
+        0, CUP_SURFACE_TOP, W, CUP_FLOOR_FRONT - CUP_SURFACE_TOP);
       c.globalAlpha = 1;
     }
     const light = c.createRadialGradient(0, 0, 0, 0, 0, 1);
@@ -534,12 +544,40 @@ export class CupPainter {
   }
 
   // ---------------------------------------------------------------- the ice
+  private iceGlassCanvas: HTMLCanvasElement | null = null;
+  /** Clear the plastic wash over exposed ice, including overlapping silhouettes in a dry pile. */
+  private glassAroundIce(frame: CupFrame, poses: ReturnType<CupPainter['icePoses']>, cubes: number, raw: number) {
+    if (!this.iceGlassCanvas) {
+      this.iceGlassCanvas = document.createElement('canvas');
+      this.iceGlassCanvas.width = this.canvas.width;
+      this.iceGlassCanvas.height = Math.round(this.canvas.width * H / W);
+    }
+    const canvas = this.iceGlassCanvas, c = canvas.getContext('2d')!;
+    c.save();
+    c.setTransform(canvas.width / W, 0, 0, canvas.height / H, 0, 0);
+    c.clearRect(0, 0, W, H);
+    c.drawImage(this.images.sprite, 0, 0, W, H);
+    c.clip(CONTENTS);
+    const water = cupIceFillPath(raw);
+    if (water) c.clip(path(`${BOX} ${water}`), 'evenodd');
+    const outlines = frame.iceLayout.slice(0, cubes).map((cube, at) => {
+      const { pose } = poses[at];
+      const fall = 1 - (frame.iceSettle[at] ?? 1);
+      return cupIceOutlinePath(pose.cx, pose.cy - 10 * fall, pose.angle - 7 * fall, cube.r);
+    }).join(' ');
+    // Nonzero winding makes a union; overlapping pieces must not restore the plastic between them.
+    c.globalCompositeOperation = 'destination-out';
+    c.fill(path(outlines));
+    c.restore();
+    return canvas;
+  }
+
   private icePoses(frame: CupFrame, raw: number) {
     const toppingLayers = frame.drink.toppings.length;
     return frame.iceLayout.map((cube) => {
       const dry = cupIceRestPosition(cube.restX, cube.r, cube.restAngle, cube.restLift + toppingLayers * 10);
-      const pose = raw > 0 && cube.liquidDepth !== undefined
-        ? cupIceSpreadPosition(raw, cube.x, cube.r, cube.angle, cube.liquidDepth)
+      const pose = cube.liquidDepth !== undefined
+        ? cupIceSpreadPosition(raw, cube.x, cube.r, cube.angle, cube.liquidDepth, dry.cx, dry.cy, cube.restAngle)
         : cupIcePosition(raw, cube.x, cube.r, cube.angle, cube.depth, dry.cx, dry.cy, cube.restAngle,
           cube.immersion ?? 0.42);
       return { dry, pose };
@@ -601,8 +639,9 @@ export class CupPainter {
       c.drawImage(target, 0, 0);
       c.globalAlpha = 1;
     }
+    // restore() returns to the cup transform, including the cream headroom translation.
+    // Rebuilding it from canvas.height / H shifts the crowns away from their submerged bodies.
     c.restore();
-    c.setTransform(this.canvas.width / W, 0, 0, this.canvas.height / H, 0, 0);
 
     // Every cube breaking the surface is anchored to it by the tea's own near arc.
     if (!submerged && raw > 0) {

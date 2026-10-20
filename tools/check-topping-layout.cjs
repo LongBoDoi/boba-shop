@@ -22,6 +22,20 @@ function project(m, x, y) {
 // Independently moving a middle row's corner must fail this check, even if its pans still touch.
 const trayBack = TOPPING_TRAY_EDGES[0];
 const trayFront = TOPPING_TRAY_EDGES[TOPPING_TRAY_EDGES.length - 1];
+// Both fitted sides must follow the painted rims, with matching clearance.
+// Measure away from the rounded corners; allow one background pixel over the full depth.
+const paintedLeftSlope = (1478 - 1457) / (510 - 420);
+assert(Math.abs(trayBack.x0 - trayFront.x0 - paintedLeftSlope * (trayFront.y - trayBack.y)) < 1,
+  'Left topping edge must remain parallel to the painted tray rim');
+const paintedRightSlope = (1824 - 1807) / (510 - 420);
+assert(Math.abs(trayFront.x1 - trayBack.x1 - paintedRightSlope * (trayFront.y - trayBack.y)) < 1,
+  'Right topping edge must remain parallel to the painted tray rim');
+for (const { y, left, right } of [{ y: 420, left: 1478, right: 1807 }, { y: 510, left: 1457, right: 1824 }]) {
+  const t = (y - trayBack.y) / (trayFront.y - trayBack.y);
+  const leftInset = trayBack.x0 + (trayFront.x0 - trayBack.x0) * t - left;
+  const rightInset = right - (trayBack.x1 + (trayFront.x1 - trayBack.x1) * t);
+  assert(Math.abs(leftInset - rightInset) < 1, 'Both topping edges must have matching rim clearance');
+}
 for (let divider = 0; divider <= 3; divider++) {
   const fraction = divider / 3;
   const xAt = edge => edge.x0 + (edge.x1 - edge.x0) * fraction;

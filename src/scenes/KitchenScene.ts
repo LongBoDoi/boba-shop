@@ -1,11 +1,11 @@
 import Phaser from 'phaser';
 
 import {
-  CupSize, Drink, EMPTY_DRINK, getIngredient, MAX_ICE_SCOOPS, MAX_POUR, MILK_SPLASH, POUR_RATE, SUGAR_STEPS, Topping,
+  CupSize, Drink, EMPTY_DRINK, getIngredient, MAX_ICE_SCOOPS, MAX_POUR, MILK_SPLASH, POUR_RATE, SUGAR_STEPS,
 } from '../game/ingredients';
 import { GameState } from '../game/reducer';
-import { CUP_HOLDER, ROOM_BG, SUGAR_JAR, TEA_DISPENSER_ART, TEA_DISPENSERS } from '../art/kitchenArt';
-import { TOPPING_PANS, TOPPING_TAG } from '../art/toppingArt';
+import { CUP_HOLDER, ROOM_BG, ROOM_BG_CUP_STATION, SUGAR_JAR, TEA_DISPENSER_ART, TEA_DISPENSERS } from '../art/kitchenArt';
+import { TOPPING_PANS } from '../art/toppingArt';
 import { CUP_ART, CUP_FOOT } from '../art/cupGeometry';
 import { gameArea } from '../game/host';
 import { bakeCanvas, canvasFont, placeCamera, tex } from '../game/view';
@@ -14,10 +14,11 @@ import { dispatch, store } from '../store';
 import { nudge, uiState } from '../ui-state';
 import { CupView } from '../kitchen/CupView';
 import {
-  addTool, bottleColor, bottleTexture, card, drawPan, drawShadow, fitText, foamTexture, measure, panExtent, plaque, roundRect, SHOP, sourceImage,
+  addTool, prepareEquipmentTextures, card, drawPan, drawShadow, fitText, measure, panExtent, roundRect, sourceImage,
 } from '../kitchen/equipment';
 import { Atlas } from '../kitchen/atlas';
 import { cupSizeFor, findStation, hintFor, KitchenLayout, layoutKitchen, Station } from '../kitchen/layout';
+import { KITCHEN_TEXT_MIN } from '../kitchen/typography';
 import { DURATION, EASE } from '../kitchen/motion';
 import { cupShadowTexture, Spill, Stream } from '../kitchen/pourEffects';
 
@@ -64,6 +65,8 @@ export class KitchenScene extends Phaser.Scene {
   private matLabel: Phaser.GameObjects.Image | null = null;
   private stationViews = new Map<string, { container: Phaser.GameObjects.Container; art: Phaser.GameObjects.Container; locked?: boolean }>();
   private teaLabels = new Map<string, Phaser.GameObjects.Image>();
+  /** The carton or canister in a hand. There is one of each, so its place on the counter stands empty. */
+  private held: Station | null = null;
 
   private pan = 0;
   private panVelocity = 0;
@@ -107,7 +110,7 @@ export class KitchenScene extends Phaser.Scene {
     this.level = store.state.build.fill;
 
     // Vector equipment is rasterised once; the room is rebuilt when it is ready.
-    void Promise.all(['#EBD4A7', '#FFF2D3'].map((color) => bottleTexture(this, color)))
+    void prepareEquipmentTextures(this)
       .then(() => this.relayout(true))
       .catch((error: unknown) => console.warn('[kitchen] equipment could not be drawn', error));
 
@@ -184,6 +187,17 @@ export class KitchenScene extends Phaser.Scene {
     type Piece = { frame: string; x: number; y: number; w: number; h: number; dims?: boolean; name?: string; visible?: boolean };
     const pieces: { station?: Station; items: Piece[] }[] = [];
 
+    const rack = ROOM_BG_CUP_STATION;
+    (['S', 'M', 'L'] as const).forEach((size, i) => {
+      const w = Math.max(24, 52 * room.scale), h = Math.max(20, 29 * room.scale);
+      const frame = atlas.add(`rack-size:${size}:${sized(w,h)}`, w, h, c => {
+        card(c,w,h,3,'#FFF1D4',1,'#C3955E');
+        fitText(c,size,KITCHEN_TEXT_MIN,800,'#845933',w/2,h/2,w-6);
+      });
+      pieces.push({items:[{frame,x:(rack.x+ rack.width*(i+0.5)/3)*room.scale-w/2,
+        y:room.top+486*room.scale-h/2,w,h}]});
+    });
+
     for (const bin of layout.emptyBins) {
       const extent = panExtent(bin.w, bin.h, bin.panShape);
       const frame = atlas.add(`pan:empty:${sized(bin.w, bin.h)}:${bin.panShape ? Object.values(bin.panShape).map((v) => v.toFixed(3)).join(',') : ''}`,
@@ -196,18 +210,20 @@ export class KitchenScene extends Phaser.Scene {
       const { x, y, w, h } = station;
       if (station.kind === 'tea') {
         const cell = TEA_DISPENSER_ART.cells[station.id];
-        const label = TEA_DISPENSER_ART.label;
-        const labelW = w * label.width;
-        const lh = h * label.height;
-        const lx = w * label.left;
-        const ly = h * label.top;
-        const nameSize = Math.min(Math.max(7, Math.min(11, w * 0.08)), labelW / (station.name.length * 0.55));
+        const labelW = w * 0.35, lh = h * 0.22;
+        const lx = (w - labelW) / 2, ly = h * 0.35;
         const frame = atlas.add(`tank:${station.id}:${sized(w, h)}`, w, h, (c) => {
           c.drawImage(tanks, cell.x, cell.y, TEA_DISPENSER_ART.width, TEA_DISPENSER_ART.height, 0, 0, w, h);
-          fitText(c, station.name, nameSize, 700, '#784522', lx + labelW / 2, ly + lh / 2, labelW);
+          // A pictorial emblem replaces the name. The order uses this same emblem and tank.
+          roundRect(c, lx + 1, ly + 1, labelW - 2, lh - 2, w * 0.025);
+          c.fillStyle = '#FFF0CC'; c.fill();
+          const key = `ingredient-mark-tea-${station.id}`;
+          if (this.textures.exists(key)) {
+            const size = Math.min(labelW - 3, lh - 2);
+            c.drawImage(sourceImage(this, key), (w - size) / 2, ly + (lh - size) / 2, size, size);
+          }
         });
         items.push({ frame, x, y, w, h });
-        // The active tap's name is ringed; the ring is a frame shown or hidden.
         const ring = atlas.add(`tea-ring:${sized(labelW, lh)}`, labelW, lh, (c) => {
           roundRect(c, 0.5, 0.5, labelW - 1, lh - 1, 3);
           c.lineWidth = 1;
@@ -216,20 +232,9 @@ export class KitchenScene extends Phaser.Scene {
         });
         items.push({ frame: ring, x: x + lx, y: y + ly, w: labelW, h: lh, name: 'ring', visible: false });
       } else if (station.kind === 'topping') {
-        const option = getIngredient('toppings', station.id) as Topping;
         const extent = panExtent(w, h, station.panShape);
-        const tagW = w * TOPPING_TAG.width;
-        const nameSize = Math.min(Math.max(6, Math.min(10, w * 0.085)), tagW / (option.name.length * 0.52));
-        const padY = Math.max(0.5, h * 0.02);
-        const tagH = nameSize * 1.25 + padY * 2 + 2;
-        const tagTop = h - h * TOPPING_TAG.bottom - tagH;
         const frame = atlas.add(`pan:${station.id}:${sized(w, h)}`, extent.width, h, (c) => {
           drawPan(c, pans, station.id, w, h, station.panShape);
-          c.save();
-          c.translate(-extent.left + (w - tagW) / 2, tagTop);
-          card(c, tagW, tagH, 3, SHOP.plaque, 1, SHOP.woodEdge);
-          fitText(c, option.name, nameSize, 700, '#6B4422', tagW / 2, tagH / 2, tagW - 4);
-          c.restore();
         });
         items.push({ frame, x: x + extent.left, y, w: extent.width, h, dims: true });
       } else if (station.kind === 'ice') {
@@ -241,40 +246,40 @@ export class KitchenScene extends Phaser.Scene {
           c.fill();
         });
         items.push({ frame, x, y, w, h: gh, name: 'glow', visible: false });
+        // Cover the background's baked word with an ice illustration, without a name plaque.
+        const iw = w * 0.26, ih = Math.max(20, h * 0.22);
+        const name = atlas.add(`ice-picture:${sized(iw, ih)}`, iw, ih, c => {
+          const fill = c.createLinearGradient(0, 0, 0, ih);
+          fill.addColorStop(0, '#FFE8C3'); fill.addColorStop(1, '#FFE1AF');
+          c.fillStyle = fill; c.fillRect(0, 0, iw, ih);
+          if (this.textures.exists('ingredient-mark-ice')) {
+            c.drawImage(sourceImage(this, 'ingredient-mark-ice'), (iw - ih) / 2, 0, ih, ih);
+          }
+        });
+        items.push({frame:name,x:station.cx-iw/2,y:y+h*0.84-ih/2,w:iw,h:ih});
       } else if (station.kind === 'sugar') {
         const jar = sourceImage(this, SUGAR_JAR);
-        // Centre the plaque on the holder's flat front (below its raised top rail).
-        const labelW = w * 0.82;
-        const labelH = h * 0.2;
-        const label = { x: (w - labelW) / 2, y: h * 0.82 - labelH / 2, w: labelW, h: labelH };
-        const tag = plaque(station.name, label.w, label);
         const frame = atlas.add(`sugar-jar:${sized(w, h)}`, w, h, (c) => {
           c.drawImage(jar, 0, 0, w, h);
-          c.save();
-          c.translate(label.x, label.y);
-          tag.draw(c);
-          c.restore();
+          if (this.textures.exists('ingredient-mark-sweetness')) {
+            const size = Math.min(w * 0.48, h * 0.27);
+            c.drawImage(sourceImage(this, 'ingredient-mark-sweetness'), (w - size) / 2, h * 0.82 - size / 2, size, size);
+          }
         });
         items.push({ frame, x, y, w, h, dims: true });
       } else {
         const rx = w * 0.46;
         const ry = Math.max(3, w * 0.11);
         const shadow = atlas.add(`shadow:${sized(rx, ry)}`, rx * 2, ry * 2, (c) => drawShadow(c, rx, ry));
-        const foot = station.kind === 'milk' ? h * 146 / 150 : h;
-        items.push({ frame: shadow, x: station.cx - rx, y: y + foot - ry, w: rx * 2, h: ry * 2 });
-        const equipmentKey = `bottle-${bottleColor(station)}`;
-        const art = station.kind === 'foam' ? sourceImage(this, foamTexture(station.id))
-          : this.textures.exists(equipmentKey) ? sourceImage(this, equipmentKey) : null;
+        const foot = station.kind === 'milk' ? h * 150 / 154 : h;
+        items.push({ frame: shadow, x: station.cx - rx, y: y + foot - ry, w: rx * 2, h: ry * 2, name: 'shadow' });
+        const equipmentKey = station.kind === 'foam' ? `cream-can-${station.id}` : `milk-carton-${station.id}`;
+        const art = this.textures.exists(equipmentKey) ? sourceImage(this, equipmentKey) : null;
         if (art) {
           const frame = atlas.add(`${station.key}:${sized(w, h)}`, w, h, (c) => c.drawImage(art, 0, 0, w, h));
-          items.push({ frame, x, y, w, h, dims: true });
+          items.push({ frame, x, y, w, h, dims: true, name: 'object' });
         }
-        const labels = [station.kind === 'milk' ? (station.id === 'oat' ? 'Yến mạch' : 'Sữa tươi') : (station.id === 'cheese' ? 'Phô mai' : 'Brûlée')];
-        labels.forEach((text, i) => {
-          const p = plaque(text, station.labelW);
-          const frame = atlas.add(`plaque:${text}:${p.w.toFixed(1)}`, p.w, p.h, p.draw);
-          items.push({ frame, x: station.cx - p.w / 2, y: y + h + 1, w: p.w, h: p.h, name: `plaque${i}`, visible: i === 0 });
-        });
+
       }
       pieces.push({ station, items });
     }
@@ -303,6 +308,8 @@ export class KitchenScene extends Phaser.Scene {
       this.stationViews.set(station.key, { container, art });
     }
     this.room.setX(-this.pan);
+    // A rebuild (a resize mid-carry) draws the whole counter back, including what is in a hand.
+    if (this.held) this.showStationObject(this.held, false);
 
     const { holder } = layout;
     this.holder.setPosition(holder.left, holder.top).setDisplaySize(holder.width, holder.height);
@@ -378,7 +385,7 @@ export class KitchenScene extends Phaser.Scene {
     if (!show || !this.layout) return;
     const { holder } = this.layout;
     const label = 'Chạm ly S / M / L trên kệ';
-    const font = canvasFont(11, 700);
+    const font = canvasFont(KITCHEN_TEXT_MIN, 700);
     const w = measure(label, font) + 12;
     const h = 19;
     const key = bakeCanvas(this, `mat-label:${w.toFixed(1)}`, w, h, (c) => {
@@ -807,6 +814,27 @@ export class KitchenScene extends Phaser.Scene {
     }
   }
 
+  /**
+   * A milk carton and a cream canister are carried *whole* — unlike a scoop of topping or a spoonful of
+   * sugar, whose container stays where it is — and the room has only one of each. So the counter
+   * shows nothing while one is in hand, and has it back the moment the carried one is gone.
+   */
+  private holdStation(station: Station | null) {
+    const previous = this.held;
+    this.held = station;
+    if (previous && previous !== station) this.showStationObject(previous, true);
+    if (station) this.showStationObject(station, false);
+  }
+
+  private showStationObject(station: Station, visible: boolean) {
+    if (station.kind !== 'milk' && station.kind !== 'foam') return;
+    const view = this.stationViews.get(station.key);
+    if (!view) return;
+    (view.art.getByName('object') as Phaser.GameObjects.Image | null)?.setVisible(visible);
+    // Its contact shadow goes with it; nothing is standing there to cast one.
+    (view.container.getByName('shadow') as Phaser.GameObjects.Image | null)?.setVisible(visible);
+  }
+
   private grabTool(station: Station, x: number, y: number) {
     const busy = this.busyMessage();
     this.pressStation(station, true);
@@ -831,6 +859,7 @@ export class KitchenScene extends Phaser.Scene {
     };
     this.toolState.x = this.toolState.originX;
     this.toolState.y = this.toolState.originY;
+    this.holdStation(station);
     playSound('pickup');
     if (station.kind === 'topping') nudge(getIngredient('toppings', station.id)?.name ?? station.name);
     else if (station.kind === 'ice') nudge('1 muỗng: ít đá · 2 muỗng: đá thường');
@@ -1102,9 +1131,14 @@ export class KitchenScene extends Phaser.Scene {
         .setRotation(Phaser.Math.DegToRad(-6 + (124 + 6) * tip))
         .setAlpha(show * (1 - tip * 0.85))
         .setVisible(show > 0);
-      if (show <= 0 && !this.gesture) {
-        this.tool.destroy();
-        this.tool = null;
+      if (show <= 0) {
+        // Whatever ended the carry — tipped in, put back, or the game put down — it is off the
+        // screen now, so the counter has its carton or canister back.
+        if (this.held) this.holdStation(null);
+        if (!this.gesture) {
+          this.tool.destroy();
+          this.tool = null;
+        }
       }
     }
 

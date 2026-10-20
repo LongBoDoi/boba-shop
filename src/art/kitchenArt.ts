@@ -205,6 +205,8 @@ export const MILK: Record<string, Sprite> = {
   oat: milkOat,
 };
 
+export const CREAM_CAN_ART = { width: 64, height: 150 };
+
 export const FOAM: Record<string, Sprite> = {
   cheese: foamCheese,
   brulee: foamBrulee,
@@ -321,8 +323,8 @@ export const ROOM_BG_TEA_SHELF = {
 export const ROOM_BG_CUP_STATION = { x: 22, y: 242, width: 300, height: 291, stackTops: [312, 278, 242] };
 export const ROOM_BG_ICE_MACHINE = { x: 1818, y: 339, width: 430, height: 230 };
 export const ROOM_BG_EXTRAS = {
-  // Bottle artwork ends at 146/150 of its box; its painted feet meet the jar's 541px base.
-  milkCenters: [880, 951], milkBase: 545, milkWidth: 60, milkHeight: 150,
+  // Carton artwork ends at 150/154 of its box; its painted feet meet the jar's 541px base.
+  milkCenters: [878, 952], milkBase: 545, milkWidth: 72, milkHeight: 154,
   foamCenters: [1022, 1093], foamBase: 541, foamWidth: 64,
   // The reference jar's 141×182 silhouette, on the counter just left of the utensil caddy.
   sugar: { x: 1166, y: 359, width: 141, height: 182 },
@@ -520,7 +522,7 @@ export const ART = {
   scoop: 102 / 64,
   milk: 99 / 157,
   syrup: 77 / 167,
-  foam: 150 / 149,
+  foam: CREAM_CAN_ART.width / CREAM_CAN_ART.height,
   card: 130 / 229,
   wall: 176 / 145,
   lamp: 112 / 173,

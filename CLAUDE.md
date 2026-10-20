@@ -634,7 +634,7 @@ What that changes beyond the shelf, since the day config feeds more than the roo
   picks out of `config.options`. The first drink of a new shop is as involved as the last — which
   is also why an order asks for only some of what is on the shelf; see "What an order asks for".
 - **The kitchen is fully furnished from the start.** `layoutKitchen` gates the syrup, the cartons,
-  the foam tubs and the ice machine on `config.categories`, so all of them stand on the bench on
+  the cream dispensers and the ice machine on `config.categories`, so all of them stand on the bench on
   day 1, and no tea tank or topping bin is drawn empty.
 - **The serve window starts at its widest.** `patienceMs` still adds `categories.length * 4_000`,
   which is now the constant 24 s rather than something that grew with the week — a full build needs
@@ -757,7 +757,7 @@ pan: it is the one thing that belongs to the player's hand.
   because a cup fetched to it would otherwise hang off the same edge, reading a meter nobody can
   see; the cup is aimed at where the wall is *going*, so the two travel together.
 - **Everything else is carried to the cup.** The topping containers, the ice machine's scoop, the
-  sugar jar, the milk bottles and the foam tubs are dragged or tapped: what is in hand follows
+  sugar jar, the milk cartons and the cream dispensers are dragged or tapped: what is in hand follows
   the finger above everything else, and on release either tips into the cup (`SCOOP` / `ICE_SCOOP`
   / `SUGAR_PUMP`, or `POUR` of `MILK_SPLASH` for a carton) or goes back. The cup does not move for
   these — drop onto it wherever it stands, and a drop counts over the cup's *home* as well as over
@@ -766,6 +766,12 @@ pan: it is the one thing that belongs to the player's hand.
   (`tipToolIn`), whichever way the tool got there: a tap is refused before it sets off, so nothing
   crosses the room to be turned away at the cup. Sugar carries a spoonful while its jar stays on
   the counter. Milk takes room in the cup, so a cup filled to the brim with tea has nowhere to put it.
+- **A carton and a cream dispenser are carried whole, so their place on the counter stands empty.** The room
+  has one of each, and `holdStation` hides the station's sprite and its contact shadow from the
+  moment it is lifted until the carried one is off the screen — tipped in, put back, or dropped
+  when the game was put down, which is why the release is in `update` where `show` reaches 0 rather
+  than in each of those three. A topping bin, the ice machine and the sugar jar stay where they
+  are, because what leaves them is a scoopful and not the container.
 - **While the cup is docked under a tap, nothing can be picked up.** A touch on any tool answers
   `Ly đang ở dưới vòi … — kéo ly ra trước` rather than lifting, and still takes the touch, so the
   room does not pan out from under it. The cup is up at the shelf, nowhere near the bench.
@@ -812,17 +818,30 @@ cup's id — so the arrangement is stable through pours, ticks and reloads, whil
 different one. It lays out the whole tray rather than the cubes currently in the cup, so adding the
 second scoop cannot move the first, and an index means the same thing however many scoops have gone
 in. The first three retain their fitted floor positions and float at the tea's front waterline.
-The second scoop is a single seeded pass over nine regions across the drink, with small offsets
-and varied tilts: no collision search, retries or absolute submerged-depth offsets.
-`cupIceSpreadPosition` maps those fractions into the current liquid height, so shallow tea cannot
-leave extra cubes suspended in clear air halfway up the glass. Whole rotated cube outlines are
+The second scoop adds one surface crown and eight chunky submerged cubes, with varied sizes,
+tilts and depths. Seeded candidates are spaced after fitting their actual outlines to the glass;
+the dry pile has its own uneven placements. This avoids the former small, uniform 3×3 grid.
+`cupIceSpreadPosition` maps those fractions into a band at most 40 sprite units below the tea's
+front surface, limited by the actual liquid height. The lower tea stays clear; extra cubes do not
+sink throughout its body. All wet candidates are evaluated for the largest available gap after
+fitting the glass, so the narrow band uses the cup's width and varied depths rather than clumping.
+The target band shrinks to the available tea height instead of projecting below its floor. Whole rotated cube outlines are
 fitted against the mouth, tapered sides and curved floor; dry ice still rests on the ingredient
 bed. Cubes settle briefly when they land, then stay put.
+When tea follows the ice, `cupIceSpreadPosition` starts from each cube's fitted dry pose. The water
+must reach its body before a smooth transition releases its position and resting angle into the
+surface band. The first nonzero fill never switches the entire second scoop to a new arrangement;
+continuity checks cover the initial trace of tea and every later fill step.
 
 The waterline is where the drawing gets its care: the submerged body is softened and tinted by the
 tea (more so with milk), with a small meniscus to anchor it to the surface, and the exposed crown
 remains behind the glass's front wall and rim. Crowns can rise into the clear space below the lip,
 but the shared `CUP_CONTENTS` clip contains every ingredient, including settling frames.
+The plastic painting is cleared over exposed silhouettes, so upper dry cubes stay as crisp as
+the first scoop; overlapping cutouts form a union. The painter preserves the same canvas transform
+for both ice passes, including the translation for cream headroom, so crowns and submerged bodies
+meet at the front waterline without a gap. Never reset an ice pass using the taller canvas's height
+divided by the unextended cup height.
 
 Sources and the imagegen prompts for the ice art are in `tools/ice-art-prompts.md`; repackage them
 with `python3 tools/cut-ice-art.py`, preserving the source transparency.
@@ -854,17 +873,33 @@ What the painting is allowed to decide, and what the geometry is:
   colour washes submerged ice and toppings. The wash over the toppings is
   drawn once per row of the pile — three rows, which is the grain that keeps the gradient from the
   back of the pile to the front while a near piece still covers a far one's wash.
+- **Ingredients are identified by pictures, without name tags.** Tea tanks have distinct
+  leaf, jasmine, anise, rolled-leaf, taro and matcha emblems (`art/ingredientMarks.ts`). Topping
+  pans show their contents unobscured. Sugar and ice use cube motifs. Milk cartons show a cow
+  or oats; cream dispensers show cheese or a caramel spiral, without printed words.
+- **Equipment and orders share artwork.** `kitchenMilkCartonSvg` and `kitchenCreamCanSvg` in
+  `art/kitchenEquipment.ts` define the complete packages; `prepareEquipmentTextures` rasterises
+  them and the station emblems once. Counter and carried equipment use the same textures.
+  Milk's painted foot remains at 150/154 of its box, on the sugar holder's counter line.
+  Minimum equipment scales keep the pictures recognizable in landscape. Cream counter objects
+  hide while held. See `docs/milk-cartons.md`, `docs/cream-options.md` and `docs/visual-orders.md`.
+- **Functional kitchen lettering keeps an 11 CSS pixel minimum** (`kitchen/typography.ts`):
+  cup rack S/M/L, cup-size badges, quantities and hints. The cup-size badge compensates for
+  docking scale. Ingredient names remain available to screen readers; there are no visible
+  ingredient name captions or plaques.
 - **Cream is a painted star-nozzle spiral** (`kitchen/creamPainter.ts`), using the transparent
   `cup-cream-contrast.png` sprite. Source and generation prompt: `docs/cream-art.md`. Keep the
   pronounced fluted folds and the curled peak; the previous smooth procedural tubing read as
   a heavy blob at actual cup size. Warm caramel shadows and a fine brown contour keep the cream
   visible against the white cup and pale kitchen; do not wash these contrasts out. The upper folds retain their height while the lower contact
   area is projected onto the tea's oval. Flavours are cached during loading (`prepareCupCream`
-  in `PreloadScene`); scooping and pouring only draw the cached image. Brûlée has a warm wash and
-  toasted accents. The base shares the tea's centre, width and curved boundary.
+  in `PreloadScene`); scooping and pouring only draw the cached image. Cheese stays ivory;
+  `finishBrulee` maps the painted shading into golden custard with torched patches and sugar flecks,
+  plus a matching golden mixing layer. Keep the two flavours visibly different on the same tea. The base shares the tea's centre, width and perspective, with a raised contact from `creamSurface`.
   Adding cream preserves tea level and ice positions. The cup glass is split at `FRONT_GLASS`
   into rear and near passes: rear glass, cream, then near-wall glass and the solid near lip, then
-  edge and decal. The lip remains visible at full fill regardless of the liquid mask. Do not lower
+  edge and decal. `CUP_NEAR_GLASS` traces the actual painted rim, whose front centre is y29–31;
+  do not use the tea well's mouth geometry for this mask (it previously missed the near lip). The lip remains visible at full fill regardless of the liquid mask. Do not lower
   the tea to make cream appear inside the cup. The peak can rise above the rim, and `CUP_OVERFLOW`
   gives its texture headroom. `settleCreamContact` blends only the wet foot into the drink colour,
   removes its dark cut-out seam, and adds a narrow uneven feather. `meltingArt` adds five visible
@@ -890,11 +925,16 @@ The design's full cup (`cut-cup-design.ps1`, `SURFACE_Y = 48`) is a drink made t
 fifth of the glass left clear for its lid, and the well was traced to it. Taking that as the game's
 brim made the meter lie: it ran to the end of its track, and then warned of tea going over the
 side, while the glass plainly still had room in it. The surface now stops where the painted rim
-stops it (y 36, its far edge reaching into the mouth of the cup), and `CUP_WELL` is carried up the
+stops it (y 28, centered in the mouth of the cup), and `CUP_WELL` is carried up the
 glass's own taper to meet it. `CUP_RX_BOTTOM`/`CUP_RX_TOP` measure the liquid; the mouth and curved
 floor also bound the solid ingredients through `cupInteriorAt`. The painted drink texture only
-has pixels from y 48 down; above it the body is the
-gradient alone, which is why nothing in there may depend on the sprite to carry a shape.
+has pixels from y 48 down; `CupPainter` maps that painted region into the full well, from
+`CUP_SURFACE_TOP` to the curved floor. Its transparent top padding must not enter the drink:
+it otherwise creates a horizontal colour seam beneath the raised surface.
+Adding either cream keeps the tea's fill and surface height unchanged. `creamSurface` lifts the
+mound progressively, by 8 cup-art units at full, so it stands mostly above the near lip. Its
+curved lower edge still overlaps the tea; the mixing layer follows that same raised contact and
+is clipped to the real liquid. The texture has 40 units of headroom rather than lowering the tea.
 
 
 ### The kitchen's artwork
@@ -960,7 +1000,7 @@ keeps the painted ticks, highlights and the cat decal on top of it:
   over the bowl differs; matched on width instead, a heaped one shrinks beside a flat one.
   Ice uses its own complete `SCOOPFUL.ice` painting. Foam takes the bare `SCOOP` with a blob
   drawn in its bowl;
-- the **cartons, syrup, foam tubs and every fitting** (wall, lamps, shelf, steel counter,
+- the **cartons, syrup, cream dispensers and every fitting** (wall, lamps, shelf, steel counter,
   cabinets, rail, coaster, plant, poster, cup stack, towel) are whole sprites
   that `kitchen/layout.ts` places by the painting's own lines and `kitchen/equipment.ts` draws;
 - **the room itself is one painted plate**, `room-bg.png` — the tiled wall and its lamps, the
@@ -1085,10 +1125,10 @@ asked for — the average drink is about 7% cheaper than when every category was
 ### The order, spoken back
 [OrderBubble.tsx](src/ui/OrderBubble.tsx) is the **panel docked across the top of the
 prep page** (it was a paper note clipped to a rail inside the room, then a bubble floating over
-it): who the drink is for, what it is called, how far along it is, and a tile for every thing that
-goes in it, each ticking off as the cup comes together. The heart beside the name is the
+it): who the drink is for, what it is called, how far along it is, and a picture for every thing that
+goes in it, each ticking off as the cup comes together. Toppings tick individually when added. The heart beside the name is the
 customer's patience, emptying from the top and turning amber then red. A 40px portrait, a 17px
-title, tiles up to 32px and a progress bar under the name; the empty state keeps the same box and
+title, picture tiles up to 48px (60px in a roomy column) and a progress bar under the name; the empty state keeps the same box and
 centres a one-line prompt in it.
 
 Six things about it are deliberate:
@@ -1110,6 +1150,14 @@ Six things about it are deliberate:
   seven-thing order had its last two ingredients covered by them;
 - the patience heart empties from the top through a clip on its own SVG, which is the one piece of
   the card that is redrawn as the day runs.
+
+`ingredientIconSvg` uses the actual tea-tank and topping-scoop atlas frames, the shared
+milk/cream packages, and the painted sugar scoop and ice. Milk and cream get enlarged ingredient
+insets; tea and topping tiles carry a small diagram of their shelf/tray location. There are no
+visible name captions. Only S/M/L, sugar percentage and ice scoop count remain as small badges;
+full Vietnamese ingredient names and completion states remain in accessible labels. The compact
+side column puts its waiting portraits into the header so they never push recipe pictures out
+of the card. See `docs/visual-orders.md`; `check-order-art.cjs` checks artwork mappings.
 
 The card itself takes no touches; only the queue portraits are live (`.live`).
 

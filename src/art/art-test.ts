@@ -19,7 +19,7 @@ import {
   titleAwningSvg, titlePearlsSvg, titleWallpaperSvg,
 } from './icons';
 import { ingredientIconSvg } from './ingredientIcon';
-import { kitchenActionIconSvg, kitchenBottleSvg, kitchenIceBoxSvg } from './kitchenEquipment';
+import { kitchenActionIconSvg, kitchenBottleSvg, kitchenMilkCartonSvg, kitchenIceBoxSvg } from './kitchenEquipment';
 import { backdropClouds, backdropWindow, cloudSvg, cloudX, shopBackdropSvg } from './shopBackdrop';
 import { svgDataUrl } from './svg';
 import { colors } from './theme';
@@ -207,7 +207,8 @@ cell(counterTopSvg(320, 400), 'counterTop 320×400');
 // ------------------------------------------------------------------ kitchen equipment
 
 section('Kitchen equipment');
-cell(kitchenBottleSvg(60, 150, '#F5CC63'), 'bottle 60×150 #F5CC63');
+cell(kitchenMilkCartonSvg(72, 154, 'whole'), 'fresh milk carton');
+cell(kitchenMilkCartonSvg(72, 154, 'oat'), 'oat milk carton');
 cell(kitchenBottleSvg(36, 90, '#B26337'), 'bottle 36×90 #B26337');
 cell(kitchenIceBoxSvg(160, 80), 'ice box 160×80');
 cell(kitchenActionIconSvg('cup'), 'action cup 20', 'dark');
@@ -242,6 +243,7 @@ imgCell(shopBackdropSvg(390, 300), 'backdrop');
 imgCell(counterTopSvg(390, 300), 'counterTop');
 imgCell(coinSvg(32), 'coin');
 imgCell(patienceHeartSvg(0.5, 48), 'heart .5');
-imgCell(kitchenBottleSvg(60, 150, '#F5CC63'), 'bottle');
+imgCell(kitchenMilkCartonSvg(72, 154, 'whole'), 'fresh milk carton');
+imgCell(kitchenMilkCartonSvg(72, 154, 'oat'), 'oat milk carton');
 
 (window as unknown as { artTestReady: boolean }).artTestReady = true;

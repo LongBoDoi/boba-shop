@@ -17,10 +17,10 @@ export const CUP_SURFACE_BOTTOM = 155;
  * It is deliberately not where the design's full cup paints its tea (y 48). That is a drink made to
  * be carried, with a fifth of the glass left clear for the lid, and taking it as the brim meant the
  * meter ran to the end of its track, and then warned of tea going over the side, while the glass
- * plainly still had room in it. The surface sits as high as the painted rim allows instead: its far
- * edge reaches into the mouth of the cup, just under the lip.
+ * plainly still had room in it. The full surface shares the mouth's centerline and width,
+ * reaching just under the painted lip. Cream rises above it without lowering the tea.
  */
-export const CUP_SURFACE_TOP = 36;
+export const CUP_SURFACE_TOP = 28;
 export const CUP_SURFACE_RUN = CUP_SURFACE_BOTTOM - CUP_SURFACE_TOP;
 /**
  * The inside of the tapered glass, as half-widths at the two ends of that run. The walls are
@@ -28,7 +28,7 @@ export const CUP_SURFACE_RUN = CUP_SURFACE_BOTTOM - CUP_SURFACE_TOP;
  * the walls — takes its width off the same line.
  */
 const CUP_RX_BOTTOM = 33.5;
-const CUP_RX_TOP = 42.4;
+const CUP_RX_TOP = 42.9;
 /** How deep the surface oval is for its width: the perspective the painted rim is drawn in. */
 export const CUP_SURFACE_RATIO = 0.235;
 const FLOOR_RY = 9;
@@ -44,6 +44,13 @@ const MOUTH_RY = 10.1;
 export const CUP_CONTENTS = `M13.6 ${MOUTH_Y} A${MOUTH_RX} ${MOUTH_RY} 0 0 1 99.4 ${MOUTH_Y} ${CUP_FLOOR}`;
 /** The inner floor painting is behind the ingredients; its front edge and wall glints are in front. */
 export const CUP_REAR_FLOOR_GLASS = `M21.3 132H91.7 ${CUP_FLOOR}`;
+/**
+ * Near glass traced from cup.png's painted lip, independently of the liquid well.
+ * The actual front lip crosses the centre at y29–31; the old y35.5 split missed it.
+ */
+export const CUP_NEAR_GLASS = 'M0 14H5 A51.5 12.7 0 0 0 108 14H113V174H0Z';
+/** The actual rim band, excluding the front wall below it. */
+export const CUP_NEAR_LIP_BAND = 'M0 12H113V34H0Z';
 /** Original vertical highlights on the near wall, continuing across the ingredient pile. */
 export const CUP_FRONT_GLINTS = 'M29 132L35 132L39 160Q36 162 33 160Z M76 132L81 132L78 158Q76 161 73 161Z';
 
@@ -167,11 +174,23 @@ export function cupIcePosition(raw: number, x: number, r: number, angle: number,
   return { ...fitted, angle: tilt, waterY, floating: raw > 0 && fitted.cy < dryY - 0.1, rise };
 }
 
-/** Second-scoop cubes spread through the actual liquid height instead of searching for a stack. */
-export function cupIceSpreadPosition(raw: number, x: number, r: number, angle: number, liquidDepth: number) {
+/** Submerged ice stays in a shallow band below the surface, limited by the available tea. */
+export function cupIceSpreadPosition(raw: number, x: number, r: number, angle: number, liquidDepth: number,
+  dryX?: number, dryY?: number, dryAngle = angle) {
   const surface = cupSurface(raw);
-  const y = surface.y + surface.ry + (CUP_FLOOR_FRONT - surface.y - surface.ry) * liquidDepth;
-  return { ...fitIceInsideCup(x, y, r, angle), angle, rise: 1 };
+  const surfaceFront = surface.y + surface.ry;
+  const band = Math.max(0, Math.min(40, CUP_FLOOR_FRONT - surfaceFront));
+  const y = surfaceFront + band * liquidDepth;
+  if (dryX === undefined || dryY === undefined) return { ...fitIceInsideCup(x, y, r, angle), angle, rise: 1 };
+  // Release the dry pile as the water reaches each body, rather than switching poses at raw > 0.
+  const contact = Math.max(0, Math.min(1, (dryY + r * 0.75 - surfaceFront) / (r * 1.5)));
+  const rise = contact * contact * (3 - 2 * contact);
+  if (!rise) return { cx: dryX, cy: dryY, angle: dryAngle, rise: 0 };
+  const target = fitIceInsideCup(x, y, r, angle);
+  const cy = dryY + (target.cy - dryY) * rise;
+  const tilt = dryAngle + (angle - dryAngle) * rise;
+  const cx = dryX + (target.cx - dryX) * rise;
+  return { ...fitIceInsideCup(cx, cy, r, tilt), angle: tilt, rise };
 }
 
 /**

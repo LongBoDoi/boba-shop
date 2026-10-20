@@ -20,12 +20,6 @@ export const TOPPING_PANS = toppingPans;
 export const TOPPING_SCOOPS = toppingScoops;
 export const TOPPING_PIECES = toppingPieces;
 
-/**
- * Where a pan's name card sits, as fractions of the pan's own box: centred on the near lip, which
- * is the one band of steel the ingredients never reach over.
- */
-export const TOPPING_TAG = { width: 0.72, bottom: 0.06 };
-
 export const TOPPING_PAN_ART: ToppingAtlas = {
   width: 1536, height: 1024,
   cells: {

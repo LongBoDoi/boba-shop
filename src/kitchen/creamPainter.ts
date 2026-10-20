@@ -1,9 +1,9 @@
-import { CUP_ART, CUP_SURFACE_RATIO, cupFillPath, cupSurface } from '../art/cupGeometry';
+import { CUP_ART, CUP_SURFACE_RATIO, cupFillPath, cupSurface, pourLevel } from '../art/cupGeometry';
 
 const RX = 42;
 const WIDTH = 104, HEIGHT = 80, ORIGIN_X = 52, ORIGIN_Y = 58;
 /** Room for the peak above the rim; the cup's near wall is composited in front of the cream. */
-export const CUP_OVERFLOW = 24 / CUP_ART.h;
+export const CUP_OVERFLOW = 40 / CUP_ART.h;
 const RESOLUTION = 4;
 const creams = new Map<string, HTMLCanvasElement>();
 const melting = new Map<string, HTMLCanvasElement>();
@@ -33,27 +33,48 @@ function creamArt(id: string, color: string, sprite: CanvasImageSource, teaColor
   c.globalCompositeOperation = 'destination-in';
   c.fillStyle = '#fff';
   c.fill(new Path2D(`M-52-58H52V0H42 A42 ${RX * CUP_SURFACE_RATIO} 0 0 1-42 0H-52Z`));
-  if (id === 'brulee') {
-    c.globalCompositeOperation = 'source-atop';
-    c.globalAlpha = 0.11;
-    c.fillStyle = color;
-    c.fillRect(-52, -58, WIDTH, HEIGHT);
-    c.globalAlpha = 1;
-    for (const [x, y, rx, ry] of [[-20,-4,14,5], [12,-19,10,4], [-1,-33,6,3]]) {
-      c.save();
-      c.translate(x, y);
-      c.scale(rx, ry);
-      const caramel = c.createRadialGradient(0,0,0,0,0,1);
-      caramel.addColorStop(0, 'rgba(175,96,24,0.25)');
-      caramel.addColorStop(1, 'rgba(175,96,24,0)');
-      c.fillStyle = caramel;
-      c.fillRect(-1,-1,2,2);
-      c.restore();
-    }
-  }
+  if (id === 'brulee') finishBrulee(c);
   if (teaColor) settleCreamContact(c, teaColor);
   creams.set(key, canvas);
   return canvas;
+}
+
+/** Golden custard shading and torched sugar distinguish brûlée at actual cup size. */
+function finishBrulee(c: CanvasRenderingContext2D) {
+  const pixels = c.getImageData(0, 0, WIDTH * RESOLUTION, HEIGHT * RESOLUTION);
+  const shadow = [144, 78, 29], custard = [240, 190, 108], highlight = [255, 246, 214];
+  for (let i = 0; i < pixels.data.length; i += 4) {
+    if (!pixels.data[i + 3]) continue;
+    const light = pixels.data[i] * 0.2126 + pixels.data[i + 1] * 0.7152 + pixels.data[i + 2] * 0.0722;
+    const upper = light >= 216;
+    const t = Math.max(0, Math.min(1, upper ? (light - 216) / 39 : (light - 90) / 126));
+    const from = upper ? custard : shadow, to = upper ? highlight : custard;
+    for (let channel = 0; channel < 3; channel++) pixels.data[i + channel] = Math.round(from[channel] * (1 - t) + to[channel] * t);
+  }
+  c.putImageData(pixels, 0, 0);
+  c.save();
+  c.globalCompositeOperation = 'source-atop';
+  // Thin caramelised patches sit on exposed folds, not over the entire cream.
+  const patches = [
+    'M-30-8 C-24-5-14-6-9-10 C-15-7-24-10-30-8Z',
+    'M5-16 C11-20 15-26 14-30 C18-27 17-19 11-15Z',
+    'M-8-31 C-4-36 1-39 6-40 C2-36 0-32-4-29Z',
+    'M-17 1 C-7 4 6 1 13-3 C6 4-6 7-17 4Z',
+  ];
+  c.fillStyle = 'rgba(164,81,20,0.38)';
+  for (const patch of patches) c.fill(new Path2D(patch));
+  for (const [cx, cy, rx, ry] of [[-19,-9,11,4],[11,-22,6,8],[-2,-34,5,5],[-3,1,14,3]]) {
+    for (let i = 0; i < 13; i++) {
+      const angle = i * 2.399963;
+      const r = Math.sqrt((i + 0.5) / 13);
+      const x = cx + Math.cos(angle) * r * rx, y = cy + Math.sin(angle) * r * ry;
+      c.fillStyle = i % 3 ? 'rgba(136,67,24,0.48)' : 'rgba(222,139,39,0.7)';
+      c.beginPath();
+      c.ellipse(x, y, 0.28 + (i % 3) * 0.13, 0.22 + (i % 2) * 0.12, angle, 0, Math.PI * 2);
+      c.fill();
+    }
+  }
+  c.restore();
 }
 
 /**
@@ -158,7 +179,7 @@ function meltingArt(id: string, teaColor: string) {
   const c = canvas.getContext('2d')!;
   const pixels = c.createImageData(canvas.width, canvas.height);
   const density = creamDensity();
-  const cream = id === 'brulee' ? [255, 234, 205] : [255, 246, 225];
+  const cream = id === 'brulee' ? [255, 218, 151] : [255, 246, 225];
   const tea = [1, 3, 5].map(at => parseInt(teaColor.slice(at, at + 2), 16));
   for (let px = 0; px < canvas.width; px++) {
     const x = (px + 0.5) / RESOLUTION - ORIGIN_X;
@@ -206,7 +227,7 @@ export function prepareCupCream(id: string, color: string, sprite: CanvasImageSo
 export function paintCupCream(c: CanvasRenderingContext2D, level: number, id: string, color: string, sprite: CanvasImageSource, teaColor?: string) {
   const { x, y, w, h } = creamBox(level);
   if (teaColor && level > 0) {
-    const surface = cupSurface(level);
+    const surface = creamSurface(level);
     const scale = surface.rx / RX;
     c.save();
     c.clip(new Path2D(cupFillPath(level)));
@@ -217,9 +238,15 @@ export function paintCupCream(c: CanvasRenderingContext2D, level: number, id: st
   c.drawImage(creamArt(id, color, sprite, teaColor), x, y, w, h);
 }
 
-/** The cream's foot shares the tea's centre, width and perspective at every fill. */
-export function creamBox(level: number) {
+/** Lift the mound as the cup fills; its curved lower edge still overlaps the tea. */
+export function creamSurface(level: number) {
   const surface = cupSurface(level);
+  return { ...surface, y: surface.y - 8 * pourLevel(level) };
+}
+
+/** Cream keeps the tea's width and perspective while standing mostly above the rim at full. */
+export function creamBox(level: number) {
+  const surface = creamSurface(level);
   const scale = surface.rx / RX;
   const foot = Math.min(surface.y, CUP_ART.h - (HEIGHT - ORIGIN_Y) * scale - 1);
   return { x: 56.5 - ORIGIN_X * scale, y: foot - ORIGIN_Y * scale, w: WIDTH * scale, h: HEIGHT * scale };
