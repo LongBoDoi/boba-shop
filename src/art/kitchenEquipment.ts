@@ -1,17 +1,6 @@
 /** Vector kitchen fittings: milk bottles and serving tools. */
 import { svgDoc, uid } from './svg';
 
-/** A wooden spoon carrying white sugar, in a 100×64 box. */
-export function kitchenSugarSpoonSvg(width: number, height: number): string {
-  return svgDoc(width, height,
-    '<path d="M37 38 L88 9 Q94 6 96 10 Q98 14 92 17 L44 47" fill="#D5A064" stroke="#99673C" stroke-width="2"/>' +
-    '<path d="M49 41 Q48 56 28 58 Q10 60 6 48 Q2 36 21 29 Q40 22 49 41 Z" fill="#DDAA70" stroke="#99673C" stroke-width="2"/>' +
-    '<path d="M10 43 Q12 33 22 34 Q28 25 35 33 Q44 31 45 43 Q29 53 10 43 Z" fill="#FFF9E8" stroke="#EAD6B6" stroke-width="1.3"/>' +
-    '<path d="M15 40 L21 36 L26 41 M29 35 L34 33 L38 39 M25 46 L30 41 L35 44" fill="none" stroke="#E7D4B5" stroke-width="1"/>' +
-    '<path d="M53 34 L89 13" stroke="#F6D3A3" stroke-width="1.5" stroke-linecap="round"/>',
-    '0 0 100 64');
-}
-
 /** A syrup bottle in a 60×150 box, its body tinted `color`. */
 export function kitchenBottleSvg(width: number, height: number, color: string): string {
   const id = uid('bottle');

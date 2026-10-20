@@ -2,7 +2,7 @@ import Phaser from 'phaser';
 
 import { Drink } from '../game/ingredients';
 import {
-  CUP_BASE, CUP_DECAL, CUP_EDGE, CUP_ICE, CUP_SPRITE, DRINK, DRINK_MILKY, DRINK_MILKY_TOP, DRINK_TOP,
+  CUP_BASE, CUP_CREAM, CUP_DECAL, CUP_EDGE, CUP_ICE, CUP_SPRITE, DRINK, DRINK_MILKY, DRINK_MILKY_TOP, DRINK_TOP,
 } from '../art/kitchenArt';
 import { TOPPING_PIECES } from '../art/toppingArt';
 import { createIceLayout, IcePlacement } from '../art/iceLayout';
@@ -24,6 +24,7 @@ function images(scene: Phaser.Scene): CupImages {
   const img = (asset: string) => scene.textures.get(tex(asset)).getSourceImage() as CanvasImageSource;
   return {
     sprite: img(CUP_SPRITE),
+    cream: img(CUP_CREAM),
     ice: img(CUP_ICE),
     pieces: img(TOPPING_PIECES),
     drink: (teaId, milky) => ({
@@ -65,7 +66,7 @@ export class CupView {
 
     const base = scene.add.image(0, 0, tex(CUP_BASE)).setOrigin(0).setDisplaySize(width, height)
       .setTint(GLASS).setAlpha(GLASS_TINT);
-    // The painted drink is taller than the cup's box and hangs above it, for cream over the rim.
+    // The texture extends above the rim for cream; front glass still covers its lower portion.
     const overflow = height * CUP_OVERFLOW;
     const drawn = scene.add.image(0, -overflow, this.key).setOrigin(0)
       .setDisplaySize(width, height + overflow);

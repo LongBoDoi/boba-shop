@@ -68,20 +68,22 @@ try {
       }
     }
   }
-  // Cream is the one thing allowed over the rim, so the texture's headroom has to hold all of it.
+  // Cream keeps the real tea surface. Its peak can rise over the rim, within the texture.
   const headroom = CUP_OVERFLOW * CUP_ART.h;
-  let highest = 0;
-  for (let fill = 0; fill <= 1.0001; fill += 0.02) {
+  for (let fill = 0; fill <= 1.1501; fill += 0.02) {
     const box = creamBox(fill);
-    highest = Math.min(highest, box.y);
-    assert(box.y >= -headroom,
-      `cream at fill ${fill.toFixed(2)} reaches ${box.y.toFixed(1)}, above the texture's ${-headroom} headroom`);
-    assert(box.y + box.h <= CUP_ART.h, `cream at fill ${fill.toFixed(2)} hangs below the cup's box`);
+    assert(box.y >= -headroom, 'The complete peak fits the texture');
+    assert(box.y + box.h <= CUP_ART.h, 'The cream texture clears the bottom');
+    const scale = box.w / 104;
+    const surface = cupSurface(fill);
+    assert(Math.abs(box.x + 52 * scale - 56.5) < 0.001, 'Cream shares the tea centre');
+    assert(Math.abs(box.y + 58 * scale - surface.y) < 0.001, 'Cream rests on the unchanged tea surface');
+    assert(Math.abs(42 * scale - surface.rx) < 0.001, 'Cream matches the tea width');
   }
-  assert(highest < 0, 'A full cup stands its cream over the rim, rather than fitting it inside');
 
   console.log(`check-cup-contents: ${outlines} ice outlines fit the cup; toppings clear the floor; `
-    + `second scoop spans the tea; cream rises ${(-highest).toFixed(1)} over the rim, inside ${headroom} of headroom.`);
+    + 'second scoop spans the tea; cream shares the unchanged tea surface and its peak fits the texture.');
+
 } finally {
   if (previousLoader) require.extensions['.ts'] = previousLoader;
   else delete require.extensions['.ts'];

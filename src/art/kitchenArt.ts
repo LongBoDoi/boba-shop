@@ -31,6 +31,7 @@ import jarMatcha from '../assets/kitchen/jar-matcha.png';
 import teaTank from '../assets/kitchen/tea-tank.png';
 import teaDispensers from '../assets/kitchen/tea-dispensers.png';
 import cup from '../assets/kitchen/cup.png';
+import cupCreamPainted from '../assets/kitchen/cup-cream-contrast.png';
 import cupBase from '../assets/kitchen/cup-base.png';
 import cupEdge from '../assets/kitchen/cup-edge.png';
 import cupDecal from '../assets/kitchen/cup-decal.png';
@@ -71,6 +72,7 @@ import pieceIceV2 from '../assets/kitchen/piece-ice-v2.png';
 import pieceIceClear from '../assets/kitchen/piece-ice-clear.png';
 import kitchenSugarCounter from '../assets/kitchen/kitchen-sugar-counter.png';
 import sugarJar from '../assets/kitchen/sugar-jar.png';
+import sugarScoop from '../assets/kitchen/sugar-scoop.png';
 import cupHolder from '../assets/kitchen/cup-holder.png';
 import teaRoom from '../assets/kitchen/tea-room.png';
 import teaFrontLeft from '../assets/kitchen/tea-front-left.png';
@@ -182,6 +184,7 @@ export const TEA_DISPENSER_ART = {
   } as Record<string, { x: number; y: number }>,
 };
 export const CUP_SPRITE = cup;
+export const CUP_CREAM = cupCreamPainted;
 export const CUP_BASE = cupBase;
 /**
  * The cat printed on the *front* of the cup, cut out of the glass so it can be laid over the
@@ -296,6 +299,8 @@ export const BIN_HEAD = 0.1713;
 /** Warm watercolor room; interactive equipment is anchored in this plate's coordinates. */
 export const ROOM_BG = kitchenSugarCounter;
 export const SUGAR_JAR = sugarJar;
+export const SUGAR_SCOOP = sugarScoop;
+export const SUGAR_SCOOP_ART = { width: 400, height: 242 };
 /**
  * The painted holder, lifted off the original room so the wall can pan behind it. It is cut to
  * twice its original room box and displayed at the extended counter's scale below — see
@@ -564,6 +569,7 @@ export const PRELOAD: Sprite[] = [
   // the room itself, and what stands in it
   ROOM_BG,
   SUGAR_JAR,
+  SUGAR_SCOOP,
   TEA_DISPENSERS,
   CUP_HOLDER,
   TOPPING_PANS,
@@ -577,6 +583,7 @@ export const PRELOAD: Sprite[] = [
   CUP_ICE,
   // the cup, and the painted tea inside it
   CUP_SPRITE,
+  CUP_CREAM,
   CUP_BASE,
   CUP_EDGE,
   CUP_DECAL,

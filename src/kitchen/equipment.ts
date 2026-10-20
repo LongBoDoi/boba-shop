@@ -1,9 +1,9 @@
 import Phaser from 'phaser';
 
-import { ART, FOAM, SCOOP, SCOOP_ART, SCOOP_BOWL, SCOOPFUL, TEA_DISPENSER_ART, TEA_DISPENSERS } from '../art/kitchenArt';
+import { ART, FOAM, SCOOP, SCOOP_ART, SCOOP_BOWL, SCOOPFUL, SUGAR_SCOOP, SUGAR_SCOOP_ART, TEA_DISPENSER_ART, TEA_DISPENSERS } from '../art/kitchenArt';
 import { TOPPING_PAN_ART, TOPPING_PANS, TOPPING_SCOOP_ART, TOPPING_SCOOPS } from '../art/toppingArt';
 import { toppingPanBands, ToppingPanShape } from '../art/toppingGeometry';
-import { kitchenBottleSvg, kitchenSugarSpoonSvg } from '../art/kitchenEquipment';
+import { kitchenBottleSvg } from '../art/kitchenEquipment';
 import { bakeCanvas, canvasFont, svgTexture, tex } from '../game/view';
 import { Station } from './layout';
 
@@ -172,10 +172,6 @@ export function bottleColor(station: Pick<Station, 'kind' | 'id'>) {
   return station.id === 'oat' ? '#EBD4A7' : '#FFF2D3';
 }
 
-export function sugarSpoonTexture(scene: Phaser.Scene): Promise<string> {
-  return svgTexture(scene, 'sugar-spoon', kitchenSugarSpoonSvg(200, 128), 200, 128);
-}
-
 /**
  * What a station puts in your hand — a scoopful, milk, a spoon of sugar or foam —
  * laid out in a `size`×`size` box from its top-left, as `Tool` in KitchenStation.
@@ -183,8 +179,8 @@ export function sugarSpoonTexture(scene: Phaser.Scene): Promise<string> {
 export function addTool(scene: Phaser.Scene, station: Station, size: number): Phaser.GameObjects.GameObject[] {
   const S = size;
   if (station.kind === 'sugar') {
-    if (!scene.textures.exists('sugar-spoon')) return [];
-    return [scene.add.image(0, 0, 'sugar-spoon').setOrigin(0).setDisplaySize(S, S * 0.64)];
+    return [scene.add.image(0, 0, tex(SUGAR_SCOOP)).setOrigin(0)
+      .setDisplaySize(S, S * SUGAR_SCOOP_ART.height / SUGAR_SCOOP_ART.width)];
   }
   if (station.kind === 'milk') {
     const key = `bottle-${bottleColor(station)}`;

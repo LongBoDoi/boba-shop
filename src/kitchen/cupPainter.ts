@@ -35,6 +35,8 @@ import { CUP_OVERFLOW, paintCupCream } from './creamPainter';
  * ice) are canvas clips here, which are cheap and move freely.
  */
 export interface CupImages {
+  /** Painted cream with transparent edges. */
+  cream: CanvasImageSource;
   /** The painted cup, whose glass is drawn over and under the drink. */
   sprite: CanvasImageSource;
   /** Clear ice texture, faint on each cube. */
@@ -62,7 +64,7 @@ export interface CupFrame {
 const W = CUP_ART.w;
 const H = CUP_ART.h;
 const BOX = `M0 0H${W}V${H}H0Z`;
-/** The texture is taller than the cup's box, the extra above the rim: see `CUP_OVERFLOW`. */
+/** The texture includes space above the rim for the cream peak. */
 const PAINT_H = H * (1 + CUP_OVERFLOW);
 /**
  * How much of the painted glass reads through the tea. `KitchenCup` asks for 22%, but the web build
@@ -85,6 +87,13 @@ function path(d: string): Path2D {
 }
 const WELL = new Path2D(CUP_WELL);
 const CONTENTS = new Path2D(CUP_CONTENTS);
+// Let the peak rise above the mouth while keeping the wet edge behind the inner walls.
+const CREAM_CONTENTS = new Path2D(CUP_CONTENTS);
+CREAM_CONTENTS.rect(0, -H * CUP_OVERFLOW, W, 28 + H * CUP_OVERFLOW);
+/** Near half of the mouth and the front wall. The far half stays behind the contents. */
+const FRONT_GLASS = 'M0 28H13.6 A42.9 7.5 0 0 0 99.4 28H113V174H0Z';
+const FRONT = new Path2D(FRONT_GLASS);
+const REAR = new Path2D(`${BOX} ${FRONT_GLASS}`);
 const FLOOR_EDGE = new Path2D(CUP_FLOOR_EDGE);
 
 // ------------------------------------------------------------------ the toppings' bed
@@ -271,7 +280,7 @@ export class CupPainter {
     const { c, canvas } = this;
     c.setTransform(1, 0, 0, 1, 0, 0);
     c.clearRect(0, 0, canvas.width, canvas.height);
-    // The cup's own coordinates, with the headroom above `y = 0` left to whatever stands over the rim.
+    // Shared cup coordinates keep every ingredient behind the same glass boundary.
     c.setTransform(canvas.width / W, 0, 0, canvas.height / PAINT_H, 0, 0);
     c.translate(0, H * CUP_OVERFLOW);
 
@@ -304,11 +313,31 @@ export class CupPainter {
     if (ice && poses) this.ice('exposed', frame, poses, ice.cubes, raw, tint, Boolean(milk));
     c.restore();
 
-    // The front rim and glass remain in front even when a floating crown reaches the mouth.
-    this.glass(filled, path(`${BOX} ${CUP_REAR_FLOOR_GLASS}`), true);
-    // Opaque whipped cream hides the painted rear glass. CupView's rim/edge layer stays in front.
-    // It is the one ingredient not held inside `CONTENTS`: a mound is allowed to stand over the rim.
-    if (foam) paintCupCream(c, raw, foam.id, foam.color);
+    // Split the cup into a rear and a near wall. Cream belongs between them, just
+    // like the tea: painting it after both walls makes it look pasted on the glass.
+    const walls = path(`${BOX} ${CUP_REAR_FLOOR_GLASS}`);
+    c.save();
+    c.clip(REAR, 'evenodd');
+    this.glass(filled, walls, true);
+    c.restore();
+    if (foam) {
+      c.save();
+      c.clip(CREAM_CONTENTS);
+      paintCupCream(c, raw, foam.id, foam.color, this.images.cream, tint);
+      c.restore();
+    }
+    c.save();
+    c.clip(FRONT);
+    this.glass(filled, walls, true);
+    if (foam) {
+      // The near lip is solid glass even where the liquid mask reaches the brim.
+      // It must cross in front of the cream, rather than disappear under its base.
+      c.save();
+      c.clip(new Path2D('M0 25H113V45H0Z'));
+      c.drawImage(this.images.sprite, 0, 0, W, H);
+      c.restore();
+    }
+    c.restore();
   }
 
   // ---------------------------------------------------------------- the painted glass

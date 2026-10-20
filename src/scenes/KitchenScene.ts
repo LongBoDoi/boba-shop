@@ -14,7 +14,7 @@ import { dispatch, store } from '../store';
 import { nudge, uiState } from '../ui-state';
 import { CupView } from '../kitchen/CupView';
 import {
-  addTool, bottleColor, bottleTexture, card, drawPan, drawShadow, fitText, foamTexture, measure, panExtent, plaque, roundRect, SHOP, sourceImage, sugarSpoonTexture,
+  addTool, bottleColor, bottleTexture, card, drawPan, drawShadow, fitText, foamTexture, measure, panExtent, plaque, roundRect, SHOP, sourceImage,
 } from '../kitchen/equipment';
 import { Atlas } from '../kitchen/atlas';
 import { cupSizeFor, findStation, hintFor, KitchenLayout, layoutKitchen, Station } from '../kitchen/layout';
@@ -107,7 +107,7 @@ export class KitchenScene extends Phaser.Scene {
     this.level = store.state.build.fill;
 
     // Vector equipment is rasterised once; the room is rebuilt when it is ready.
-    void Promise.all([sugarSpoonTexture(this), ...['#EBD4A7', '#FFF2D3'].map((color) => bottleTexture(this, color))])
+    void Promise.all(['#EBD4A7', '#FFF2D3'].map((color) => bottleTexture(this, color)))
       .then(() => this.relayout(true))
       .catch((error: unknown) => console.warn('[kitchen] equipment could not be drawn', error));
 
@@ -243,7 +243,10 @@ export class KitchenScene extends Phaser.Scene {
         items.push({ frame, x, y, w, h: gh, name: 'glow', visible: false });
       } else if (station.kind === 'sugar') {
         const jar = sourceImage(this, SUGAR_JAR);
-        const label = { x: w * 0.09, y: h * 0.74, w: w * 0.82, h: h * 0.2 };
+        // Centre the plaque on the holder's flat front (below its raised top rail).
+        const labelW = w * 0.82;
+        const labelH = h * 0.2;
+        const label = { x: (w - labelW) / 2, y: h * 0.82 - labelH / 2, w: labelW, h: labelH };
         const tag = plaque(station.name, label.w, label);
         const frame = atlas.add(`sugar-jar:${sized(w, h)}`, w, h, (c) => {
           c.drawImage(jar, 0, 0, w, h);

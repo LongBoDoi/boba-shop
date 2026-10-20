@@ -9,12 +9,15 @@ Created with the built-in imagegen tool using the user's supplied kitchen design
 | `src/assets/kitchen/sugar-jar.png` | Shipped transparent 282×364 cutout, twice its 141×182 room size |
 | `tools/prepare-sugar-art.py` | Repeatable trim and downsample; preserves source alpha |
 | `docs/sugar-counter-preview.png` | Browser preview at 390×844 |
+| `tools/sheets/sugar-scoop.png` | Generated painted wooden scoop carrying sugar crystals |
+| `src/assets/kitchen/sugar-scoop.png` | Transparent 400×242 carried scoop, preloaded with other kitchen artwork |
+| `docs/sugar-scoop-preview.png` | Carried scoop preview at phone size |
 
 The jar stands on the rear marble counter immediately left of the painted utensil caddy, with milk and cream to its left and toppings to its right. Its label is overlaid with “Đường” using the same cream plaque, border and Baloo lettering as the other equipment names. Milk bottles and cream tubs stand on the same counter plane as the jar; bottle shadows meet their painted feet rather than the transparent bottom padding. The floating sweetness plaque and added dots are removed. The existing sweetness steps, saved values and spoon carry behavior are unchanged.
 
 The wider plate has no bottle ledge. All shelf, cup-rack, topping-tray, ice-box and counter anchors were remeasured against the delivered plate. These measurements live in `kitchenArt.ts` and `toppingGeometry.ts`, and the rack's measured stack tops now live with its other geometry.
 
-Repackage the jar with `python3 tools/prepare-sugar-art.py` (Pillow required).
+Repackage the jar and scoop with `python3 tools/prepare-sugar-art.py` (Pillow required).
 
 Validation: typecheck, regression suite, production build, and browser tap/drag checks at 1400×900, 390×844 and 375×667. The browser checks verify the carried texture is the sugar spoon and that both a tap and a drag increase sweetness. Native app shells were not built.
 
@@ -22,6 +25,34 @@ The baked-in English plaque is removed from the source sprite, including its cre
 decorations and border. The shared Vietnamese plaque is the only name tag on the jar.
 
 ## Generation prompts
+
+### Brighter glass reflections
+
+Edited with built-in imagegen, retaining clear alpha between stronger white reflection bands.
+The earlier labelled jar is only a lighting reference; the current wooden front stays unlabelled
+so the centred Vietnamese tag is rendered by the shared plaque helper.
+
+```text
+undefined
+```
+
+### Painted sugar scoop
+
+Created with the built-in imagegen tool, referencing the jar for its wood and painting style.
+The scoop keeps its native aspect ratio and uses the existing carry, tip and sweetness behavior.
+
+```text
+Use case: stylized-concept. Asset type: production transparent PNG carried-tool sprite for a cozy boba cooking game. Reference image: the supplied sugar jar establishes the EXACT honey-oak watercolor/gouache painting style and material of its little wooden spoon. Create ONE isolated wooden SUGAR SCOOP filled with white sugar, no jar. A shallow oval wooden spoon bowl at LOWER LEFT, handle rising diagonally to UPPER RIGHT, viewed slightly from above, approximately 100:64 overall silhouette proportions. Give it a rich honey oak wooden bowl with visible warm wood grain, a subtly curved lip, soft amber/brown shaded underside, thin caramel edge, a smooth gently tapered handle with rounded end and a delicate golden highlight. Bowl is generously loaded with a small appetizing heap of irregular sparkling white sugar crystals, a handful of tiny softly faceted sugar chunks similar to those in the reference jar, with warm ivory shadows and bright white edges. The sugar must be instantly readable on a 70px-wide phone sprite; clear rounded silhouette with a generous spoon bowl occupying the left half of the sprite, substantial handle occupying right half. White sugar should read as sugar crystals, not whipped cream, ice cubes, foam, rice, or a solid white blob. Same refined warm hand-painted watercolor detail, soft texture and delicate caramel outlines as jar, not flat vector, not photorealistic. Entire spoon and handle visible, no clipping. Center it tightly on a landscape transparent canvas with about 3% transparent padding. TRUE transparent alpha outside the spoon, no drop shadow, no floating grains, no aura, no haze, no checkerboard drawn into pixels, no ground plane, no words, no hands, no people, no extra objects. Produce the finished game sprite, not a mockup.
+```
+
+### Clear glass (current source)
+
+The glass above the sugar has real alpha transparency, with only faint reflections retained.
+The Vietnamese plaque is centred on the holder's flat front, below its raised rail.
+
+```text
+Use case: precise-object-edit. Edit target: supplied transparent sugar jar game sprite. Change ONLY the empty GLASS area above and between the sugar cubes and the lid to genuinely transparent alpha. The upper inside of the glass currently has opaque white/frosted painted fill: REMOVE that fill so a game background placed behind this PNG is plainly visible through the empty glass. It must be clear transparent glass, NOT frosted glass, NOT white milk, NOT an opaque white or beige rectangle. Keep only delicate thin glass edge highlights, amber glass rims and subtle translucent reflections (very low opacity), making most empty upper interior pixels alpha zero or at most 15 percent opacity. Keep the wooden spoon, sugar cubes, wooden lid, knob, entire plain wooden holder and wood texture opaque and exactly unchanged in design, proportions, position, color, scale. Preserve transparent pixels outside the object; no shadow, halo or backdrop. Do not add a name tag or any lettering: holder front stays plain wood. Preserve canvas and silhouette. Output a genuinely transparent PNG with the wall behind able to show through the upper jar.
+```
 
 ### Remove the baked-in plaque (current source)
 

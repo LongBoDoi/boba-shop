@@ -30,13 +30,13 @@ export const CUP_SURFACE_RUN = CUP_SURFACE_BOTTOM - CUP_SURFACE_TOP;
 const CUP_RX_BOTTOM = 33.5;
 const CUP_RX_TOP = 42.4;
 /** How deep the surface oval is for its width: the perspective the painted rim is drawn in. */
-const SURFACE_RATIO = 0.235;
+export const CUP_SURFACE_RATIO = 0.235;
 const FLOOR_RY = 9;
 export const CUP_FLOOR_FRONT = CUP_SURFACE_BOTTOM + FLOOR_RY;
 const CUP_FLOOR = `L90 ${CUP_SURFACE_BOTTOM} A${CUP_RX_BOTTOM} ${FLOOR_RY} 0 0 1 23 ${CUP_SURFACE_BOTTOM} Z`;
 export const CUP_FLOOR_EDGE = `M23 ${CUP_SURFACE_BOTTOM} A${CUP_RX_BOTTOM} ${FLOOR_RY} 0 0 0 90 ${CUP_SURFACE_BOTTOM}`;
 /** Inner glass traced from cup-design.png, carried up its own taper to that brim. */
-export const CUP_WELL = `M${56.5 - CUP_RX_TOP} ${CUP_SURFACE_TOP} A${CUP_RX_TOP} ${(CUP_RX_TOP * SURFACE_RATIO).toFixed(2)} 0 0 1 ${56.5 + CUP_RX_TOP} ${CUP_SURFACE_TOP} ${CUP_FLOOR}`;
+export const CUP_WELL = `M${56.5 - CUP_RX_TOP} ${CUP_SURFACE_TOP} A${CUP_RX_TOP} ${(CUP_RX_TOP * CUP_SURFACE_RATIO).toFixed(2)} 0 0 1 ${56.5 + CUP_RX_TOP} ${CUP_SURFACE_TOP} ${CUP_FLOOR}`;
 const MOUTH_Y = 28;
 const MOUTH_RX = 42.9;
 const MOUTH_RY = 10.1;
@@ -147,7 +147,7 @@ export function cupSurface(raw: number) {
   const fill = pourLevel(raw);
   const y = CUP_SURFACE_BOTTOM - fill * CUP_SURFACE_RUN;
   const rx = CUP_RX_BOTTOM + fill * (CUP_RX_TOP - CUP_RX_BOTTOM);
-  return { y, rx, ry: rx * SURFACE_RATIO, opacity: raw > 0 ? 1 : 0 };
+  return { y, rx, ry: rx * CUP_SURFACE_RATIO, opacity: raw > 0 ? 1 : 0 };
 }
 
 /** Seat cubes at the near side of the shared oval, so their crowns sit in front of its rear edge. */

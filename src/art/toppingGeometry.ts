@@ -9,7 +9,7 @@ export interface ToppingPanShape {
 export interface ToppingTrayEdge { x0: number; x1: number; y: number }
 
 /** Calibrate the tray's two ends; every divider between them stays on the same straight line. */
-const TRAY_BACK: ToppingTrayEdge = { x0: 1481, x1: 1798, y: 396 };
+const TRAY_BACK: ToppingTrayEdge = { x0: 1487, x1: 1798, y: 396 };
 const TRAY_FRONT: ToppingTrayEdge = { x0: 1456, x1: 1819, y: 553 };
 export const TOPPING_TRAY_EDGES: ToppingTrayEdge[] = [0, 1 / 3, 2 / 3, 1].map(t => ({
   x0: TRAY_BACK.x0 + (TRAY_FRONT.x0 - TRAY_BACK.x0) * t,

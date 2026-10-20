@@ -831,11 +831,11 @@ with `python3 tools/cut-ice-art.py`, preserving the source transparency.
 
 The cup is painted in one pass by `kitchen/cupPainter.ts`, in the design's own 113×174 sprite
 space, in this order: the faint cool glass backing, liquid inside the traced `CUP_WELL`, rear floor
-detail, submerged ice, the pile of toppings, exposed ice, the glass's front wall, opaque whipped
-cream, then the front reflections, edge highlights and cat decal. Every moving boundary — the tea's surface, the waterline the
+detail, submerged ice, the pile of toppings, exposed ice, rear glass, opaque whipped
+cream, then near-wall glass, the front lip, reflections, edge highlights and cat decal. Every moving boundary — the tea's surface, the waterline the
 ice is split at, the wash over each band of the pile — is a **canvas clip**, which costs nothing
-and can move freely. The shared `CUP_CONTENTS` boundary contains every ingredient pass **but the
-cream**, which is allowed over the rim; the cup's edge and rim artwork stays in front. `check-cup-contents.cjs` checks whole
+and can move freely. The shared `CUP_CONTENTS` boundary contains tea, ice and toppings. Cream
+shares the tea surface but can rise above the mouth; the near glass and lip stay in front of it. `check-cup-contents.cjs` checks whole
 ice and topping outlines against the glass across fills, portions and cup seeds.
 
 What the painting is allowed to decide, and what the geometry is:
@@ -854,18 +854,26 @@ What the painting is allowed to decide, and what the geometry is:
   colour washes submerged ice and toppings. The wash over the toppings is
   drawn once per row of the pile — three rows, which is the grain that keeps the gradient from the
   back of the pile to the front while a near piece still covers a far one's wash.
-- **Cream is an upright piped spiral** (`kitchen/creamPainter.ts`): three narrowing coils,
-  nozzle ridges and a curled peak, with warm toasted accents for brûlée. Each flavour is baked
-  once into a small canvas and scaled uniformly, so its height is never flattened into a surface
-  oval. **Nothing shortens it to fit the glass**: it is piped to its full height onto wherever the
-  tea stands, so a mound on a full cup stands over the rim, and that is why the painted texture is
-  `CUP_OVERFLOW` taller than the cup's own box with the extra above it (`CupView` draws it lifted by
-  the same amount). It used to be kept inside: the liquid was dropped to three quarters to make room
-  — a full cup visibly lost tea when the cream went on — and the mound itself was clipped to
-  `CUP_CONTENTS`. Both are gone; the clip is the one place an ingredient is not held inside the
-  glass, and the headroom is what stops the canvas edge shearing the peak flat. Cream covers the ice
-  and rear glass, with the cup's rim and edge still in front, and the texture is never rebuilt on
-  each pouring frame.
+- **Cream is a painted star-nozzle spiral** (`kitchen/creamPainter.ts`), using the transparent
+  `cup-cream-contrast.png` sprite. Source and generation prompt: `docs/cream-art.md`. Keep the
+  pronounced fluted folds and the curled peak; the previous smooth procedural tubing read as
+  a heavy blob at actual cup size. Warm caramel shadows and a fine brown contour keep the cream
+  visible against the white cup and pale kitchen; do not wash these contrasts out. The upper folds retain their height while the lower contact
+  area is projected onto the tea's oval. Flavours are cached during loading (`prepareCupCream`
+  in `PreloadScene`); scooping and pouring only draw the cached image. Brûlée has a warm wash and
+  toasted accents. The base shares the tea's centre, width and curved boundary.
+  Adding cream preserves tea level and ice positions. The cup glass is split at `FRONT_GLASS`
+  into rear and near passes: rear glass, cream, then near-wall glass and the solid near lip, then
+  edge and decal. The lip remains visible at full fill regardless of the liquid mask. Do not lower
+  the tea to make cream appear inside the cup. The peak can rise above the rim, and `CUP_OVERFLOW`
+  gives its texture headroom. `settleCreamContact` blends only the wet foot into the drink colour,
+  removes its dark cut-out seam, and adds a narrow uneven feather. `meltingArt` adds five visible
+  mixing plumes fading 22–36 art units into the drink, joined by a continuous settled cream
+  layer about 7 units deep. `creamDensity` bakes a shared soft concentration field during loading:
+  broad diffusion, brighter cores and faint offshoots replace sharp pointed ribbons. Side lighting
+  and shaded microbubbles round the layer; its diffuse lower edge covers the plume roots. Both
+  layer and plumes are clipped to the liquid, behind the near glass and decal. These per-colour
+  variants are cached; keep the contact fringe inside `CREAM_CONTENTS`.
 - **The dispenser's tea** is drawn into the tank's transparent chamber with the same shading, more
   strongly: it is a big volume behind glass, and the raster texture that works in a cup softens it.
   The tank's own glass and hardware are the painted sprite, untouched.
