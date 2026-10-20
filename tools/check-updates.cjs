@@ -164,45 +164,112 @@ assert.equal(parseRelease({ html_url: 'u' }), null, 'A release with no tag is no
 assert.equal(parseRelease({ tag_name: 'v3.58', html_url: 'u' }).apkUrl, null, 'A release with no .apk says so');
 assert.ok(compareVersions('2.10', '2.9') > 0, 'Versions order by number, not by text');
 
-// ============================================================ asking the site, from inside the app
-let siteChecks = Promise.resolve();
+// ============================================================ asking the site, and applying it
 /**
- * The site is read in **native** code, and this is the check that keeps it that way.
+ * The update mechanism against a **fake device**: a stub of the two plugins it works through.
  *
- * `fetch` cannot read it from inside the app: the WebView's origin is `https://localhost`, every
- * request to the site is therefore cross-origin, and a static file on the host carries no
- * `Access-Control-Allow-Origin`. The browser refuses the response, `fetchManifest` catches the
- * `TypeError` and answers "nothing to report" — which is indistinguishable from an app that is
- * up to date, and is why two releases went by with no card on anybody's phone and nothing in any
- * log. There is no test a browser can run that would have caught it, so what is pinned here is
- * the shape of the fix: the request goes through `CapacitorHttp`, and both of the response shapes
- * the two platforms hand back are read.
+ * Everything from here down is phone-only in the sense that it cannot be driven in a browser, and
+ * that is exactly why it is worth faking. Both bugs this file has caught so far were of a shape no
+ * typechecker and no browser can see:
+ *
+ * - the site was read with `fetch`, which is blocked by CORS in a WebView served from
+ *   `https://localhost`, and the check reads a refusal as "nothing to report" — so the mechanism
+ *   was **silent**, which is what an app that is up to date looks like;
+ * - the files were fetched with `Filesystem.downloadFile`, which writes straight to a stream and
+ *   fails on a directory nobody made first.
+ *
+ * So the stub is written to be **strict where the device is strict**: a write or a copy into a
+ * directory that does not exist is refused, exactly as the plugin refuses it. A stub that flatters
+ * the code is worse than no stub (see the audio engine's `playbackRate`, which went green through
+ * a whole outage).
  */
-const liveSource = fs.readFileSync(path.join(root, 'src/updates/live.ts'), 'utf8');
-assert.match(liveSource, /CapacitorHttp\.get\(/, 'The site is asked through native HTTP');
-assert.doesNotMatch(liveSource, /fetch\(\s*`\$\{SITE\}/,
-  'A site read through `fetch` is blocked by CORS in the app and fails silently — use `readSite`.');
-
+let siteChecks = Promise.resolve();
 {
   const Module = require('node:module');
-  const served = {
-    'update.json': { status: 200, data: { webBuild: 'commit-2', nativeVersion: 2, files: { 'index.html': 1, 'assets/index-aaa.js': 2 } } },
-    'index.html': { status: 200, data: '<script type="module" src="/assets/index-aaa.js"></script>' },
-  };
+
+  const FILES = { 'index.html': 1, 'assets/index-aaa.js': 2, 'assets/cup-bbb.png': 3, 'sw.js': 4 };
+  const SERVED = { webBuild: 'commit-2', nativeVersion: 2, files: FILES };
+  const PAGE = '<script type="module" src="/assets/index-aaa.js"></script>';
+  // One site serves one index.html, and both halves read it: the check holds it against the
+  // manifest, and the update then writes that same page down as a file of the build.
+  const body = (file) => (file === 'index.html' ? PAGE : `base64:${file}`);
+  const site = { 'update.json': { status: 200, data: SERVED } };
+  for (const path of Object.keys(FILES)) site[path] = { status: 200, data: body(path) };
+
+  // The app's filesystem: directories it has, files it holds, and the order things happened in.
+  // What the app's data directory is called on the device: `setServerBasePath` is handed the
+  // absolute path, which is `getUri`'s answer with the `file://` taken off it.
+  const HOME = '/data/user/0/com.manhlong.bobashop.phaser/files';
+  const dirs = new Set();
+  const disk = new Map();
+  const order = [];
+  const parentOf = (path) => path.split('/').slice(0, -1).join('/');
+  const haveParent = (path) => parentOf(path) === '' || dirs.has(parentOf(path));
+  // Every request the app makes, with what it asked the response to be: the check reads text, a
+  // file of the build comes down as a blob, and telling them apart is how both are pinned.
   const asked = [];
+  const downloaded = () => asked.filter(([, type]) => type === 'blob').map(([file]) => file);
+  let basePath = '';
+  let persisted = 0;
+  let mkdirWorks = true;
+
   const core = {
     Capacitor: { isNativePlatform: () => true },
     CapacitorHttp: {
-      get: async ({ url }) => {
-        const file = url.replace(/^.*\//, '');
-        asked.push(file);
-        // Anything not laid out above is a 404, the same as it would be off the real host.
-        return served[file] ?? { status: 404, data: '' };
+      get: async ({ url, responseType }) => {
+        const file = url.replace(/^https:\/\/[^/]+\//, '');
+        asked.push([file, responseType]);
+        return site[file] ?? { status: 404, data: '' };
       },
     },
-    WebView: { getServerBasePath: async () => ({ path: '' }) },
+    WebView: {
+      getServerBasePath: async () => ({ path: basePath }),
+      setServerBasePath: async ({ path }) => { basePath = path; order.push(`serve ${path}`); },
+      persistServerBasePath: async () => { persisted += 1; },
+    },
   };
-  const filesystem = { Directory: { Data: 'DATA' }, Encoding: { UTF8: 'utf8' }, Filesystem: {} };
+  const filesystem = {
+    Directory: { Data: 'DATA' },
+    Encoding: { UTF8: 'utf8' },
+    Filesystem: {
+      mkdir: async ({ path, recursive }) => {
+        if (!mkdirWorks) return;
+        if (dirs.has(path)) throw new Error('Directory already exists');
+        if (!recursive && !haveParent(path)) throw new Error('Parent directory does not exist');
+        const parts = path.split('/');
+        for (let i = 1; i <= parts.length; i++) dirs.add(parts.slice(0, i).join('/'));
+      },
+      rmdir: async ({ path }) => {
+        if (!dirs.has(path)) throw new Error('Directory does not exist');
+        for (const held of [...dirs]) if (held === path || held.startsWith(`${path}/`)) dirs.delete(held);
+        for (const held of [...disk.keys()]) if (held.startsWith(`${path}/`)) disk.delete(held);
+      },
+      readdir: async ({ path }) => {
+        if (!dirs.has(path)) throw new Error('Directory does not exist');
+        const inside = new Set();
+        for (const held of dirs) if (parentOf(held) === path) inside.add(held.split('/').pop());
+        return { files: [...inside].map((name) => ({ name })) };
+      },
+      writeFile: async ({ path, data, recursive }) => {
+        if (!haveParent(path)) {
+          if (!recursive) throw new Error('File does not exist');
+          const parts = parentOf(path).split('/');
+          for (let i = 1; i <= parts.length; i++) dirs.add(parts.slice(0, i).join('/'));
+        }
+        disk.set(path, data);
+        order.push(`write ${path}`);
+      },
+      copy: async ({ from, to }) => {
+        if (!disk.has(from)) throw new Error('File does not exist');
+        // The real plugin refuses rather than making the destination's parent. See `mkdirp`.
+        if (!haveParent(to)) throw new Error('Parent directory does not exist');
+        disk.set(to, disk.get(from));
+        order.push(`copy ${to}`);
+      },
+      getUri: async ({ path }) => ({ uri: `file://${HOME}/${path}` }),
+    },
+  };
+
   const load = Module._load;
   Module._load = (request, ...rest) => {
     if (request === '@capacitor/core') return core;
@@ -216,37 +283,124 @@ assert.doesNotMatch(liveSource, /fetch\(\s*`\$\{SITE\}/,
     Module._load = load;
   }
 
+  // --- the site is read in native code, and this is the check that keeps it that way
+  const liveSource = fs.readFileSync(path.join(root, 'src/updates/live.ts'), 'utf8');
+  assert.match(liveSource, /CapacitorHttp\.get\(/, 'The site is asked through native HTTP');
+  assert.doesNotMatch(liveSource, /fetch\(\s*`\$\{SITE\}/,
+    'A site read through `fetch` is blocked by CORS in the app and fails silently — use `readSite`.');
+  assert.doesNotMatch(liveSource, /Filesystem\.downloadFile\(/,
+    '`Filesystem.downloadFile` is the deprecated legacy path and writes into no directory of its own.');
+
   // Its own complaints are part of what it does: a check that goes quiet has to say why, because
   // the quiet itself is what cannot be told apart from an app that is up to date.
   const said = [];
-  const read = async () => {
+  const quietly = async (run) => {
     const warn = console.warn;
     console.warn = (...parts) => said.push(parts.join(' '));
     try {
-      const found = await live.fetchManifest();
-      return found && found.webBuild;
+      return await run();
     } finally {
       console.warn = warn;
     }
   };
+  const read = async () => {
+    const found = await quietly(() => live.fetchManifest());
+    return found && found.webBuild;
+  };
 
   siteChecks = (async () => {
+    // --- what the site is
     // Android parses a JSON response before it reaches the page; iOS hands back the text. The
     // manifest has to read the same either way, and only one of the two can be tried on a desk.
     assert.equal(await read(), 'commit-2', 'The manifest reads when the response arrives parsed');
-    served['update.json'].data = JSON.stringify(served['update.json'].data);
+    site['update.json'].data = JSON.stringify(SERVED);
     assert.equal(await read(), 'commit-2', 'and when it arrives as text');
-    assert.deepEqual(asked.slice(0, 2), ['update.json', 'index.html'], 'The page is held against the manifest');
 
     // The two silences that are not an update, told apart from each other only in the log.
-    served['index.html'].data = '<script type="module" src="/assets/index-bbb.js"></script>';
+    site['index.html'].data = '<script type="module" src="/assets/index-ccc.js"></script>';
     assert.equal(await read(), null, 'A site caught mid-deploy is a wait, not an update');
-    served['index.html'].data = '<script type="module" src="/assets/index-aaa.js"></script>';
-    served['update.json'] = { status: 503, data: '' };
+    site['index.html'].data = PAGE;
+    site['update.json'] = { status: 503, data: '' };
     assert.equal(await read(), null, 'A site that answers badly is nothing to report');
-
+    site['update.json'] = { status: 200, data: JSON.stringify(SERVED) };
     assert.match(said.join('\n'), /mid-deploy/, 'and a deploy in flight says so');
     assert.match(said.join('\n'), /answered 503/, 'as does a host that will not answer');
+
+    // --- the first update an installed app does: nothing of its own to copy from
+    const manifest = await live.fetchManifest();
+    const seen = [];
+    await live.applyUpdate(manifest, (progress) => seen.push(progress.done), () => false);
+
+    assert.deepEqual(downloaded().sort(), Object.keys(FILES).sort(),
+      'Every file of the build is fetched, because an app has nothing on disk to copy from');
+    assert.deepEqual(asked.filter(([, type]) => type === 'text').map(([file]) => file).slice(-2),
+      ['update.json', 'index.html'],
+      'The check itself reads as text, and reads the page to hold it against the manifest');
+    for (const file of Object.keys(FILES)) {
+      assert.equal(disk.get(`builds/commit-2/${file}`), body(file), `${file} is written as itself`);
+    }
+    assert.equal(order.at(-1), `serve ${HOME}/builds/commit-2`,
+      'The build is served, by its absolute path, only once it is all there');
+    assert.equal(order.at(-2), 'write builds/commit-2/update.json',
+      'and its manifest is the last file written, so a directory holding one is a whole build');
+    assert.equal(seen.at(-1), 1, 'The bar reaches the end');
+
+    // --- it boots, so it is kept, and the build it replaced is thrown away
+    await quietly(() => live.settle());
+    assert.equal(persisted, 1, 'A build that has booted is made permanent');
+
+    // --- the next update copies what has not changed and fetches what has
+    const NEXT = {
+      webBuild: 'commit-3',
+      nativeVersion: 2,
+      files: { ...FILES, 'assets/index-ddd.js': 9, 'assets/index-aaa.js': undefined },
+    };
+    delete NEXT.files['assets/index-aaa.js'];
+    for (const file of Object.keys(NEXT.files)) site[file] = { status: 200, data: body(file) };
+    // `running()` reads the app's **own** manifest off the local server, which is same-origin and
+    // so is a plain `fetch` — pinned here, because swapping it for the site's reader would break it.
+    globalThis.fetch = async (url) => {
+      assert.equal(url, 'update.json', 'The app reads its own manifest relatively, off its own server');
+      return { ok: true, json: async () => manifest };
+    };
+    asked.length = 0;
+    order.length = 0;
+    await live.applyUpdate(NEXT, () => {}, () => false);
+    assert.deepEqual(downloaded().sort(), ['assets/index-ddd.js', 'index.html', 'sw.js'],
+      'Only the new bundle and the unhashed files come down; the artwork is copied across');
+    assert.deepEqual(order.filter((what) => what.startsWith('copy ')), ['copy builds/commit-3/assets/cup-bbb.png'],
+      'and the copy lands in a directory that was made first, which is why `mkdirp` may not fail quietly');
+    assert.equal(disk.get('builds/commit-3/assets/cup-bbb.png'), 'base64:assets/cup-bbb.png',
+      'A copied file is the file');
+
+    // --- a failure says which file and why, because the card is the only place anyone reads it
+    site['assets/index-ddd.js'] = { status: 500, data: '' };
+    dirs.delete('builds/commit-4');
+    await assert.rejects(
+      () => live.applyUpdate({ ...NEXT, webBuild: 'commit-4' }, () => {}, () => false),
+      (error) => {
+        assert.match(error.message, /assets\/index-ddd\.js/, 'The failure names the file');
+        assert.match(error.message, /500/, 'and what the server said about it');
+        return true;
+      },
+      'A file that cannot be fetched fails the update rather than half-applying it',
+    );
+    assert.equal(basePath, `${HOME}/builds/commit-3`, 'and what is being served does not move');
+
+    // --- the parents are made twice over, on purpose
+    // `mkdirp` makes them for the copies, and every write asks for them again (`recursive`). The
+    // belt is there because the braces are what broke: the downloader this replaced wrote straight
+    // into a stream and failed on any directory that was not already there. So the writes have to
+    // stand up on a device where nothing made one — which is what this pretends to be.
+    site['assets/index-ddd.js'] = { status: 200, data: body('assets/index-ddd.js') };
+    basePath = '';
+    mkdirWorks = false;
+    dirs.clear();
+    await live.applyUpdate({ ...NEXT, webBuild: 'commit-5' }, () => {}, () => false);
+    for (const file of Object.keys(NEXT.files)) {
+      assert.equal(disk.get(`builds/commit-5/${file}`), body(file),
+        `${file} lands even where no directory was made for it`);
+    }
   })();
 }
 

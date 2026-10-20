@@ -31,8 +31,18 @@ import { directories, isWhole, parseManifest, plan, UpdateManifest } from './man
 export const SITE = 'https://boba-shop.expo.app';
 /** The app's data directory for downloaded builds, one directory per build. */
 const ROOT = 'builds';
-/** A whole update has this long to finish before it is called a failure. */
-const DEADLINE_MS = 10 * 60_000;
+/**
+ * A whole update has this long to finish before it is called a failure.
+ *
+ * It is generous because it is the wrong tool for a stalled connection: twenty-two megabytes on a
+ * phone's data is legitimately slow, and a deadline tight enough to catch a stall would fail an
+ * update that was working. The stall is caught per request instead, by the timeouts below, which
+ * the native HTTP layer enforces on a connection that opens and then says nothing.
+ */
+const DEADLINE_MS = 20 * 60_000;
+/** How long one request may take to connect, and how long it may then go quiet mid-file. */
+const CONNECT_MS = 20_000;
+const READ_MS = 60_000;
 
 export const isApp = () => Capacitor.isNativePlatform();
 
@@ -66,6 +76,8 @@ async function readSite(file: string): Promise<unknown> {
     url: `${SITE}/${file}`,
     headers: { 'Cache-Control': 'no-cache' },
     responseType: 'text',
+    connectTimeout: CONNECT_MS,
+    readTimeout: READ_MS,
   });
   if (status < 200 || status >= 300) throw new Error(`${file} answered ${status}`);
   return data;
@@ -73,6 +85,54 @@ async function readSite(file: string): Promise<unknown> {
 
 const asText = (data: unknown): string => (typeof data === 'string' ? data : JSON.stringify(data));
 const asJson = (data: unknown): unknown => (typeof data === 'string' ? JSON.parse(data) : data);
+
+export const reasonFor = (error: unknown): string =>
+  (error instanceof Error ? error.message : String(error)) || 'không rõ lý do';
+
+/**
+ * Do one step of an update, and if it fails, say **which** step it was.
+ *
+ * An update is a few hundred native calls over two platforms, and what comes back from a failed
+ * one is a sentence with no subject: "File does not exist", "Error downloading file". A player
+ * cannot read a log and neither can anyone they report it to, so the card shows this text, and
+ * what it is worth depends entirely on it naming the file and the move. The first version of this
+ * failed with nothing but "Chưa tải được bản mới" and cost a build to find out why.
+ */
+async function doing<T>(what: string, run: () => Promise<T>): Promise<T> {
+  try {
+    return await run();
+  } catch (error: unknown) {
+    throw new Error(`${what}: ${reasonFor(error)}`);
+  }
+}
+
+/**
+ * Fetch one file of the build and write it down.
+ *
+ * **Not `Filesystem.downloadFile`**, which is what this used to be and is the single thing that
+ * has been removed from the mechanism rather than added to it. Three strikes against it: it is
+ * deprecated (the plugin points at `@capacitor/file-transfer` instead, which is native code this
+ * app would have to be reinstalled to get); it is the plugin's one remaining *legacy*
+ * implementation, which writes straight to a `FileOutputStream` and so fails on any directory
+ * nobody made first; and it was never the thing this app had been shown to be able to do.
+ * `CapacitorHttp` is — it is how the manifest is read, so by the time a file is being fetched it
+ * has already worked twice on this device.
+ *
+ * A native response for a binary body arrives as base64, which is exactly what `writeFile` takes
+ * when it is given no encoding, so the file crosses the bridge once and lands as itself.
+ * `recursive` makes its own parent directories, which is what the legacy downloader would not.
+ */
+async function downloadInto(file: string, to: string): Promise<void> {
+  const { status, data } = await CapacitorHttp.get({
+    url: `${SITE}/${file}`,
+    responseType: 'blob',
+    connectTimeout: CONNECT_MS,
+    readTimeout: READ_MS,
+  });
+  if (status < 200 || status >= 300) throw new Error(`máy chủ trả lịi ${status}`);
+  if (typeof data !== 'string') throw new Error('không nhận được nội dung tệp');
+  await Filesystem.writeFile({ path: to, directory: Directory.Data, data, recursive: true });
+}
 
 /** The build the site is serving, or null if it cannot be read or does not hang together. */
 export async function fetchManifest(): Promise<UpdateManifest | null> {
@@ -121,11 +181,20 @@ async function running(): Promise<{ basePath: string; manifest: UpdateManifest |
   }
 }
 
+/**
+ * Make a directory, and **let a real failure through**.
+ *
+ * A directory that already exists is the one failure worth ignoring. Everything else used to be
+ * swallowed here too, on the reasoning that a real problem would surface on the write — and that
+ * was wrong twice over: the write it surfaced on was a different call, with a message about a
+ * missing file rather than a missing directory, and `Filesystem.copy` refuses outright when the
+ * destination's parent is not there, which is most of an update after the first one.
+ */
 async function mkdirp(path: string) {
   try {
     await Filesystem.mkdir({ path, directory: Directory.Data, recursive: true });
-  } catch {
-    // Already there, which is the only failure worth ignoring; a real one surfaces on the write.
+  } catch (error: unknown) {
+    if (!/exist/i.test(reasonFor(error))) throw new Error(`tạo thư mục ${path}: ${reasonFor(error)}`);
   }
 }
 
@@ -155,6 +224,7 @@ export async function applyUpdate(
   // half a build. Start it again from nothing.
   await Filesystem.rmdir({ path: target, directory: Directory.Data, recursive: true }).catch(() => {});
   await mkdirp(target);
+  // `downloadInto` makes its own parents; these are for `copy`, which refuses without them.
   for (const directory of directories(manifest)) await mkdirp(`${target}/${directory}`);
 
   const total = work.copy.length + work.fetch.length;
@@ -172,36 +242,33 @@ export async function applyUpdate(
 
   for (const path of work.copy) {
     check();
-    await Filesystem.copy({
+    await doing(`sao lại ${path}`, () => Filesystem.copy({
       from: `${source}/${path}`,
       to: `${target}/${path}`,
       directory: Directory.Data,
       toDirectory: Directory.Data,
-    });
+    }));
     step();
   }
   for (const path of work.fetch) {
     check();
-    await Filesystem.downloadFile({
-      url: `${SITE}/${path}`,
-      path: `${target}/${path}`,
-      directory: Directory.Data,
-    });
+    await doing(`tải ${path}`, () => downloadInto(path, `${target}/${path}`));
     step(manifest.files[path]);
   }
 
   // Everything is down. The manifest goes in last, so a directory that holds one is a build that
   // is all there — `running()` reads it back as what this app is.
   check();
-  await Filesystem.writeFile({
+  await doing('ghi update.json', () => Filesystem.writeFile({
     path: `${target}/update.json`,
     directory: Directory.Data,
     data: JSON.stringify(manifest),
     encoding: Encoding.UTF8,
-  });
+  }));
 
-  const { uri } = await Filesystem.getUri({ path: target, directory: Directory.Data });
-  await WebView.setServerBasePath({ path: filePath(uri) });
+  const uri = await doing('tìm thư mục bản mới',
+    async () => (await Filesystem.getUri({ path: target, directory: Directory.Data })).uri);
+  await doing('chuyển sang bản mới', () => WebView.setServerBasePath({ path: filePath(uri) }));
   // The WebView is reloading into the new build; `settle()` there makes it permanent.
 }
 

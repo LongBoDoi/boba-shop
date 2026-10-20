@@ -36,6 +36,18 @@ function Frame({ title, children }: { title: string; children: preact.ComponentC
   );
 }
 
+/**
+ * What actually went wrong, under the apology.
+ *
+ * It is the one place in the game that shows text nobody wrote in Vietnamese, because it is not
+ * for reading — it is for repeating to whoever can fix it. A failure the player cannot describe
+ * is a failure that costs a whole build to find out about, which is exactly what happened here.
+ */
+function Reason({ reason }: { reason: string }) {
+  if (!reason) return null;
+  return <p class="update-reason">{reason}</p>;
+}
+
 function Bar({ progress }: { progress: number }) {
   return (
     <div class="update-track">
@@ -67,6 +79,7 @@ function LiveCard({ offer }: { offer: UpdateOffer }) {
       {offer.status === 'failed' && (
         <>
           <p class="update-note">Chưa tải được bản mới. Thử lại lần sau nhé.</p>
+          <Reason reason={offer.reason} />
           <Button label="Đóng" variant="secondary" onPress={offer.dismiss} />
         </>
       )}
@@ -122,6 +135,7 @@ function NewFileCard({ offer }: { offer: UpdateOffer }) {
       {offer.status === 'failed' && (
         <>
           <p class="update-note">Chưa tải được bản cài đặt. Thử lại lần sau nhé.</p>
+          <Reason reason={offer.reason} />
           <Button label="Đóng" variant="secondary" onPress={offer.dismiss} />
         </>
       )}

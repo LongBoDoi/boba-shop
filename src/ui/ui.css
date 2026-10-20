@@ -739,6 +739,13 @@ button:focus-visible { outline: 2px solid var(--primary-dark); outline-offset: 2
 }
 .update-mark { font-size: 34px; text-align: center; }
 .update-note { margin: 0; font-size: 15px; line-height: 21px; font-weight: 500; color: var(--ink-soft); text-align: center; }
+/* The failure's own words: small, breakable anywhere (it carries file names), and selectable so
+   it can be copied out — the blanket user-select: none would otherwise make it unrepeatable. */
+.update-reason {
+  margin: 0; font-size: 12px; line-height: 17px; color: var(--ink-soft); text-align: left;
+  opacity: 0.85; word-break: break-word; max-height: 96px; overflow-y: auto;
+  user-select: text; -webkit-user-select: text;
+}
 .update-track {
   height: 10px;
   border-radius: 5px;

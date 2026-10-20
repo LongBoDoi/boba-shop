@@ -157,6 +157,23 @@ These rules are each the difference between an update and an unusable app:
   back off the local server, is same-origin and stays a `fetch`. The GitHub releases API is the
   other way round: it sends `Access-Control-Allow-Origin: *`, so the new-file half is a plain
   `fetch` and works.
+- **A file of the build comes down through `CapacitorHttp` too, not `Filesystem.downloadFile`.**
+  That is the second thing the app could not do and said nothing useful about. The plugin's
+  `downloadFile` is deprecated (it points at `@capacitor/file-transfer`, which is native code and
+  so needs the app installed again), it is the one method still served by the plugin's *legacy*
+  implementation, and it writes straight into a `FileOutputStream` — so it fails on any directory
+  nobody made first and cannot make one itself. `downloadInto` in `live.ts` asks for the file as a
+  blob, which arrives as base64, and hands it to `writeFile`, which takes base64 when it is given
+  no encoding and makes its own parent directories. The directories are still made up front as
+  well, because `Filesystem.copy` refuses when the destination's parent is missing — and `mkdirp`
+  no longer swallows a failure that is not "it already exists", which is how a missing directory
+  used to turn into a confusing complaint about a missing file.
+- **A failure names the step and the file, and the card shows it.** `doing(what, …)` wraps every
+  native call in an update, and `UpdateOffer.reason` carries what it threw onto the card. Nobody
+  can read a phone's log: without this the whole account of a failure is "Chưa tải được bản
+  mới", which costs a build and an install to turn into a diagnosis — it has already cost one.
+  It is the only English in the game, and it is there to be repeated, not read, which is why it is
+  also the one piece of text that is selectable.
 - **Nothing is swapped until every file is written.** A half-written directory served to the
   WebView is a white screen with no way back.
 - **A build is made permanent only once it has booted.** `setServerBasePath` lasts for the launch;
@@ -1211,11 +1228,14 @@ stands plainly inside the shelf; divided across the board it laps over the ends 
   `NATIVE_VERSION` moves with it. A real build needs the **Build apps** workflow or a local
   Android SDK / Xcode; neither is here, so say in the report that the app shell was not built.
 - Updating an app: the pure half — which kind of new version it is, what it costs, what a tag and a
-  manifest mean — is `tools/check-updates.cjs`, which also drives `fetchManifest` against a stub of
-  `CapacitorHttp`. One thing more a desk can check, and it is the one that was missed: whether the
-  app is allowed to read the site at all. Serve a page on `http://localhost:<port>` — any origin
-  that is not the site — and `fetch` the site's `update.json` from it; blocked there is blocked in
-  the app, for the same reason. The rest is phone-only and a browser cannot fake
-  it: downloading a build into the app, pointing the WebView at it, the rollback when one does not
+  manifest mean — is `tools/check-updates.cjs`, which also drives `fetchManifest` **and the whole
+  apply** against a fake device: a stub of the two plugins that is strict where the device is
+  strict, so that a write or a copy into a directory nobody made is refused there too. It covers
+  the first update (nothing on disk to copy from), the second (only the changed files come down),
+  what a failure says, and that what is being served does not move when one fails. One thing more
+  a desk can check, and it is the one that was missed: whether the app is allowed to read the site
+  at all. Serve a page on `http://localhost:<port>` — any origin that is not the site — and
+  `fetch` the site's `update.json` from it; blocked there is blocked in the app, for the same
+  reason. The rest is phone-only and a browser cannot fake it: downloading a build into the app, pointing the WebView at it, the rollback when one does not
   boot, and Android's installer prompt all need two real builds on a real device. Say so in the
   report.

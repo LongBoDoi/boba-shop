@@ -1,5 +1,5 @@
 import { uiState } from '../ui-state';
-import { applyUpdate, fetchManifest, isApp, settle } from './live';
+import { applyUpdate, fetchManifest, isApp, reasonFor, settle } from './live';
 import { canInstall, fetchRelease, installNewBuild, isNewFile, openReleasePage } from './install';
 import { decide } from './manifest';
 import { NATIVE_VERSION } from './native';
@@ -34,6 +34,13 @@ export interface UpdateOffer {
   canInstall: boolean;
   /** `2.57`, for the card. Empty for a live update, which has no version a player would know. */
   version: string;
+  /**
+   * Why it failed, named step and all, for the card to show once `status` is `failed`.
+   *
+   * Nobody can read a phone's log, so this is the only account of a failure that ever reaches
+   * anyone — and the only reason there is a word of English anywhere in this game.
+   */
+  reason: string;
   accept(): void;
   dismiss(): void;
 }
@@ -90,6 +97,7 @@ function offerLive(apply: () => Promise<void>) {
     megabytes: 0,
     canInstall: true,
     version: '',
+    reason: '',
     accept: () => void accept(),
     dismiss,
   };
@@ -104,7 +112,7 @@ function offerLive(apply: () => Promise<void>) {
     } catch (error: unknown) {
       if (cancelled) return;
       console.warn('[update] the new build could not be put in place:', error);
-      patch(working, { status: 'failed' });
+      patch(working, { status: 'failed', reason: reasonFor(error) });
     }
   }
 }
@@ -117,6 +125,7 @@ function offerNewFile(release: Release) {
     megabytes: Math.round(release.apkBytes / 1024 / 1024),
     canInstall: canInstall() && !!release.apkUrl,
     version: release.version,
+    reason: '',
     accept: () => void accept(),
     dismiss,
   };
@@ -138,7 +147,7 @@ function offerNewFile(release: Release) {
     } catch (error: unknown) {
       if (cancelled) return;
       console.warn('[update] the new file could not be installed:', error);
-      patch(working, { status: 'failed' });
+      patch(working, { status: 'failed', reason: reasonFor(error) });
     }
   }
 }
