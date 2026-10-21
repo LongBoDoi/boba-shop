@@ -929,10 +929,12 @@ What the painting is allowed to decide, and what the geometry is:
   pans show their contents unobscured. Sugar uses a cube motif; the ice box keeps its original
   background artwork and lettering without an added tag or graphic. Milk cartons show a cow
   or oats; cream dispensers show cheese or a caramel spiral, without printed words.
-- **Equipment and orders share artwork.** `kitchenMilkCartonSvg` and `kitchenCreamCanSvg` in
-  `art/kitchenEquipment.ts` define the complete packages; `prepareEquipmentTextures` rasterises
-  them and the station emblems once. Counter and carried equipment use the same textures.
-  Milk's painted foot remains at 150/154 of its box. Cartons are 66×141 room pixels at y548;
+- **Equipment and orders share hand-painted artwork.** `art/equipmentArt.ts` defines package
+  crops, printed ingredient close-ups and proportional placement from `milk-cartons-frontal-v2.png`
+  (upright cartons) and `milk-cream-painted.png` (cream cans).
+  Canvas prepares counter/hand textures once; SVG wrappers use the same sprites on orders.
+  `PRELOAD` includes the atlas. See `docs/equipment-painted-art.md` for the imagegen prompt.
+  Milk's painted foot remains at 150/154 of its 72×154 frame. Cartons are 66×141 room pixels at y548;
   smaller 50×117 cream cans sit slightly farther back at y536. Their proportions and positions
   follow the background scale in every orientation, and stay the same when picked up. Cream counter objects
   hide while held. See `docs/milk-cartons.md`, `docs/cream-options.md` and `docs/visual-orders.md`.
@@ -992,9 +994,22 @@ is clipped to the real liquid. The texture has 40 units of headroom rather than 
 
 
 ### The kitchen's artwork
-The active room is `kitchen-sugar-counter.png`, with a separate painted `sugar-jar.png` cutout
-standing beside its utensil caddy. See [sugar counter artwork](docs/sugar-counter-art.md) for
-sources, prompts, packaging and the remeasured room geometry.
+The active room is `kitchen-room-counter-cups.png`, with an elevated top-down viewpoint and broad
+wooden work boards. `tea-dispensers-overhead.png`, `counter-props-overhead.png` and
+`topping-pans-overhead.png` supply matching equipment, shared with order illustrations.
+The original plate uses 1920×1080 coordinates; its counter anchors are offset by a 350-unit upper extension,
+for a 1920×1430 room. The original file remains untouched as a design reference.
+All six tanks keep the first top-down design's apparent size, with 180-unit reference widths
+compensated for the taller room. `roomGeometry.ts` owns those dimensions. `kitchenRoomArt.ts` supplies
+one imagegen-repaired room, including the tall rack and continuous sunlit wall. Do not reintroduce
+separate wall strips or stretched-row fades; they caused a blurry horizontal join. The press head
+crops from the same active background. The compact cup organizer rests directly on the counter;
+the long shelf behind it is removed. Its lower selection targets and size badges follow
+`ROOM_BG_CUP_STATION`. See [cup station](docs/counter-cup-station.md) and [wall repair](docs/continuous-kitchen-wall.md) for their
+prompt, and [tall tea shelf](docs/tall-tea-shelf.md) for the room and tank anchors.
+See [overhead kitchen artwork](docs/overhead-kitchen.md) for the original asset provenance.
+The counter pans by swiping; there are no bottom station shortcuts or reserved shortcut bar.
+Two foreground mats stay in view; lidded cups return to the right finishing mat.
 
 Nearly everything in the prep room is a **painted sprite**. `tools/cut-sheets.py` cuts
 `tools/sheets/*.png` into `src/assets/kitchen/`; `tools/cut-topping-boxes.py` cuts the new
@@ -1219,38 +1234,20 @@ The card itself takes no touches; only the queue portraits are live (`.live`).
 becomes "Trà sữa Thái", "Hồng trà" becomes "Hồng trà sữa".
 
 ### Standing things on a painting
-The plate is `tools/sheets/room-bg.png`, 941x1672, and `ROOM` in
-[kitchenArt.ts](src/art/kitchenArt.ts) is **where it draws its surfaces, in its own
-pixels**: the shelf's board, the ceiling over it and the face of the board above that (where its
-sign is mounted), the ledge, the line a cup stands on along the work top, the bench, the cabinets.
-Nothing in the room is a fraction of the phone — `fitBackground(w, h, …)` in `kitchen/layout.ts`
-gives the scale and offset that take plate pixels to screen pixels, and a dispenser is on the shelf
-the painting paints however the phone is shaped.
+The active room uses `ROOM_BG_SIZE` (1920×1430 logical coordinates), with the original
+1920×1080 counter plate offset below the upper extension.
+`fitBackground` covers and centers the working band; room equipment shares its scale,
+vertical offset and horizontal pan. The old `ROOM` measurements remain for legacy art only.
+Re-measure `ROOM_BG_*` anchors and topping tray edges when changing the active plate.
 
-`fitBackground` deliberately does **not** centre the plate on itself, the way a `cover` background
-would: a phone shorter than the painting then loses the work top off the bottom. It centres on the
-working band instead (`ROOM_BG_KEEP`, the crown of a tank down to the front of the cup's holder)
-and lets the ceiling and the floor be what goes. Anything that must stay reachable in a short room has to clamp itself into
-view — the hint pill does, because the pink units it sits on can be cropped away.
+`kitchenHolderFor` places the preparation mat in the left half of the viewport, with a second
+finishing mat alongside it. Both preserve the generated mat's proportions and stay fixed while
+the room pans. The cup's foot uses `CUP_FOOT`; an unsealed cup returns to the preparation mat,
+and a lidded cup returns to the finishing mat. The room opens panned all the way to the left.
 
-**The holder under the cup is measured there too, and only half used.** `ROOM_BG_CUP_HOLDER` is the
-mat's box in the painting's own pixels, and `kitchenHolderFor` projects it like any other surface,
-so the holder comes out the size the design draws it. Its **x** is the one measurement thrown away:
-the wall pans and the cup standing on the holder does not, so the holder is centred on the screen
-instead — which is within a few pixels of where the painting puts it. Sizing it off the cup instead
-(it used to be `cupW * 1.5`) gave a mat less than half the painted one. The sprite itself is cut to
-twice that box by `tools/cut-cup-holder.py` rather than shipped at the two thousand pixels imagegen
-returned, because a woven grid reduced that far is sampled rather than averaged and the weave comes
-out as stripes; see `docs/cup-holder-art.md`. The cup's resting place is measured off the holder
-rather than off the counter: it is centred in it, standing on `CUP_FOOT` — the middle of its
-painted base ring — because the bottom of the cup's sprite box is the *front* of that ring, and a
-cup stood on a surface by its box sits forward of whatever it is on by half a ring.
-
-If the plate is re-cut, `ROOM` is what to re-measure: read a column of it for the horizontal
-lines and a row for the vertical ones. Two lines that look alike and are not: `shelf.x0`/`x1` are
-the **back wall** of the recess, which is narrower than the board in front of it, and every
-`base` is the **front** of a board's lit top face. A row of jars divided across the back wall
-stands plainly inside the shelf; divided across the board it laps over the ends of it.
+The background contains empty pans, so the topping atlas fills their measured plane. Each row
+shares its boundaries with the next; `toppingGeometry.ts` projects the painted rims as horizontal
+bands. The press head is cropped from the active room and moves to the inserted cup's rim.
 
 
 ## Conventions

@@ -1,4 +1,4 @@
-import toppingPans from '../assets/kitchen/topping-pans.png';
+import toppingPans from '../assets/kitchen/topping-pans-overhead.png';
 import toppingScoops from '../assets/kitchen/topping-scoops.png';
 import toppingPieces from '../assets/kitchen/topping-pieces.png';
 
@@ -21,18 +21,18 @@ export const TOPPING_SCOOPS = toppingScoops;
 export const TOPPING_PIECES = toppingPieces;
 
 export const TOPPING_PAN_ART: ToppingAtlas = {
-  width: 1536, height: 1024,
+  width: 1254, height: 1254,
   cells: {
-    pearls: { x: 30, y: 60, width: 490, height: 192 },
-    lychee: { x: 530, y: 60, width: 480, height: 194 },
-    popping: { x: 1019, y: 60, width: 488, height: 193 },
-    redbean: { x: 30, y: 282, width: 490, height: 206 },
-    pudding: { x: 529, y: 287, width: 482, height: 201 },
-    aloe: { x: 1018, y: 285, width: 489, height: 203 },
-    pandan: { x: 30, y: 521, width: 490, height: 210 },
-    grass: { x: 530, y: 521, width: 482, height: 210 },
-    crystal: { x: 1020, y: 523, width: 487, height: 209 },
-    empty: { x: 530, y: 767, width: 482, height: 206 },
+    pearls: { x: 11, y: 71, width: 413, height: 255 },
+    popping: { x: 427, y: 71, width: 401, height: 255 },
+    lychee: { x: 832, y: 71, width: 412, height: 255 },
+    pudding: { x: 11, y: 344, width: 414, height: 272 },
+    grass: { x: 428, y: 344, width: 400, height: 272 },
+    pandan: { x: 831, y: 344, width: 413, height: 272 },
+    redbean: { x: 10, y: 629, width: 417, height: 281 },
+    aloe: { x: 427, y: 629, width: 402, height: 281 },
+    crystal: { x: 830, y: 629, width: 415, height: 280 },
+    empty: { x: 417, y: 924, width: 420, height: 275 },
   },
 };
 

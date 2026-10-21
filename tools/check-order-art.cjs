@@ -2,6 +2,7 @@
 // Orders must depict the ingredient actually found at the pictured station, without name captions.
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
+const crypto = require('node:crypto');
 const ts = require('typescript');
 for (const ext of ['.png', '.jpg', '.webp', '.svg', '.woff2', '.wav', '.mp3']) {
   require.extensions[ext] = (module, filename) => { module.exports = filename; };
@@ -15,7 +16,67 @@ require.extensions['.ts'] = (module, filename) => {
 const { ingredientIconSvg, ingredientLocatorSvg } = require('../src/art/ingredientIcon.ts');
 const { CATEGORIES } = require('../src/game/ingredients.ts');
 const { TEA_DISPENSER_ART, ROOM_BG_TEA_SHELF, ROOM_BG_TOPPING_SHELF } = require('../src/art/kitchenArt.ts');
-const { TOPPING_SCOOP_ART, TOPPING_SCOOPS } = require('../src/art/toppingArt.ts');
+const { TOPPING_PAN_ART, TOPPING_PANS, TOPPING_SCOOP_ART, TOPPING_SCOOPS } = require('../src/art/toppingArt.ts');
+const { equipmentFrame } = require('../src/art/equipmentArt.ts');
+const { PRELOAD, ROOM_BG } = require('../src/art/kitchenArt.ts');
+const { KITCHEN_ROOM_ART, KITCHEN_ROOM_RENDER } = require('../src/art/kitchenRoomArt.ts');
+const { ORIGINAL_TEA_WIDTH, ORIGINAL_ROOM_SIZE } = require('../src/art/roomGeometry.ts');
+const { layoutKitchen } = require('../src/kitchen/layout.ts');
+const { getDayConfig } = require('../src/game/levels.ts');
+
+// Shelf additions must preserve the original overhead painting byte for byte.
+assert.equal(crypto.createHash('sha256').update(fs.readFileSync(ROOM_BG)).digest('hex'),
+  '337ef3b9e618cd8eed1686a9bf88f0283f7a2f28a57bf9520d47b3acdaaafdfe',
+  'Keep the original room plate available as an untouched design reference');
+
+const roomPng = fs.readFileSync(KITCHEN_ROOM_RENDER);
+assert.equal(roomPng.readUInt32BE(16), KITCHEN_ROOM_ART.width);
+assert.equal(roomPng.readUInt32BE(20), KITCHEN_ROOM_ART.height);
+assert(PRELOAD.includes(KITCHEN_ROOM_RENDER), 'The continuous room must load before play');
+
+// A taller room must not shrink the tanks back below the first top-down design's apparent size.
+for (const [width, height] of [[390, 541], [375, 364], [450, 315], [500, 355], [715, 532]]) {
+  const layout = layoutKitchen(getDayConfig(1), width, height);
+  const tanks = layout.stations.filter(s => s.kind === 'tea');
+  const originalScale = Math.max(width / ORIGINAL_ROOM_SIZE.width, height / ORIGINAL_ROOM_SIZE.height);
+  assert.equal(tanks.length, 6);
+  for (const tank of tanks) {
+    assert(tank.w >= ORIGINAL_TEA_WIDTH * originalScale - 0.1,
+      `${width}×${height}: ${tank.id} keeps the first design's apparent size`);
+  }
+  assert(Math.max(...tanks.slice(0, 3).map(s => s.y + s.h))
+    < Math.min(...tanks.slice(3).map(s => s.y)), 'The tall rack gives both rows their own clearance');
+}
+
+// Painted atlases must be present before play; their independent crops must neither bleed
+// into neighbouring products nor distort their packaging proportions between UI and Canvas.
+for (const id of ['whole', 'oat', 'cheese', 'brulee']) {
+  const { source: s, target: t, width, height, atlas } = equipmentFrame(id);
+  const png = fs.readFileSync(atlas.image);
+  assert.equal(png.readUInt32BE(16), atlas.width);
+  assert.equal(png.readUInt32BE(20), atlas.height);
+  assert(PRELOAD.includes(atlas.image), 'Painted packages must load before the kitchen opens');
+  const d = atlas.detail;
+  for (const crop of [s, d]) {
+    assert(crop.x >= 0 && crop.y >= 0 && crop.x + crop.width <= atlas.width
+      && crop.y + crop.height <= atlas.height, `${id}: artwork crop stays inside the atlas`);
+  }
+  assert(d.x >= s.x && d.y >= s.y && d.x + d.width <= s.x + s.width
+    && d.y + d.height <= s.y + s.height, `${id}: detail shows this product only`);
+  assert(t.x >= 0 && t.y >= 0 && t.x + t.width <= width && t.y + t.height <= height,
+    `${id}: painted silhouette fits its equipment frame`);
+  assert(Math.abs(t.width / t.height - s.width / s.height) < 1e-8, `${id}: preserve painted proportions`);
+}
+
+// The overhead pan sheet has its own dimensions and row ordering.
+const panPng = fs.readFileSync(TOPPING_PANS);
+assert.equal(panPng.readUInt32BE(16), TOPPING_PAN_ART.width);
+assert.equal(panPng.readUInt32BE(20), TOPPING_PAN_ART.height);
+assert(PRELOAD.includes(TOPPING_PANS));
+for (const [id, cell] of Object.entries(TOPPING_PAN_ART.cells)) {
+  assert(cell.x >= 0 && cell.y >= 0 && cell.x + cell.width <= TOPPING_PAN_ART.width
+    && cell.y + cell.height <= TOPPING_PAN_ART.height, `${id}: overhead pan crop stays in its atlas`);
+}
 
 for (const category of Object.values(CATEGORIES)) {
   const icons = category.options.filter(o => !o.isNone && o.id !== '0').map(option => {

@@ -99,9 +99,13 @@ export interface CupBuild {
   spilled: boolean;
   iceScoops: number;
   sugarPumps: number;
+  lidded: boolean;
+  straw: boolean;
+  /** The cup is inside the lidding machine until its cycle finishes or it is pulled out. */
+  inLidder: boolean;
 }
 
-const EMPTY_BUILD: CupBuild = { fill: 0, spilled: false, iceScoops: 0, sugarPumps: 0 };
+const EMPTY_BUILD: CupBuild = { fill: 0, spilled: false, iceScoops: 0, sugarPumps: 0, lidded: false, straw: false, inLidder: false };
 
 export interface DayStats {
   served: number;
@@ -169,6 +173,10 @@ export type GameAction =
   | { type: 'SCOOP'; category: 'toppings' | 'foam'; optionId: string }
   | { type: 'ICE_SCOOP' }
   | { type: 'SUGAR_PUMP' }
+  | { type: 'LID_CUP' }
+  | { type: 'LOAD_LIDDER' }
+  | { type: 'UNLOAD_LIDDER' }
+  | { type: 'ADD_STRAW' }
   | { type: 'CLEAR_CUP' }
   | { type: 'SERVE' }
   /** Buy something: refused outright if the shop cannot afford it. */
@@ -266,13 +274,26 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         ? { ...state, cup: { ...EMPTY_DRINK, size: action.size, toppings: [] }, build: EMPTY_BUILD, cupId: state.cupId + 1 }
         : state;
     case 'POUR':
-      return isActive(state) && state.cup.size ? pour(state, action.category, action.optionId, action.amount) : state;
+      return canAddIngredients(state) ? pour(state, action.category, action.optionId, action.amount) : state;
     case 'SCOOP':
-      return isActive(state) && state.cup.size ? scoop(state, action.category, action.optionId) : state;
+      return canAddIngredients(state) ? scoop(state, action.category, action.optionId) : state;
     case 'ICE_SCOOP':
-      return isActive(state) && state.cup.size ? iceScoop(state) : state;
+      return canAddIngredients(state) ? iceScoop(state) : state;
     case 'SUGAR_PUMP':
-      return isActive(state) && state.cup.size ? sugarPump(state) : state;
+      return canAddIngredients(state) ? sugarPump(state) : state;
+    case 'LOAD_LIDDER':
+      return isActive(state) && state.cup.size && state.cup.tea && !state.build.lidded
+        && !state.build.inLidder
+        ? { ...state, build: { ...state.build, inLidder: true } } : state;
+    case 'UNLOAD_LIDDER':
+      return isActive(state) && state.build.inLidder
+        ? { ...state, build: { ...state.build, inLidder: false } } : state;
+    case 'LID_CUP':
+      return isActive(state) && state.cup.size && state.cup.tea && state.build.inLidder && !state.build.lidded
+        ? { ...state, build: { ...state.build, lidded: true, inLidder: false } } : state;
+    case 'ADD_STRAW':
+      return isActive(state) && state.cup.size && state.build.lidded && !state.build.inLidder && !state.build.straw
+        ? { ...state, build: { ...state.build, straw: true } } : state;
     case 'CLEAR_CUP':
       return isActive(state) ? clearCup(state) : state;
     case 'SERVE':
@@ -303,6 +324,17 @@ function spend(state: GameState, amount: number): GameState {
 
 function isActive(state: GameState) {
   return state.phase === 'playing' && !state.paused;
+}
+
+function canAddIngredients(state: GameState): boolean {
+  return isActive(state) && Boolean(state.cup.size) && !state.build.lidded && !state.build.inLidder;
+}
+
+/** Shared by the serve button and reducer so unfinished cups cannot bypass the station. */
+export function canServe(state: GameState): boolean {
+  const customer = state.selectedSlot === null ? null : state.slots[state.selectedSlot];
+  return Boolean(customer?.status === 'ordered' && state.cup.size && state.cup.tea
+    && state.build.lidded && state.build.straw && !state.build.inLidder);
 }
 
 function tick(state: GameState, dt: number): GameState {
@@ -525,7 +557,7 @@ function clearCup(state: GameState): GameState {
 function serve(state: GameState): GameState {
   const slot = state.selectedSlot;
   const customer = slot === null ? null : state.slots[slot];
-  if (slot === null || !customer || !state.cup.size || !state.cup.tea) return state;
+  if (!canServe(state) || slot === null || !customer) return state;
 
   const { quality } = evaluateDrink(state.cup, customer.order, state.config.categories);
   const price = drinkPrice(customer.order);

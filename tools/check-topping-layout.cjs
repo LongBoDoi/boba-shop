@@ -24,13 +24,14 @@ const trayBack = TOPPING_TRAY_EDGES[0];
 const trayFront = TOPPING_TRAY_EDGES[TOPPING_TRAY_EDGES.length - 1];
 // Both fitted sides must follow the painted rims, with matching clearance.
 // Measure away from the rounded corners; allow one background pixel over the full depth.
-const paintedLeftSlope = (1478 - 1457) / (510 - 420);
-assert(Math.abs(trayBack.x0 - trayFront.x0 - paintedLeftSlope * (trayFront.y - trayBack.y)) < 1,
+// Overhead kitchen rims in logical 1920×1080 plate coordinates, away from rounded corners.
+const paintedLeftSlope = 25 / 287;
+assert(Math.abs(trayFront.x0 - trayBack.x0 - paintedLeftSlope * (trayFront.y - trayBack.y)) < 1,
   'Left topping edge must remain parallel to the painted tray rim');
-const paintedRightSlope = (1824 - 1807) / (510 - 420);
+const paintedRightSlope = 57 / 287;
 assert(Math.abs(trayFront.x1 - trayBack.x1 - paintedRightSlope * (trayFront.y - trayBack.y)) < 1,
   'Right topping edge must remain parallel to the painted tray rim');
-for (const { y, left, right } of [{ y: 420, left: 1478, right: 1807 }, { y: 510, left: 1457, right: 1824 }]) {
+for (const { y, left, right } of [{ y: 437, left: 1435, right: 1848 }, { y: 724, left: 1460, right: 1905 }]) {
   const t = (y - trayBack.y) / (trayFront.y - trayBack.y);
   const leftInset = trayBack.x0 + (trayFront.x0 - trayBack.x0) * t - left;
   const rightInset = right - (trayBack.x1 + (trayFront.x1 - trayBack.x1) * t);

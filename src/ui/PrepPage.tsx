@@ -3,6 +3,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'preact/ho
 
 import { kitchenActionIconSvg } from '../art/kitchenEquipment';
 import { setKitchenRect } from '../game/host';
+import { canServe as cupCanServe } from '../game/reducer';
 import { shallow, useGame, useUi } from '../hooks';
 import { playSound } from '../sound';
 import { dispatch } from '../store';
@@ -167,8 +168,14 @@ function ServeButton({ layout }: { layout: PrepLayout }) {
         ? 'Lấy ly đúng cỡ từ kệ'
         : !state.cup.tea
           ? 'Rót trà vào ly'
-          : `Phục vụ ${customer.name} ➜`;
-    return { label, canServe: Boolean(customer && state.cup.size && state.cup.tea) };
+          : state.build.inLidder
+            ? 'Máy đang đậy nắp…'
+          : !state.build.lidded
+            ? 'Đặt ly vào máy đậy nắp ➜'
+            : !state.build.straw
+              ? 'Thêm ống hút bên cạnh máy ➜'
+              : `Phục vụ ${customer.name} ➜`;
+    return { label, canServe: cupCanServe(state) };
   }, shallow);
   const icon = useMemo(() => kitchenActionIconSvg('cup'), []);
   return (

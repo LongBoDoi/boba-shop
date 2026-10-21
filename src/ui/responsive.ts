@@ -7,7 +7,7 @@
  * arrangement (`band`) or stands the order and the buttons beside the kitchen (`column`). See
  * "Turning it on its side" in CLAUDE.md.
  */
-import { ROOM_BG_KEEP, ROOM_BG_REACH, ROOM_BG_SIZE } from '../art/kitchenArt';
+import { ROOM_BG_FOCUS_Y, ROOM_BG_KEEP, ROOM_BG_REACH, ROOM_BG_SIZE } from '../art/kitchenArt';
 
 /** The order card's fixed height upright (`ORDER_PANEL_HEIGHT` in `OrderBubble.tsx`). */
 export const ORDER_PANEL_HEIGHT = 132;
@@ -21,14 +21,11 @@ export function isWideLayout(width: number, height: number) {
 /**
  * How wide the room may be against its own height before the painting is cropped through a band.
  *
- * `fitBackground` covers the box with the plate centred **on itself**, and neither band is centred
- * there — the shelf has more painting above it than the work top has below. So what a short room
- * can hold is twice the band's farther edge from the middle of the plate, not the band's own
- * height: measured the other way, a room exactly at the limit still loses the front of the cup's
- * mat.
+ * `fitBackground` centers the active working band. Measure each required band around that same
+ * focus so the taller shelf and the foreground mats stay in view together.
  */
 function roomAspect(band: { top: number; bottom: number }) {
-  const middle = ROOM_BG_SIZE.height / 2;
+  const middle = ROOM_BG_FOCUS_Y;
   return ROOM_BG_SIZE.width / (2 * Math.max(middle - band.top, band.bottom - middle));
 }
 
@@ -39,18 +36,14 @@ export const ROOM_REACH_ASPECT = roomAspect(ROOM_BG_REACH);
  * How wide the side column is in the `column` layout: **as narrow as the card can be read at**,
  * because every pixel of it is a pixel of room.
  *
- * The card shrinks to fit whatever it is given — its tiles are sized from the width it has
- * (`fitTiles`) and its two lines of text ellipsise — so the floor here is reading comfort and
- * nothing else. The one thing that can push it back out is the room itself: if a room this wide
- * would be squatter than its *workable* band (`ROOM_REACH_ASPECT`, the tanks' name tags down to
- * the line the cup stands on) the painting is cropped through the part of it the shift needs, and
- * taking the width off the room is what buys that band back. It never takes more than two fifths
- * of the screen doing it — past that the cure is worse.
+ * The overhead worktop needs its full vertical band, including the foreground mats.
+ * The card can grow up to half
+ * of the screen to preserve it; windows beyond that limit still retain the reachable band.
  */
 export function panelWidthFor(width: number, height = 0) {
   const card = Math.min(340, Math.max(248, width * 0.24));
-  const workable = height > 0 ? width - height * ROOM_REACH_ASPECT : 0;
-  return Math.round(Math.max(card, Math.min(workable, width * 0.4)));
+  const workable = height > 0 ? width - height * ROOM_KEEP_ASPECT : 0;
+  return Math.ceil(Math.max(card, Math.min(workable, width * 0.5)));
 }
 
 /**

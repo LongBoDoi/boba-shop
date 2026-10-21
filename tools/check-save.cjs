@@ -63,6 +63,9 @@ try {
       assert.ok(scooped !== cup, 'The cup still takes its toppings');
       cup = scooped;
     }
+    cup = gameReducer(cup, { type: 'LOAD_LIDDER' });
+    cup = gameReducer(cup, { type: 'LID_CUP' });
+    cup = gameReducer(cup, { type: 'ADD_STRAW' });
     return gameReducer(cup, { type: 'SERVE' });
   };
   const servedBefore = finish(state);

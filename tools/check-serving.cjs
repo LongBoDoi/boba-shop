@@ -153,6 +153,8 @@ try {
     return state;
   }
 
+  const finishCup = (state) => gameReducer(gameReducer(gameReducer(state, { type: 'LOAD_LIDDER' }), { type: 'LID_CUP' }), { type: 'ADD_STRAW' });
+
   const makeCup = (amount) => buildCup(ordered, recipe, amount);
 
   // First-day orders can request every ice level, and the station can satisfy all of them.
@@ -165,7 +167,7 @@ try {
     assert.ok(restored.config.categories.includes('ice'), 'A restored first-day shop has ice');
     assert.equal(restored.build.iceScoops, scoops, 'Ice scoops survive a reload');
     if (scoops === 2) assert.equal(gameReducer(state, { type: 'ICE_SCOOP' }), state, 'The ice limit is still two scoops');
-    const served = gameReducer(state, { type: 'SERVE' });
+    const served = gameReducer(finishCup(state), { type: 'SERVE' });
     assert.equal(served.stats.perfect, 1, `A first-day ${level} ice order can be served perfectly`);
     assert.equal(served.build.iceScoops, 0, 'The new cup starts without ice');
   }
@@ -176,16 +178,16 @@ try {
   const plainOrdered = { ...ordered, slots: ordered.slots.map((customer, i) =>
     i === slot ? { ...customer, order: plain } : customer) };
   const asOrdered = buildCup(plainOrdered, plain, 0.6);
-  assert.equal(gameReducer(asOrdered, { type: 'SERVE' }).stats.perfect, 1, 'A plain cup of tea is served perfectly');
+  assert.equal(gameReducer(finishCup(asOrdered), { type: 'SERVE' }).stats.perfect, 1, 'A plain cup of tea is served perfectly');
   const unwanted = gameReducer(asOrdered, { type: 'SCOOP', category: 'foam', optionId: 'cheese' });
   assert.deepEqual(evaluateDrink(unwanted.cup, plain, first.categories).mistakes, ['foam'],
     'Foam nobody asked for is counted as a mistake');
-  assert.equal(gameReducer(unwanted, { type: 'SERVE' }).stats.perfect, 0, 'And costs the drink its perfect mark');
+  assert.equal(gameReducer(finishCup(unwanted), { type: 'SERVE' }).stats.perfect, 0, 'And costs the drink its perfect mark');
 
-  const full = gameReducer(makeCup(0.99), { type: 'SERVE' });
+  const full = gameReducer(finishCup(makeCup(0.99)), { type: 'SERVE' });
   for (const amount of [0.0001, 0.03, 0.69, 0.7, 0.85, 0.99]) {
     const before = makeCup(amount);
-    const served = gameReducer(before, { type: 'SERVE' });
+    const served = gameReducer(finishCup(before), { type: 'SERVE' });
     assert.equal(served.stats.served, 1, `A ${amount * 100}% cup can be served`);
     assert.equal(served.stats.perfect, 1, 'Recipe quality is independent of fill');
     assert.equal(served.slots[slot], null, 'Customer receives the drink');
@@ -197,7 +199,7 @@ try {
   assert.equal(gameReducer(ordered, { type: 'SERVE' }), ordered, 'Tea is still required');
   const noCustomer = { ...makeCup(0.03), selectedSlot: null };
   assert.equal(gameReducer(noCustomer, { type: 'SERVE' }), noCustomer, 'An order is still required');
-  const overflow = gameReducer(makeCup(1.1), { type: 'SERVE' });
+  const overflow = gameReducer(finishCup(makeCup(1.1)), { type: 'SERVE' });
   assert.equal(overflow.stats.served, 1, 'An overflowing cup can be served');
   assert.equal(overflow.stats.tips, 0, 'Overflow still loses its tip');
   assert.equal(overflow.coins, Math.ceil(drinkPrice(recipe) / 2), 'Overflow retains the existing spill penalty');
@@ -218,7 +220,7 @@ try {
     const restored = parseGame(serializeGame(state));
     assert.ok(restored, 'A drink with the new topping restores correctly');
     assert.deepEqual(restored.cup.toppings, [optionId, 'pearls']);
-    const served = gameReducer(gameReducer(restored, { type: 'SET_PAUSED', paused: false }), { type: 'SERVE' });
+    const served = gameReducer(finishCup(gameReducer(restored, { type: 'SET_PAUSED', paused: false })), { type: 'SERVE' });
     assert.equal(served.stats.perfect, 1, 'A recipe with the new topping can be served perfectly after reload');
   }
   // ------------------------------------------------------------------ the shop's money
@@ -235,7 +237,7 @@ try {
   // No day can be failed any more, so nothing hangs on a target: the takings are simply kept, and
   // the till is what carries from one day to the next.
   assert.equal(getDayConfig(1).goal, undefined, 'A day no longer sets a money target');
-  const paid = gameReducer(makeCup(0.8), { type: 'SERVE' });
+  const paid = gameReducer(finishCup(makeCup(0.8)), { type: 'SERVE' });
   assert.ok(paid.coins > 0, 'Serving a drink pays');
   assert.equal(paid.money, paid.coins, "A new shop's till is exactly what it has taken");
 

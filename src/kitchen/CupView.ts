@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 
 import { Drink } from '../game/ingredients';
+import { paintLid, paintStraw } from '../art/finishingArt';
 import {
   CUP_BASE, CUP_CREAM, CUP_DECAL, CUP_EDGE, CUP_ICE, CUP_SPRITE, DRINK, DRINK_MILKY, DRINK_MILKY_TOP, DRINK_TOP,
 } from '../art/kitchenArt';
@@ -59,6 +60,7 @@ export class CupView {
   private dirty = true;
   private readonly sizeTag: Phaser.GameObjects.Image;
   private sizeTagWidth = 0;
+  private readonly finish: Phaser.GameObjects.Image;
 
   constructor(private readonly scene: Phaser.Scene, readonly width: number, readonly height: number, drink: Drink) {
     this.key = `cup-canvas-${++viewCount}`;
@@ -82,8 +84,22 @@ export class CupView {
     const decal = scene.add.image(0, 0, tex(CUP_DECAL)).setOrigin(0).setDisplaySize(width, height);
 
     this.sizeTag = scene.add.image(width + 6, 0, '__DEFAULT').setOrigin(1, 0).setVisible(false);
-    this.container = scene.add.container(0, 0, [base, drawn, glints, edge, decal, this.sizeTag]);
+    this.finish = scene.add.image(0, -overflow, '__DEFAULT').setOrigin(0).setVisible(false);
+    this.container = scene.add.container(0, 0, [base, drawn, glints, edge, decal, this.finish, this.sizeTag]);
     this.setDrink(drink, 0, true);
+  }
+
+  setFinish(lidded: boolean, straw: boolean) {
+    this.finish.setVisible(lidded);
+    if (!lidded) return;
+    const overflow = this.height * CUP_OVERFLOW;
+    const key = bakeCanvas(this.scene, `cup-finish:${this.width}:${straw}`, this.width, this.height + overflow, (c) => {
+      c.scale(this.width / 113, this.height / 174);
+      c.translate(0, 40);
+      paintLid(c);
+      if (straw) paintStraw(c);
+    });
+    this.finish.setTexture(key).setDisplaySize(this.width, this.height + overflow);
   }
 
   /** The drink changed. New portions and new cubes drop into place; a new cup starts as it is. */

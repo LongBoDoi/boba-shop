@@ -9,10 +9,9 @@ export interface ToppingPanShape {
 export interface ToppingTrayEdge { x0: number; x1: number; y: number }
 
 /** Calibrate the tray's two ends; every divider between them stays on the same straight line. */
-// Follow both painted rims, clear of their rounded corners, with the same inset on either side.
-// At y420/y510: left x1478/x1457, right x1807/x1824.
-const TRAY_BACK: ToppingTrayEdge = { x0: 1493, x1: 1793, y: 396 };
-const TRAY_FRONT: ToppingTrayEdge = { x0: 1456, x1: 1823, y: 553 };
+// Follow the overhead kitchen basin, with equal clearance from its rims.
+const TRAY_BACK: ToppingTrayEdge = { x0: 1450, x1: 1833, y: 437 };
+const TRAY_FRONT: ToppingTrayEdge = { x0: 1475, x1: 1890, y: 724 };
 export const TOPPING_TRAY_EDGES: ToppingTrayEdge[] = [0, 1 / 3, 2 / 3, 1].map(t => ({
   x0: TRAY_BACK.x0 + (TRAY_FRONT.x0 - TRAY_BACK.x0) * t,
   x1: TRAY_BACK.x1 + (TRAY_FRONT.x1 - TRAY_BACK.x1) * t,

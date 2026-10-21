@@ -9,7 +9,7 @@
     "preview": "vite preview --host",
     "typecheck": "tsc --noEmit",
     "sync": "cap sync",
-    "test": "node tools/check-serving.cjs && node tools/check-save.cjs && node tools/check-cup-station.cjs && node tools/check-cup-contents.cjs && node tools/check-audio.cjs && node tools/check-audio-engine.cjs && node tools/check-topping-layout.cjs && node tools/check-prep-layout.cjs && node tools/check-order-art.cjs && node tools/check-backup-code.cjs && node tools/check-updates.cjs"
+    "test": "node tools/check-serving.cjs && node tools/check-lidding.cjs && node tools/check-save.cjs && node tools/check-cup-station.cjs && node tools/check-cup-contents.cjs && node tools/check-audio.cjs && node tools/check-audio-engine.cjs && node tools/check-topping-layout.cjs && node tools/check-prep-layout.cjs && node tools/check-order-art.cjs && node tools/check-backup-code.cjs && node tools/check-updates.cjs"
   },
   "dependencies": {
     "@capacitor/android": "^8.5.3",

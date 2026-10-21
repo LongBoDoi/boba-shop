@@ -3,9 +3,10 @@ import Phaser from 'phaser';
 import { SCOOP_ART, SCOOPFUL, SUGAR_SCOOP, SUGAR_SCOOP_ART, TEA_DISPENSER_ART, TEA_DISPENSERS } from '../art/kitchenArt';
 import { TOPPING_PAN_ART, TOPPING_PANS, TOPPING_SCOOP_ART, TOPPING_SCOOPS } from '../art/toppingArt';
 import { toppingPanBands, ToppingPanShape } from '../art/toppingGeometry';
-import { kitchenCreamCanSvg, kitchenMilkCartonSvg, MILK_CARTON_ART } from '../art/kitchenEquipment';
-import { canvasFont, svgTexture, tex } from '../game/view';
+import { equipmentFrame, paintEquipment, PaintedEquipmentId } from '../art/equipmentArt';
+import { bakeCanvas, canvasFont, svgTexture, tex } from '../game/view';
 import { Station } from './layout';
+import { paintStraw } from '../art/finishingArt';
 import { ingredientMarkSvg } from '../art/ingredientMarks';
 import { TEAS } from '../game/ingredients';
 import { KITCHEN_TEXT_MIN } from './typography';
@@ -137,12 +138,17 @@ export function fitText(c: CanvasRenderingContext2D, text: string, size: number,
 
 /** Equipment pictures and emblems are shared with the order-panel illustrations. */
 export async function prepareEquipmentTextures(scene: Phaser.Scene): Promise<void> {
-  const { width, height } = MILK_CARTON_ART;
+  for (const id of ['whole', 'oat', 'cheese', 'brulee'] as PaintedEquipmentId[]) {
+    const { width, height, atlas } = equipmentFrame(id);
+    const image = sourceImage(scene, atlas.image);
+    const key = id === 'whole' || id === 'oat' ? `milk-carton-${id}` : `cream-can-${id}`;
+    bakeCanvas(scene, key, width * 2, height * 2, c => {
+      c.scale(2, 2);
+      c.imageSmoothingQuality = 'high';
+      paintEquipment(c, image, id);
+    });
+  }
   await Promise.all([
-    ...(['whole', 'oat'] as const).map(kind => svgTexture(scene, `milk-carton-${kind}`,
-      kitchenMilkCartonSvg(width * 2, height * 2, kind), width * 2, height * 2)),
-    ...['cheese', 'brulee'].map(id => svgTexture(scene, `cream-can-${id}`,
-      kitchenCreamCanSvg(128, 300, id), 128, 300)),
     ...TEAS.map(tea => svgTexture(scene, `ingredient-mark-tea-${tea.id}`,
       ingredientMarkSvg('tea', tea.id, 96), 96, 96)),
     svgTexture(scene, 'ingredient-mark-sweetness', ingredientMarkSvg('sweetness', '', 96), 96, 96),
@@ -155,6 +161,14 @@ export async function prepareEquipmentTextures(scene: Phaser.Scene): Promise<voi
  */
 export function addTool(scene: Phaser.Scene, station: Station, size: number): Phaser.GameObjects.GameObject[] {
   const S = size;
+  if (station.kind === 'straw') {
+    const key = bakeCanvas(scene, `finish-tool:${station.kind}:${S}`, S, S, (c) => {
+      c.scale(S / 150, S / 150);
+      c.translate(18, 40);
+      paintStraw(c);
+    });
+    return [scene.add.image(0, 0, key).setOrigin(0).setDisplaySize(S, S)];
+  }
   if (station.kind === 'sugar') {
     return [scene.add.image(0, 0, tex(SUGAR_SCOOP)).setOrigin(0)
       .setDisplaySize(S, S * SUGAR_SCOOP_ART.height / SUGAR_SCOOP_ART.width)];

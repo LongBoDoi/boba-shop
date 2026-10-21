@@ -7,8 +7,8 @@ match the actual ingredients and equipment:
   brown tea leaves, jasmine flower, star anise, rolled oolong leaves, taro and matcha.
 - Topping icons crop the actual scoop artwork, retaining the pearls, beans, cubes, colors and
   translucent highlights used at the tray. Small 3×3 diagrams locate similar pale toppings.
-- Milk cartons and cream dispensers share SVG drawings between the order panel, counter and
-  carried tool. Enlarged cow, oat, cheese and caramel insets clarify their differences on phones.
+- Milk cartons and cream dispensers share hand-painted sprites between the order panel, counter
+  and carried tool. Enlarged cow, oat, cheese and caramel crops clarify their differences on phones.
 - Sugar uses the painted spoon with a percentage badge. Ice uses the painted cubes with ×1/×2
   scoop badges. Cup sizes use a glass illustration with clear brown contours, a cool glass tint
   and the game's cat decal, plus S/M/L. This keeps the empty glass visible on the pale panel.
@@ -17,8 +17,9 @@ Tea icons also carry a 3×2 shelf diagram. The diagrams indicate the station's p
 full shelf/tray; their mapping comes from the same slot arrays as the kitchen layout.
 
 `src/art/ingredientIcon.ts` builds the order pictures. `src/art/ingredientMarks.ts` supplies shared
-emblems, and `src/art/kitchenEquipment.ts` supplies milk/cream packages. Station emblems and
-packages are rasterised once by `prepareEquipmentTextures`; no per-frame image work is added.
+emblems; `src/art/equipmentArt.ts` supplies painted package/ingredient crops. Canvas prepares
+package textures once and rasterises station emblems; no per-frame image work is added.
+See [painted equipment and generation prompt](equipment-painted-art.md).
 
 `OrderBubble` uses the space formerly occupied by captions for larger pictures. Full Vietnamese
 names and completion states remain in accessible labels. Toppings check off individually as they

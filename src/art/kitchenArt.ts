@@ -29,7 +29,7 @@ import jarOolong from '../assets/kitchen/jar-oolong.png';
 import jarTaro from '../assets/kitchen/jar-taro.png';
 import jarMatcha from '../assets/kitchen/jar-matcha.png';
 import teaTank from '../assets/kitchen/tea-tank.png';
-import teaDispensers from '../assets/kitchen/tea-dispensers.png';
+import teaDispensers from '../assets/kitchen/tea-dispensers-overhead.png';
 import cup from '../assets/kitchen/cup.png';
 import cupCreamPainted from '../assets/kitchen/cup-cream-contrast.png';
 import cupBase from '../assets/kitchen/cup-base.png';
@@ -70,10 +70,10 @@ import pieceLychee from '../assets/kitchen/piece-lychee.png';
 import pieceGrass from '../assets/kitchen/piece-grass.png';
 import pieceIceV2 from '../assets/kitchen/piece-ice-v2.png';
 import pieceIceClear from '../assets/kitchen/piece-ice-clear.png';
-import kitchenSugarCounter from '../assets/kitchen/kitchen-sugar-counter.png';
-import sugarJar from '../assets/kitchen/sugar-jar.png';
-import sugarScoop from '../assets/kitchen/sugar-scoop.png';
-import cupHolder from '../assets/kitchen/cup-holder.png';
+import kitchenOverhead from '../assets/kitchen/kitchen-overhead.png';
+import sugarTray from '../assets/kitchen/liquid-sugar-tray.png';
+import sugarScoop from '../assets/kitchen/liquid-sugar-ladle.png';
+import cupHolder from '../assets/kitchen/counter-props-overhead.png';
 import teaRoom from '../assets/kitchen/tea-room.png';
 import teaFrontLeft from '../assets/kitchen/tea-front-left.png';
 import teaFrontRight from '../assets/kitchen/tea-front-right.png';
@@ -102,7 +102,10 @@ import iconTrash from '../assets/kitchen/icon-trash.png';
 import iconCup from '../assets/kitchen/icon-cup.png';
 
 import { TOPPING_PANS, TOPPING_PIECES, TOPPING_SCOOPS } from './toppingArt';
+import { EXTENDED_ROOM_SIZE, EXTENDED_TEA_WIDTH, ORIGINAL_ROOM_SIZE, ROOM_EXTRA_HEIGHT } from './roomGeometry';
+import { KITCHEN_ROOM_RENDER } from './kitchenRoomArt';
 import { TOPPING_TRAY_EDGES } from './toppingGeometry';
+import { PAINTED_EQUIPMENT, PAINTED_MILK } from './equipmentArt';
 
 /**
  * A sprite is the **URL** of its own file. `import cup from '../assets/kitchen/cup.png'` hands one
@@ -175,12 +178,12 @@ export const TEA_TANK_ART = { width: 971, height: 1619, collar: 0.83, spout: 0.9
 /** Painted squat glass reservoirs matching the warm kitchen reference, in one transparent atlas. */
 export const TEA_DISPENSERS = teaDispensers;
 export const TEA_DISPENSER_ART = {
-  imageWidth: 1536, imageHeight: 1024, width: 414, height: 452,
-  foot: 0.90, spout: 0.994,
-  label: { left: 0.323, top: 0.432, width: 0.34, height: 0.105 },
+  imageWidth: 1536, imageHeight: 1024, width: 420, height: 480,
+  foot: 0.92, spout: 0.975,
+  label: { left: 0.255, top: 0.57, width: 0.49, height: 0.14 },
   cells: {
-    black: { x: 76, y: 38 }, green: { x: 562, y: 38 }, oolong: { x: 1045, y: 38 },
-    taro: { x: 76, y: 516 }, matcha: { x: 562, y: 516 }, thai: { x: 1045, y: 516 },
+    black: { x: 64, y: 0 }, green: { x: 557, y: 0 }, thai: { x: 1054, y: 0 },
+    oolong: { x: 62, y: 503 }, taro: { x: 557, y: 503 }, matcha: { x: 1054, y: 503 },
   } as Record<string, { x: number; y: number }>,
 };
 export const CUP_SPRITE = cup;
@@ -298,42 +301,52 @@ export const SCOOP_ART: Record<string, number> = {
 export const BIN_HEAD = 0.1713;
 
 // ------------------------------------------------------------------ the room around it
-/** Warm watercolor room; interactive equipment is anchored in this plate's coordinates. */
-export const ROOM_BG = kitchenSugarCounter;
-export const SUGAR_JAR = sugarJar;
+/** Original watercolor plate, retained as the reference for equipment design and anchors. */
+export const ROOM_BG = kitchenOverhead;
+export const SUGAR_TRAY = sugarTray;
 export const SUGAR_SCOOP = sugarScoop;
-export const SUGAR_SCOOP_ART = { width: 400, height: 242 };
-/**
- * The painted holder, lifted off the original room so the wall can pan behind it. It is cut to
- * twice its original room box and displayed at the extended counter's scale below — see
- * `tools/cut-cup-holder.py` for why a sprite this small is not shipped at the size imagegen
- * returned it.
- */
+export const SUGAR_SCOOP_ART = { width: 400, height: 260 };
+/** The overhead cloth mat shares the transparent counter-props atlas. */
 export const CUP_HOLDER = cupHolder;
-export const ROOM_BG_SIZE = { width: 2253, height: 814 };
-export const ROOM_BG_TABLE = { top: 631, base: 767 };
+export const CUP_HOLDER_ART = { x: 1029, y: 655, width: 455, height: 283 };
+export const ROOM_BG_SIZE = EXTENDED_ROOM_SIZE;
+export const ROOM_BG_ORIGINAL_SIZE = ORIGINAL_ROOM_SIZE;
+export const ROOM_BG_EXTRA_HEIGHT = ROOM_EXTRA_HEIGHT;
+export const ROOM_BG_TABLE = { top: 740 + ROOM_EXTRA_HEIGHT, base: 1025 + ROOM_EXTRA_HEIGHT };
 export const ROOM_BG_TEA_SHELF = {
-  x0: 361, x1: 797, tankWidth: 140,
-  // The feet sit on the lit wooden faces; the tap hangs over the front edge.
-  bases: [276, 453],
+  x0: 70, x1: 760, tankWidth: EXTENDED_TEA_WIDTH,
+  // Both rows stand on the shelving unit; the preparation board below stays clear.
+  bases: [310, 610],
   // The catalogue's own order, so the week fills the rack left to right and then down a shelf.
   slots: ['black', 'green', 'thai', 'oolong', 'taro', 'matcha'],
 };
 /** Painted stations share the room's scrolling coordinates and counter surface. */
-export const ROOM_BG_CUP_STATION = { x: 22, y: 242, width: 300, height: 291, stackTops: [312, 278, 242] };
-export const ROOM_BG_ICE_MACHINE = { x: 1818, y: 339, width: 430, height: 230 };
+// The compact organizer sits directly on the counter, without a long shelf behind it.
+export const ROOM_BG_CUP_STATION = { x: 910, y: 60 + ROOM_EXTRA_HEIGHT, width: 440, height: 270, stackTops: [134, 103, 60].map(y => y + ROOM_EXTRA_HEIGHT) };
+export const ROOM_BG_ICE_MACHINE = { x: 24, y: 629 + ROOM_EXTRA_HEIGHT, width: 286, height: 191 };
+export const ROOM_BG_LIDDING = {
+  lid: { x: 1440, y: 90 + ROOM_EXTRA_HEIGHT, width: 320, height: 300 },
+  straw: { x: 1770, y: 170 + ROOM_EXTRA_HEIGHT, width: 135, height: 220 },
+  bay: { x: 1540, y: 208 + ROOM_EXTRA_HEIGHT, width: 142, height: 120, cx: 1605, foot: 320 + ROOM_EXTRA_HEIGHT },
+  head: { x: 1510, y: 166 + ROOM_EXTRA_HEIGHT, width: 197, height: 34 },
+};
 export const ROOM_BG_EXTRAS = {
   // Painted feet, in room coordinates: cartons sit forward of the smaller cream cans.
-  milkCenters: [875, 951], milkBase: 548, milkWidth: 66, milkHeight: 66 * 154 / 72,
-  foamCenters: [1040, 1104], foamBase: 536, foamWidth: 50, foamHeight: 50 * 150 / 64,
-  // The reference jar's 141×182 silhouette, on the counter just left of the utensil caddy.
-  sugar: { x: 1166, y: 359, width: 141, height: 182 },
+  milkCenters: [865, 985], milkBase: 565 + ROOM_EXTRA_HEIGHT, milkWidth: 90, milkHeight: 90 * 154 / 72,
+  foamCenters: [1103, 1215], foamBase: 555 + ROOM_EXTRA_HEIGHT, foamWidth: 80, foamHeight: 80 * 150 / 64,
+  // Liquid sugar sits in a matching steel tray directly below the ice bin.
+  sugar: {
+    x: ROOM_BG_ICE_MACHINE.x,
+    y: ROOM_BG_ICE_MACHINE.y + ROOM_BG_ICE_MACHINE.height + 8,
+    width: ROOM_BG_ICE_MACHINE.width,
+    height: ROOM_BG_ICE_MACHINE.height,
+  },
 };
 /**
  * Where the lifted cup holder fits on the extended work top. It does not pan with the room:
- * the cup stays on it, centred on screen. Its size and height follow the painted counter.
+ * the two mats occupy the foreground, with their size following the painted counter.
  */
-export const ROOM_BG_CUP_HOLDER = { x: 958, y: 650, width: 337, height: 101 };
+export const ROOM_BG_CUP_HOLDER = { x: 530, y: 835 + ROOM_EXTRA_HEIGHT, width: 315, height: 196 };
 /**
  * The rows of the plate that have to stay on screen whatever shape the room is given: the crown
  * of a tank standing on the upper shelf, down to the front edge of the cup's holder. Between them
@@ -349,8 +362,11 @@ export const ROOM_BG_CUP_HOLDER = { x: 958, y: 650, width: 337, height: 101 };
 export const ROOM_BG_KEEP = {
   top: ROOM_BG_TEA_SHELF.bases[0]
     - ROOM_BG_TEA_SHELF.tankWidth * (TEA_DISPENSER_ART.height / TEA_DISPENSER_ART.width) * TEA_DISPENSER_ART.foot,
-  bottom: ROOM_BG_CUP_HOLDER.y + ROOM_BG_CUP_HOLDER.height,
+  bottom: ROOM_BG_CUP_HOLDER.y + ROOM_BG_CUP_HOLDER.height + 48,
 };
+
+/** Center the active working band, from the upper tank to the foreground mats. */
+export const ROOM_BG_FOCUS_Y = (ROOM_BG_KEEP.top + ROOM_BG_KEEP.bottom) / 2;
 
 /**
  * The narrower band the room has to keep to still be *workable*, as opposed to whole.
@@ -375,7 +391,7 @@ export const ROOM_BG_REACH = {
 
 export const ROOM_BG_TOPPING_SHELF = {
   // Shared boundaries project the whole grid into the basin's perspective.
-  edges: TOPPING_TRAY_EDGES,
+  edges: TOPPING_TRAY_EDGES.map(edge => ({ ...edge, y: edge.y + ROOM_EXTRA_HEIGHT })),
   // Unlock order, read like a page: left to right along the back row, then the next row forward.
   slots: ['pearls', 'popping', 'lychee', 'pudding', 'grass', 'pandan', 'redbean', 'aloe', 'crystal'],
 };
@@ -569,9 +585,11 @@ export const SCOOP_BOWL = { cx: 0.34, cy: 0.57, r: 0.17 };
  */
 export const PRELOAD: Sprite[] = [
   // the room itself, and what stands in it
-  ROOM_BG,
-  SUGAR_JAR,
+  KITCHEN_ROOM_RENDER,
+  SUGAR_TRAY,
   SUGAR_SCOOP,
+  PAINTED_EQUIPMENT,
+  PAINTED_MILK,
   TEA_DISPENSERS,
   CUP_HOLDER,
   TOPPING_PANS,

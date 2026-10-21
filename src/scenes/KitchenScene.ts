@@ -4,8 +4,9 @@ import {
   CupSize, Drink, EMPTY_DRINK, getIngredient, MAX_ICE_SCOOPS, MAX_POUR, MILK_SPLASH, POUR_RATE, SUGAR_STEPS,
 } from '../game/ingredients';
 import { GameState } from '../game/reducer';
-import { CUP_HOLDER, ROOM_BG, SUGAR_JAR, TEA_DISPENSER_ART, TEA_DISPENSERS } from '../art/kitchenArt';
+import { CUP_HOLDER, CUP_HOLDER_ART, ROOM_BG_LIDDING, ROOM_BG_SIZE, SUGAR_TRAY, TEA_DISPENSER_ART, TEA_DISPENSERS } from '../art/kitchenArt';
 import { TOPPING_PANS } from '../art/toppingArt';
+import { KITCHEN_ROOM_RENDER } from '../art/kitchenRoomArt';
 import { CUP_ART, CUP_FOOT } from '../art/cupGeometry';
 import { gameArea } from '../game/host';
 import { bakeCanvas, canvasFont, placeCamera, tex } from '../game/view';
@@ -46,6 +47,7 @@ const DEPTH = { room: 0, holder: 10, shadow: 15, streamBack: 18, cup: 20, tool: 
 
 type Gesture =
   | { kind: 'cup'; startX: number; startY: number; grabX: number; grabY: number; owned: boolean }
+  | { kind: 'lidder'; station: Station; startX: number }
   | { kind: 'pour'; station: Station; enabled: boolean; startedAt: number; startX: number }
   | { kind: 'carry'; station: Station; startX: number; startY: number; distance: number; target: Phaser.GameObjects.Container }
   | { kind: 'refused'; station?: Station }
@@ -62,6 +64,7 @@ export class KitchenScene extends Phaser.Scene {
 
   private room!: Phaser.GameObjects.Container;
   private holder!: Phaser.GameObjects.Image;
+  private finishHolder!: Phaser.GameObjects.Image;
   private matLabel: Phaser.GameObjects.Image | null = null;
   private stationViews = new Map<string, { container: Phaser.GameObjects.Container; art: Phaser.GameObjects.Container; locked?: boolean }>();
   private teaLabels = new Map<string, Phaser.GameObjects.Image>();
@@ -84,6 +87,9 @@ export class KitchenScene extends Phaser.Scene {
   private cupShadow!: Phaser.GameObjects.Image;
   private dock: string | null = null;
   private dockCupId = -1;
+  private lidderElapsed = 0;
+  private lidderLoading = false;
+  private lidderHead: Phaser.GameObjects.Image | null = null;
 
   private level = 0;
   private levelTween: Phaser.Tweens.Tween | null = null;
@@ -94,6 +100,8 @@ export class KitchenScene extends Phaser.Scene {
   private tool: Phaser.GameObjects.Container | null = null;
   private toolState = { x: 0, y: 0, tip: 0, show: 0, originX: 0, originY: 0, size: 0 };
   private toolTweens: Phaser.Tweens.Tween[] = [];
+  private finishingTool = false;
+  private toolCupId = -1;
   private rackCup: { view: CupView; x: number; y: number; alpha: number } | null = null;
 
   private gesture: Gesture | null = null;
@@ -106,6 +114,7 @@ export class KitchenScene extends Phaser.Scene {
   create() {
     this.room = this.add.container(0, 0).setDepth(DEPTH.room);
     this.holder = this.add.image(0, 0, tex(CUP_HOLDER)).setOrigin(0).setDepth(DEPTH.holder);
+    this.finishHolder = this.add.image(0, 0, tex(CUP_HOLDER)).setOrigin(0).setDepth(DEPTH.holder);
     this.cupShadow = this.add.image(0, 0, cupShadowTexture(this)).setOrigin(0).setDepth(DEPTH.shadow).setVisible(false);
     this.level = store.state.build.fill;
 
@@ -155,12 +164,15 @@ export class KitchenScene extends Phaser.Scene {
     if (W <= 0 || H <= 0) return;
     const key = `${W}x${H}:${state.day}:${state.cup.size ?? 'M'}`;
     if (!force && key === this.layoutKey) return;
+    const firstLayout = !this.layoutKey;
     this.layoutKey = key;
     this.W = W;
     this.H = H;
     this.cancelGesture();
     this.layout = layoutKitchen(state.config, W, H, state.cup.size ?? 'M');
-    this.pan = Math.min(this.pan, this.layout.room.maxPan);
+    // The room opens at its left-hand end and is panned right from there; it used to open on the
+    // cup rack, which put half the wall behind the player before they had touched anything.
+    this.pan = firstLayout ? 0 : Math.min(this.pan, this.layout.room.maxPan);
     this.buildRoom();
     this.buildCup(true);
     this.refreshEquipment();
@@ -178,7 +190,19 @@ export class KitchenScene extends Phaser.Scene {
     this.stationViews.clear();
     this.teaLabels.clear();
     const { room } = layout;
-    this.room.add(this.add.image(0, room.top, tex(ROOM_BG)).setOrigin(0).setDisplaySize(room.width, room.height));
+    // Render the repaired wall and room together: separate strips left a visible blurred join.
+    this.room.add(this.add.image(0, room.top, tex(KITCHEN_ROOM_RENDER))
+      .setOrigin(0).setDisplaySize(room.width, ROOM_BG_SIZE.height * room.scale));
+    this.lidderHead?.destroy();
+    const head = ROOM_BG_LIDDING.head;
+    const pressKey = bakeCanvas(this, `lidder-head:${room.scale}`, head.width * room.scale, head.height * room.scale, (c) => {
+      const art = sourceImage(this, KITCHEN_ROOM_RENDER) as HTMLImageElement;
+      c.drawImage(art, head.x / ROOM_BG_SIZE.width * art.width, head.y / ROOM_BG_SIZE.height * art.height,
+        head.width / ROOM_BG_SIZE.width * art.width, head.height / ROOM_BG_SIZE.height * art.height,
+        0, 0, head.width * room.scale, head.height * room.scale);
+    });
+    this.lidderHead = this.add.image(0, 0, pressKey).setOrigin(0)
+      .setDisplaySize(head.width * room.scale, head.height * room.scale).setDepth(DEPTH.cup + 1).setVisible(false);
 
     const atlas = new Atlas();
     const pans = sourceImage(this, TOPPING_PANS);
@@ -186,6 +210,17 @@ export class KitchenScene extends Phaser.Scene {
     const sized = (w: number, h: number) => `${w.toFixed(1)}x${h.toFixed(1)}`;
     type Piece = { frame: string; x: number; y: number; w: number; h: number; dims?: boolean; name?: string; visible?: boolean };
     const pieces: { station?: Station; items: Piece[] }[] = [];
+
+    // The new painted rack has no lettering; place size badges on its wooden front.
+    for (const stack of layout.rack) {
+      const w = Math.max(28, stack.w * 0.55), h = 20;
+      const frame = atlas.add(`cup-size:${stack.size}:${w}`, w, h, c => {
+        card(c, w, h, 5, '#FFF2D7', 1, '#B58B5F');
+        c.font = canvasFont(12, 800); c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillStyle = '#795331';
+        c.fillText(stack.size, w / 2, h / 2);
+      });
+      pieces.push({ items: [{ frame, x: stack.x + (stack.w - w) / 2, y: stack.y + stack.h - h, w, h }] });
+    }
 
     for (const bin of layout.emptyBins) {
       const extent = panExtent(bin.w, bin.h, bin.panShape);
@@ -199,8 +234,8 @@ export class KitchenScene extends Phaser.Scene {
       const { x, y, w, h } = station;
       if (station.kind === 'tea') {
         const cell = TEA_DISPENSER_ART.cells[station.id];
-        const labelW = w * 0.35, lh = h * 0.22;
-        const lx = (w - labelW) / 2, ly = h * 0.35;
+        const labelW = w * TEA_DISPENSER_ART.label.width, lh = h * TEA_DISPENSER_ART.label.height;
+        const lx = w * TEA_DISPENSER_ART.label.left, ly = h * TEA_DISPENSER_ART.label.top;
         const frame = atlas.add(`tank:${station.id}:${sized(w, h)}`, w, h, (c) => {
           c.drawImage(tanks, cell.x, cell.y, TEA_DISPENSER_ART.width, TEA_DISPENSER_ART.height, 0, 0, w, h);
           // A pictorial emblem replaces the name. The order uses this same emblem and tank.
@@ -226,7 +261,7 @@ export class KitchenScene extends Phaser.Scene {
           drawPan(c, pans, station.id, w, h, station.panShape);
         });
         items.push({ frame, x: x + extent.left, y, w: extent.width, h, dims: true });
-      } else if (station.kind === 'ice') {
+      } else if (station.kind === 'ice' || station.kind === 'lid' || station.kind === 'straw') {
         // The machine is painted into the room; only its touch highlight is drawn over it.
         const gh = Math.max(44, h);
         const frame = atlas.add(`ice-glow:${sized(w, gh)}`, w, gh, (c) => {
@@ -235,10 +270,20 @@ export class KitchenScene extends Phaser.Scene {
           c.fill();
         });
         items.push({ frame, x, y, w, h: gh, name: 'glow', visible: false });
+        if (station.kind !== 'ice') {
+          const labelH = 20;
+          const labelW = Math.max(station.kind === 'lid' ? 90 : 55, w);
+          const frame = atlas.add(`finish-label:${station.kind}:${labelW}`, labelW, labelH, (c) => {
+            card(c, labelW, labelH, 6, '#FFF2D7', 1, '#B58B5F');
+            c.font = canvasFont(10, 700); c.fillStyle = '#795331'; c.textAlign = 'center'; c.textBaseline = 'middle';
+            c.fillText(station.kind === 'lid' ? 'Máy đậy nắp' : 'Ống hút', labelW / 2, labelH / 2);
+          });
+          items.push({ frame, x: station.cx - labelW / 2, y: y + h + 4, w: labelW, h: labelH, dims: true });
+        }
       } else if (station.kind === 'sugar') {
-        const jar = sourceImage(this, SUGAR_JAR);
-        const frame = atlas.add(`sugar-jar:${sized(w, h)}`, w, h, (c) => {
-          c.drawImage(jar, 0, 0, w, h);
+        const tray = sourceImage(this, SUGAR_TRAY);
+        const frame = atlas.add(`sugar-tray:${sized(w, h)}`, w, h, (c) => {
+          c.drawImage(tray, 0, 0, w, h);
         });
         items.push({ frame, x, y, w, h, dims: true });
       } else {
@@ -285,15 +330,25 @@ export class KitchenScene extends Phaser.Scene {
     // A rebuild (a resize mid-carry) draws the whole counter back, including what is in a hand.
     if (this.held) this.showStationObject(this.held, false);
 
-    const { holder } = layout;
-    this.holder.setPosition(holder.left, holder.top).setDisplaySize(holder.width, holder.height);
+    for (const [image, box, label] of [
+      [this.holder, layout.holder, 'Pha chế'], [this.finishHolder, layout.finishHolder, 'Hoàn thiện'],
+    ] as const) {
+      const key = bakeCanvas(this, `work-mat:${label}:${sized(box.width, box.height)}`, box.width * 2, box.height * 2, c => {
+        c.scale(2, 2);
+        const crop = CUP_HOLDER_ART;
+        c.drawImage(sourceImage(this, CUP_HOLDER), crop.x, crop.y, crop.width, crop.height, 0, 0, box.width, box.height);
+        c.font = canvasFont(12, 700); c.textAlign = 'center'; c.fillStyle = '#8B653F';
+        c.fillText(label, box.width / 2, box.height - 12);
+      });
+      image.setTexture(key).setPosition(box.left, box.top).setDisplaySize(box.width, box.height);
+    }
   }
 
   /** Locks, labels and the active tap: everything about the equipment that follows the drink. */
   private refreshEquipment() {
     const layout = this.layout;
     if (!layout) return;
-    const { cup, config } = store.state;
+    const { cup, config, build } = store.state;
     const docked = this.docked();
     const busy = Boolean(!cup.size || docked);
     for (const station of layout.stations) {
@@ -305,11 +360,14 @@ export class KitchenScene extends Phaser.Scene {
         locked = (!cup.toppings.includes(station.id) && cup.toppings.length >= config.maxToppings) || busy;
       } else if (station.kind === 'foam') locked = (Boolean(cup.foam) && cup.foam !== station.id) || busy;
       else if (station.kind === 'sugar') locked = busy;
+      if (station.kind === 'lid') locked = !cup.size || !cup.tea || build.lidded || build.inLidder;
+      else if (station.kind === 'straw') locked = busy || !build.lidded || build.straw;
+      else if (build.lidded) locked = true;
       view.art.setAlpha(locked ? 0.55 : 1);
       view.locked = locked;
     }
     for (const [key, border] of this.teaLabels) border.setVisible(docked?.key === key);
-    uiState.set({ hint: hintFor(cup, docked ?? undefined) });
+    uiState.set({ hint: hintFor(cup, docked ?? undefined, build) });
   }
 
   // ================================================================== the cup
@@ -333,20 +391,25 @@ export class KitchenScene extends Phaser.Scene {
     }
     this.showMatLabel(false);
     if (key === this.cupKey && this.cup) {
-      if (relayout) this.standCupDown(true);
+      if (relayout) {
+        if (store.state.build.inLidder) this.restoreLidderCup();
+        else this.standCupDown(true);
+      }
       return;
     }
     const freshCup = !this.cupKey.startsWith(`${cupId}:`);
     this.cup?.destroy();
     this.cupKey = key;
     this.cup = new CupView(this, layout.cupW, layout.cupH, cup);
+    this.cup.setFinish(store.state.build.lidded, store.state.build.straw);
     this.cup.setDrink(cup, cupId, true);
     this.cup.level = this.level;
     this.cup.container.setDepth(DEPTH.cup);
     this.spill?.container.destroy();
     this.spill = null;
     this.dock = null;
-    this.cupPos = { x: layout.homeX, y: layout.homeY, scale: 1 };
+    this.cupPos = { x: store.state.build.lidded ? layout.finishHomeX : layout.homeX, y: store.state.build.lidded ? layout.finishHomeY : layout.homeY, scale: 1 };
+    if (store.state.build.inLidder) this.restoreLidderCup();
     // A new cup drops onto the mat; one that is merely re-sized or re-laid-out just stands there,
     // and one that flew there has been on screen the whole way and must not be dropped in on top.
     this.appear = freshCup && !this.flewIn ? 0 : 1;
@@ -358,7 +421,7 @@ export class KitchenScene extends Phaser.Scene {
     this.matLabel = null;
     if (!show || !this.layout) return;
     const { holder } = this.layout;
-    const label = 'Chạm ly S / M / L trên kệ';
+    const label = 'Chọn ly';
     const font = canvasFont(KITCHEN_TEXT_MIN, 700);
     const w = measure(label, font) + 12;
     const h = 19;
@@ -382,10 +445,12 @@ export class KitchenScene extends Phaser.Scene {
   /** Send the cup back to its mat, wherever it was left. */
   private standCupDown(instant = false) {
     if (!this.layout) return;
+    if (store.state.build.inLidder) return;
     const wasDocked = Boolean(this.dock);
     this.dock = null;
     if (this.pouring) this.stopPour(false);
-    const home = { x: this.layout.homeX, y: this.layout.homeY, scale: 1 };
+    const finished = store.state.build.lidded;
+    const home = { x: finished ? this.layout.finishHomeX : this.layout.homeX, y: finished ? this.layout.finishHomeY : this.layout.homeY, scale: 1 };
     if (instant) {
       for (const tween of this.cupTweens) tween.stop();
       Object.assign(this.cupPos, home);
@@ -412,6 +477,8 @@ export class KitchenScene extends Phaser.Scene {
       this.pouring = null;
       this.level = state.build.fill;
       this.levelTween?.stop();
+      this.lidderLoading = false;
+      this.lidderElapsed = 0;
     }
     if (state.cupId !== previous.cupId || state.cup !== previous.cup) {
       this.buildCup();
@@ -422,13 +489,17 @@ export class KitchenScene extends Phaser.Scene {
       this.tweenLevel(state.build.fill, DURATION.base);
       setPourFill(state.build.fill);
     }
-    if (state.build !== previous.build) this.refreshEquipment();
+    if (state.build !== previous.build) {
+      this.cup?.setFinish(state.build.lidded, state.build.straw);
+      this.refreshEquipment();
+    }
   }
 
   /** The drink as drawn: while the cup stands under a tap, its tea is the tap's. */
   private drinkShown(): Drink {
     const { cup } = store.state;
-    const tap = this.pouring?.station.id ?? this.docked()?.id;
+    const docked = this.docked();
+    const tap = this.pouring?.station.id ?? (docked?.kind === 'tea' ? docked.id : undefined);
     return tap && !cup.tea ? { ...cup, tea: tap } : cup;
   }
 
@@ -469,6 +540,11 @@ export class KitchenScene extends Phaser.Scene {
       const left = station.cx - station.slot / 2;
       if (station.kind === 'tea') {
         if (this.inside(rx, y, left, station.y, station.slot, Math.max(44, station.h))) return this.pressTap(station, x);
+      } else if (station.kind === 'lid') {
+        if (this.inside(rx, y, station.x, station.y, station.w, station.h)) {
+          this.gesture = { kind: 'lidder', station, startX: x };
+          return;
+        }
       } else if (station.kind === 'ice') {
         if (this.inside(rx, y, station.x, station.y, station.w, Math.max(44, station.h))) return this.grabTool(station, x, y);
       } else {
@@ -521,6 +597,11 @@ export class KitchenScene extends Phaser.Scene {
           this.rackCup.y = gesture.originY + (y - gesture.startY);
         }
         break;
+      case 'lidder':
+        if (Math.abs(x - gesture.startX) > 8) {
+          this.gesture = { kind: 'pan', startX: x, startPan: this.pan, lastX: x, lastT: this.time.now, velocity: 0 };
+        }
+        break;
       case 'pour':
         // A tap that was never going to pour, dragged sideways, is a swipe along the wall.
         if (!gesture.enabled && Math.abs(x - gesture.startX) > 8) {
@@ -548,6 +629,7 @@ export class KitchenScene extends Phaser.Scene {
     this.pointerId = -1;
     switch (gesture.kind) {
       case 'cup': return this.releaseCup();
+      case 'lidder': return this.loadLidder(gesture.station);
       case 'pour': return this.releaseTap(gesture);
       case 'carry':
         this.pressStation(gesture.station, false);
@@ -654,6 +736,7 @@ export class KitchenScene extends Phaser.Scene {
     const layout = this.layout!;
     playSound('cupPickup');
     const wasDocked = Boolean(this.dock);
+    this.leaveLidder();
     this.dock = null;
     if (wasDocked) this.refreshEquipment();
     // Keep the cup's centre under the finger while it grows back to its carrying size.
@@ -668,7 +751,8 @@ export class KitchenScene extends Phaser.Scene {
     const layout = this.layout!;
     const scale = this.cupPos.scale;
     const found = findStation(layout.stations, this.cupPos.x, this.cupPos.y, layout.cupW * scale, layout.cupH * scale, this.pan, this.W);
-    if (found) {
+    if (found?.kind === 'lid' && !store.state.build.lidded) return this.loadLidder(found);
+    if (found && !store.state.build.lidded) {
       playSound('cupDown', DURATION.base);
       this.dockCup(found, DURATION.base);
     } else {
@@ -676,6 +760,56 @@ export class KitchenScene extends Phaser.Scene {
       this.standCupDown();
       this.cup?.setDrink(this.drinkShown(), store.state.cupId);
     }
+  }
+
+  /** Insert the cup, then let the machine complete its press cycle before returning it. */
+  private loadLidder(station: Station) {
+    const { cup, build, cupId } = store.state;
+    const refusal = !cup.size ? 'Lấy ly và pha trà trước khi dùng máy'
+      : !cup.tea ? 'Pha trà xong rồi đặt ly vào máy'
+      : build.lidded ? 'Ly đã có nắp — thêm ống hút rồi phục vụ'
+      : build.inLidder ? 'Máy đang đậy nắp…' : null;
+    if (refusal) {
+      playSound('nudge'); nudge(refusal);
+      if (!build.inLidder) this.standCupDown();
+      return;
+    }
+    this.cancelTool();
+    if (this.pouring) this.stopPour(false);
+    this.lidderElapsed = 0;
+    this.lidderLoading = true;
+    const to = this.panForDock(station);
+    const duration = DURATION.slow;
+    this.tweenPan(to, duration);
+    this.dockCup(station, duration);
+    this.cupTweens[0].setCallback('onComplete', () => {
+      if (store.state.cupId === cupId) this.lidderLoading = false;
+    });
+    dispatch({ type: 'LOAD_LIDDER' });
+    playSound('cupPickup');
+    playSound('cupDown', duration);
+  }
+
+  private leaveLidder() {
+    this.lidderLoading = false;
+    this.lidderElapsed = 0;
+    this.lidderHead?.setVisible(false);
+    if (store.state.build.inLidder) dispatch({ type: 'UNLOAD_LIDDER' });
+  }
+
+  /** A resized room or a restored save keeps the cup in the machine it was left in. */
+  private restoreLidderCup() {
+    const layout = this.layout;
+    const station = layout?.stations.find(s => s.kind === 'lid');
+    if (!layout || !station) return;
+    this.lidderLoading = false;
+    this.lidderElapsed = 0;
+    for (const tween of this.cupTweens) tween.stop();
+    this.setPan(this.panForDock(station));
+    this.dock = station.key;
+    this.dockCupId = store.state.cupId;
+    this.cupPos = { x: station.cx - this.pan - layout.cupW * station.dockScale / 2,
+      y: station.dockY - layout.cupH * station.dockScale, scale: station.dockScale };
   }
 
   /** Stand the cup under a tap and leave it there, ready for the tap to be held. */
@@ -697,7 +831,7 @@ export class KitchenScene extends Phaser.Scene {
   // ------------------------------------------------------------------ the taps
   private pressTap(station: Station, x: number) {
     const { cup, build } = store.state;
-    const locked = cup.tea !== null && cup.tea !== station.id;
+    const locked = build.lidded || (cup.tea !== null && cup.tea !== station.id);
     const enabled = this.docked()?.key === station.key && !locked;
     this.gesture = { kind: 'pour', station, enabled, startedAt: performance.now(), startX: x };
     if (!enabled) return;
@@ -724,6 +858,10 @@ export class KitchenScene extends Phaser.Scene {
       if (!cup.size) {
         playSound('nudge');
         nudge('Chạm ly S / M / L trên kệ để lấy ly trước');
+        return;
+      }
+      if (store.state.build.lidded) {
+        playSound('nudge'); nudge('Ly đã đậy nắp — thêm ống hút rồi phục vụ');
         return;
       }
       if (cup.tea !== null && cup.tea !== station.id) {
@@ -772,6 +910,7 @@ export class KitchenScene extends Phaser.Scene {
     const { cup } = store.state;
     const docked = this.docked();
     if (!cup.size) return 'Chạm ly S / M / L trên kệ để lấy ly trước';
+    if (docked?.kind === 'lid' || store.state.build.inLidder) return 'Ly đang ở trong máy đậy nắp — đợi máy xong';
     if (docked) return `Ly đang ở dưới vòi ${docked.name} — kéo ly ra trước`;
     return null;
   }
@@ -810,7 +949,7 @@ export class KitchenScene extends Phaser.Scene {
   }
 
   private grabTool(station: Station, x: number, y: number) {
-    const busy = this.busyMessage();
+    const busy = this.busyMessage() ?? this.refuseTool(station);
     this.pressStation(station, true);
     if (busy) {
       // It still takes the touch, so the room does not pan out from under it.
@@ -821,6 +960,8 @@ export class KitchenScene extends Phaser.Scene {
     }
     const layout = this.layout!;
     const size = Math.round(layout.cupW * 1.2);
+    this.finishingTool = station.kind === 'straw';
+    this.toolCupId = store.state.cupId;
     for (const tween of this.toolTweens) tween.stop();
     this.tool?.destroy();
     const inner = this.add.container(-size / 2, -size / 2, addTool(this, station, size));
@@ -884,6 +1025,9 @@ export class KitchenScene extends Phaser.Scene {
   /** What stops this tool going into the cup, said the way the cup would say it. */
   private refuseTool(station: Station): string | null {
     const { cup, build, config } = store.state;
+    if (station.kind === 'lid') return 'Đặt ly vào máy để đậy nắp';
+    if (station.kind === 'straw') return !build.lidded ? 'Đậy nắp trước khi thêm ống hút' : build.straw ? 'Ly đã có ống hút' : null;
+    if (build.lidded) return 'Ly đã đậy nắp — đổ bỏ nếu muốn pha lại';
     switch (station.kind) {
       case 'topping':
         if (cup.toppings.includes(station.id)) return `Ly đã có ${station.name}`;
@@ -905,7 +1049,14 @@ export class KitchenScene extends Phaser.Scene {
 
   /** Tip it in over the cup, then it's gone. */
   private tipToolIn(station: Station) {
+    if (this.toolCupId !== store.state.cupId) return this.putToolBack();
+    const refusal = this.busyMessage() ?? this.refuseTool(station);
+    if (refusal) return this.putToolBack(refusal);
     switch (station.kind) {
+      case 'straw':
+        playSound('pickup');
+        dispatch({ type: 'ADD_STRAW' });
+        break;
       case 'topping':
         playSound('scoop');
         dispatch({ type: 'SCOOP', category: 'toppings', optionId: station.id });
@@ -1057,6 +1208,31 @@ export class KitchenScene extends Phaser.Scene {
     if (!this.layout) return;
     const layout = this.layout;
 
+    // The cycle pauses with the shop. No delayed callback can lid a discarded or replaced cup.
+    const state = store.state;
+    if (state.build.inLidder && !this.lidderLoading) {
+      if (this.docked()?.kind !== 'lid') this.restoreLidderCup();
+      const machine = this.docked();
+      if (machine) this.cupPos.x = machine.cx - this.pan - layout.cupW * this.cupPos.scale / 2;
+      if (state.phase === 'playing' && !state.paused && !uiState.value.opening) {
+        this.lidderElapsed += Math.min(delta, 50);
+      }
+      const progress = Math.min(1, this.lidderElapsed / 1100);
+      const press = Math.sin(progress * Math.PI);
+      const head = ROOM_BG_LIDDING.head;
+      const rimY = this.cupPos.y + layout.cupH * this.cupPos.scale * 16 / CUP_ART.h;
+      const stroke = Math.max(0, rimY - layout.room.top - (head.y + head.height) * layout.room.scale);
+      this.lidderHead?.setVisible(true).setPosition(head.x * layout.room.scale - this.pan,
+        layout.room.top + head.y * layout.room.scale + press * stroke);
+      if (progress >= 1) {
+        dispatch({ type: 'LID_CUP' });
+        this.lidderHead?.setVisible(false);
+        this.lidderElapsed = 0;
+        playSound('cupDown');
+        this.standCupDown();
+      }
+    } else this.lidderHead?.setVisible(false);
+
     // The room coasts to a stop after a flick.
     if (!this.gesture && Math.abs(this.panVelocity) > 0.01) {
       this.setPan(this.pan + this.panVelocity * delta);
@@ -1090,7 +1266,7 @@ export class KitchenScene extends Phaser.Scene {
       }
     }
     const docked = this.docked();
-    if (docked) {
+    if (docked?.kind === 'tea') {
       const meter = uiState.value.meter;
       const running = Boolean(this.pouring?.running);
       if (!meter || meter.level !== this.level || meter.color !== docked.color || meter.running !== running) {
@@ -1102,7 +1278,7 @@ export class KitchenScene extends Phaser.Scene {
     if (this.tool) {
       const { x, y, tip, show, size } = this.toolState;
       this.tool.setPosition(x + size / 2, y + size / 2 + tip * layout.cupH * 0.12)
-        .setRotation(Phaser.Math.DegToRad(-6 + (124 + 6) * tip))
+        .setRotation(this.finishingTool ? 0 : Phaser.Math.DegToRad(-6 + (124 + 6) * tip))
         .setAlpha(show * (1 - tip * 0.85))
         .setVisible(show > 0);
       if (show <= 0) {

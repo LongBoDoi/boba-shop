@@ -150,11 +150,13 @@ export function parseGame(json: string | null | undefined): GameState | null {
   // Older saves had an automatically supplied medium cup. Keep a drink in progress, but let
   // an untouched bench adopt the new pick-a-cup flow. An explicit null is the new empty bench.
   const contents = cup.toppings.length > 0 || SINGLE.some((category) => cup[category] !== null)
-    || build.fill > 0 || build.spilled || build.iceScoops > 0 || build.sugarPumps > 0;
+    || build.fill > 0 || build.spilled || build.iceScoops > 0 || build.sugarPumps > 0 || build.lidded || build.straw || build.inLidder;
   if (!cup.size && contents) {
     if (asObject(save.cup)?.size !== undefined) return null;
     cup.size = 'M';
   }
+  if ((build.lidded && !cup.tea) || (build.straw && !build.lidded)) return null;
+  if (build.inLidder && (!cup.tea || build.lidded || build.straw)) return null;
 
   // Only a customer whose order has been taken can be the selected one. If that customer has since
   // gone, the next tick picks whoever has been waiting longest for their drink.
@@ -317,8 +319,13 @@ function parseBuild(raw: unknown): CupBuild | null {
   const fill = num(value.fill, 0, 1);
   const iceScoops = int(value.iceScoops, 0, MAX_ICE_SCOOPS);
   const sugarPumps = int(value.sugarPumps, 0, SUGAR_STEPS.length);
+  // Existing cups predate the finishing station and return ready to be lidded by the player.
+  const lidded = value.lidded === undefined ? false : value.lidded;
+  const straw = value.straw === undefined ? false : value.straw;
+  const inLidder = value.inLidder === undefined ? false : value.inLidder;
+  if (typeof lidded !== 'boolean' || typeof straw !== 'boolean' || typeof inLidder !== 'boolean') return null;
   if (fill === null || iceScoops === null || sugarPumps === null) return null;
-  return { fill, spilled: value.spilled, iceScoops, sugarPumps };
+  return { fill, spilled: value.spilled, iceScoops, sugarPumps, lidded, straw, inLidder };
 }
 
 function parseStats(raw: unknown): DayStats | null {

@@ -5,6 +5,7 @@ import {
 } from './kitchenArt';
 import { kitchenCreamCanSvg, kitchenMilkCartonSvg, milkIngredientSvg } from './kitchenEquipment';
 import { ingredientMarkSvg } from './ingredientMarks';
+import { paintedEquipmentDetailSvg } from './equipmentArt';
 import { TOPPING_SCOOP_ART, TOPPING_SCOOPS } from './toppingArt';
 import { el, svgDoc, uid } from './svg';
 
@@ -31,7 +32,7 @@ export function ingredientIconSvg(category: CategoryId, id: string, size: number
     if (!cell) return '';
     const w = 40, h = w * art.height / art.width, x = 4, y = 1;
     body = crop(String(TEA_DISPENSERS), art.imageWidth, art.imageHeight, cell.x, cell.y, art.width, art.height, x, y, w, h);
-    const lw = w * .35, lh = h * .22, ly = y + h * .35;
+    const lw = w * art.label.width, lh = h * art.label.height, ly = y + h * art.label.top;
     body += el('rect', {x: x + (w-lw)/2+1, y: ly+1, width: lw-2, height: lh-2, rx: w*.025, fill: '#FFF0CC'});
     const mark = Math.min(lw-3, lh-2);
     body += el('svg', {x:x+(w-mark)/2,y:ly+(lh-mark)/2,width:mark,height:mark}, ingredientMarkSvg('tea',id,mark));
@@ -51,7 +52,10 @@ export function ingredientIconSvg(category: CategoryId, id: string, size: number
     body = el('svg', {x:1,y:1,width:24,height:46}, milk ? kitchenMilkCartonSvg(24,46,kind) : kitchenCreamCanSvg(24,46,id));
     // Enlarge the printed ingredient alongside its package: the flavor stays legible at phone size.
     body += '<circle cx="32" cy="31" r="14.5" fill="#FFF9E5" stroke="#D8BC87" stroke-width=".8"/>';
-    body += el('svg', {x:19,y:18,width:27,height:27}, milk ? milkIngredientSvg(kind,27) : ingredientMarkSvg('foam',id,27));
+    const detailClip = uid('equipment-detail');
+    body += `<defs><clipPath id="${detailClip}"><circle cx="32.5" cy="31.5" r="13.5"/></clipPath></defs>`;
+    body += el('g', {'clip-path': `url(#${detailClip})`}, el('svg', {x:19,y:18,width:27,height:27},
+      milk ? milkIngredientSvg(kind,27) : paintedEquipmentDetailSvg(id === 'brulee' ? 'brulee' : 'cheese',27)));
   }
   if (category === 'sweetness') {
     body = el('image', {href:String(SUGAR_SCOOP),x:1,y:9,width:46,height:28});
