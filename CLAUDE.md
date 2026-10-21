@@ -193,6 +193,14 @@ These rules are each the difference between an update and an unusable app:
   for exactly one launch and comes back to a white screen that a force-close cannot clear — the
   one failure the rollback cannot catch, because that build *did* boot and so *was* persisted.
   `ROOT` and `HOME` at the top of `live.ts` are per-platform for that reason alone.
+- **A rate limit is a wait, not a failure.** An update is a hundred and fifty requests as fast as
+  the connection will carry them, and a host happy with that from a browser over a minute of play
+  is not necessarily happy with it in twenty seconds: ours let 99 files through and refused the
+  hundredth with a 429, and the update threw away 9 MB of work it had already done. So a refusal
+  that could pass is asked for again — `Retry-After` when the host says, a long wait for a rate
+  limit and a short one for a hiccup (`waitFor`) — and a 429 also raises `pacing`, which slows
+  every remaining file rather than only the one that was turned away. A 404 is none of those and
+  is asked for exactly once.
 - **Nothing is swapped until every file is written.** A half-written directory served to the
   WebView is a white screen with no way back.
 - **A build is made permanent only once it has booted.** `setServerBasePath` lasts for the launch;
@@ -269,6 +277,29 @@ and Safari's rubber-band / pull-to-refresh.
 - `contextmenu`, `dragstart` and the iOS `gesture*` events are refused in `index.html`'s own
   script, because no CSS covers them.
 
+### The screen stays on
+
+A shift is two minutes of watching customers arrive and tea run into a cup, a good deal of it with
+a finger resting on the glass rather than moving across it. A phone with a thirty-second timeout
+dims mid-pour and then locks, which is the shop closing itself.
+
+`src/screen.ts` holds a **screen wake lock** for as long as the game is in front. It is the Screen
+Wake Lock API and nothing else: no plugin, no permission, no change to the native shell, so it
+costs no reinstall and the installed page gets it exactly as the app does. Two things decide its
+shape, and both are the API's rather than ours:
+
+- **The browser takes the lock away whenever the page is hidden**, and never hands it back. A lock
+  taken once at boot is gone the first time the player answers a message, so it is asked for again
+  on the way back in (`visibilitychange`). It is also let go of deliberately on the way out, which
+  is the one way this could flatten a battery.
+- **It can simply be refused** — battery saver, a WebView older than Chrome 84, an iPhone before
+  16.4. The screen then behaves as it always did, and the player is told nothing; the console is
+  told once.
+
+A browser can show it works: patch `navigator.wakeLock.request` from an init script that runs
+before the bundle, load the page, then override `document.visibilityState` and fire
+`visibilitychange` by hand. One request on load, a release on hiding, a second request on return.
+
 ## Who draws what
 
 One Phaser canvas sits under the HTML and over nothing: the counter (`scenes/CounterScene.ts`,
@@ -329,6 +360,7 @@ src/ui-state.ts         screen state the rules don't own: page, sign, meter, hin
 src/clock.ts            the day's tick
 src/persist.ts          localStorage: the read at launch and the slow write; see "Saving the shop"
 src/sound.ts            watches the shop and tells the engine what to play
+src/screen.ts           the screen wake lock: the phone stays awake while the game is in front
 src/hooks.ts            useGame/useUi: the only way the HTML reads either store
 src/game/               the rules, and the canvas they run on
   reducer.ts            GameState + CupBuild, actions (START_DAY, TICK, TAKE_ORDER, POUR, SCOOP,

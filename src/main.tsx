@@ -7,6 +7,7 @@ import { createGame, getGame } from './game/game';
 import { goToPage } from './game/pager';
 import { parseGame } from './game/save';
 import { readSavedGame, startSaving } from './persist';
+import { keepScreenOn } from './screen';
 import { startSound } from './sound';
 import { isApp } from './updates/live';
 import { store } from './store';
@@ -44,6 +45,7 @@ async function boot() {
   startSaving();
   startClock();
   startSound();
+  keepScreenOn();
   createGame(document.getElementById('game')!);
 
   // Tests drive the shop through this: always in development, and in a build only when the page is

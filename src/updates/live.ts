@@ -56,6 +56,13 @@ const DEADLINE_MS = 20 * 60_000;
 /** How long one request may take to connect, and how long it may then go quiet mid-file. */
 const CONNECT_MS = 20_000;
 const READ_MS = 60_000;
+/** How many times one file is asked for before the update gives up on it. */
+const ATTEMPTS = 5;
+/**
+ * The answers worth asking again for. A rate limit is the one that matters — see `waitFor` — and
+ * the rest are a host having a moment, which is not a thing to end an update over.
+ */
+const RETRYABLE = new Set([408, 425, 429, 500, 502, 503, 504]);
 
 export const isApp = () => Capacitor.isNativePlatform();
 
@@ -135,16 +142,58 @@ async function doing<T>(what: string, run: () => Promise<T>): Promise<T> {
  * when it is given no encoding, so the file crosses the bridge once and lands as itself.
  * `recursive` makes its own parent directories, which is what the legacy downloader would not.
  */
-async function downloadInto(file: string, to: string): Promise<void> {
-  const { status, data } = await CapacitorHttp.get({
-    url: `${SITE}/${file}`,
-    responseType: 'blob',
-    connectTimeout: CONNECT_MS,
-    readTimeout: READ_MS,
-  });
-  if (status < 200 || status >= 300) throw new Error(`máy chủ trả lịi ${status}`);
-  if (typeof data !== 'string') throw new Error('không nhận được nội dung tệp');
-  await Filesystem.writeFile({ path: to, directory: HOME, data, recursive: true });
+async function downloadInto(file: string, to: string, check: () => void): Promise<void> {
+  for (let attempt = 1; ; attempt++) {
+    check();
+    if (pacing) await sleep(pacing);
+    const answer = await CapacitorHttp.get({
+      url: `${SITE}/${file}`,
+      responseType: 'blob',
+      connectTimeout: CONNECT_MS,
+      readTimeout: READ_MS,
+    }).catch((error: unknown) => ({ status: 0, data: reasonFor(error), headers: {} }));
+
+    const { status, data } = answer;
+    if (status >= 200 && status < 300) {
+      if (typeof data !== 'string') throw new Error('không nhận được nội dung tệp');
+      await Filesystem.writeFile({ path: to, directory: HOME, data, recursive: true });
+      return;
+    }
+    if (attempt >= ATTEMPTS || !(status === 0 || RETRYABLE.has(status))) {
+      throw new Error(status === 0 ? String(data) : `máy chủ trả lời ${status}`);
+    }
+    // A rate limit is the host asking for less of this, so the whole update slows down — not just
+    // the one file that was turned away.
+    if (status === 429) pacing = Math.min(pacing + 200, 1000);
+    await sleep(waitFor(status, answer.headers ?? {}, attempt));
+  }
+}
+
+const sleep = (ms: number) => new Promise<void>((done) => setTimeout(done, ms));
+
+/** Raised by a rate limit and left raised: what the host would not take once it will not take twice. */
+let pacing = 0;
+
+/**
+ * How long to leave it before asking again.
+ *
+ * **429 is the one this exists for.** An update is a hundred and fifty requests as fast as the
+ * connection will carry them, and a host content with that from a browser across a minute of play
+ * is not necessarily content with it in twenty seconds: this one let 99 files through and refused
+ * the hundredth. A refusal like that is not a failure, it is a **wait** — but only if somebody
+ * waits, and the update that first met it threw the whole thing away with 12 MB to go.
+ *
+ * `Retry-After` is the host saying how long, in seconds, and beats any guess. Without one, a rate
+ * limit gets a long wait and everything else a short one, because they are different problems in
+ * the same shape: a limit is counted in a window somebody else chose, while a hiccup is usually
+ * over by the time you have asked again.
+ */
+export function waitFor(status: number, headers: Record<string, string>, attempt: number): number {
+  const named = Object.entries(headers).find(([name]) => name.toLowerCase() === 'retry-after');
+  const asked = Number(named?.[1]);
+  if (named && Number.isFinite(asked) && asked >= 0) return Math.min(asked * 1000, 60_000);
+  const first = status === 429 ? 5_000 : 500;
+  return Math.min(first * 2 ** (attempt - 1), 30_000);
 }
 
 /** The build the site is serving, or null if it cannot be read or does not hang together. */
@@ -249,6 +298,7 @@ export async function applyUpdate(
   cancelled: () => boolean,
 ): Promise<void> {
   const started = Date.now();
+  pacing = 0;
   const current = await running();
   const work = plan(current.manifest, manifest);
   const target = `${ROOT}/${manifest.webBuild}`;
@@ -292,7 +342,7 @@ export async function applyUpdate(
       });
     } catch {
       refetched.push(path);
-      await doing(`tải lại ${path}`, () => downloadInto(path, `${target}/${path}`));
+      await doing(`tải lại ${path}`, () => downloadInto(path, `${target}/${path}`, check));
     }
     step();
   }
@@ -302,7 +352,7 @@ export async function applyUpdate(
   }
   for (const path of work.fetch) {
     check();
-    await doing(`tải ${path}`, () => downloadInto(path, `${target}/${path}`));
+    await doing(`tải ${path}`, () => downloadInto(path, `${target}/${path}`, check));
     step(manifest.files[path]);
   }
 

@@ -223,7 +223,13 @@ let siteChecks = Promise.resolve();
       get: async ({ url, responseType }) => {
         const file = url.replace(/^https:\/\/[^/]+\//, '');
         asked.push([file, responseType]);
-        return site[file] ?? { status: 404, data: '' };
+        const answer = site[file] ?? { status: 404, data: '' };
+        // A host that refuses once and relents, the way a rate limit does.
+        if (answer.refuseOnce) {
+          delete answer.refuseOnce;
+          return { status: 429, data: '', headers: { 'Retry-After': '0' } };
+        }
+        return answer;
       },
     },
     WebView: {
@@ -404,10 +410,34 @@ let siteChecks = Promise.resolve();
       'and it lands all the same');
     assert.match(said.join('\n'), /could not be copied/, 'and the log says how many and which');
 
+    // --- a rate limit is a wait, not a failure
+    // The host let 99 files through and refused the hundredth, and the update threw away 12 MB of
+    // work over it. `Retry-After` is nothing here so the test does not sit about; what is pinned
+    // is that the file is asked for again and that the update carries on through it.
+    asked.length = 0;
+    // `index.html` carries no hash, so it is always one of the files that comes down.
+    site['index.html'].refuseOnce = true;
+    await quietly(() => live.applyUpdate({ ...NEXT, webBuild: 'commit-7' }, () => {}, () => false));
+    assert.equal(downloaded().filter((file) => file === 'index.html').length, 2,
+      'A file the host turned away is asked for a second time');
+    assert.equal(disk.get('builds/commit-7/index.html'), body('index.html'),
+      'and the update finishes with it');
+
+    // How long to wait is its own small decision, and the host gets the last word on it.
+    assert.equal(live.waitFor(429, { 'Retry-After': '12' }, 1), 12_000, 'Retry-After is obeyed');
+    assert.equal(live.waitFor(429, { 'retry-after': '2' }, 4), 2_000, 'whatever its capitals');
+    assert.equal(live.waitFor(429, { 'Retry-After': '9999' }, 1), 60_000, 'but not past a minute');
+    assert.ok(live.waitFor(429, {}, 1) >= 5_000, 'A rate limit with no advice waits a while');
+    assert.ok(live.waitFor(503, {}, 1) < 1_000, 'where a hiccup asks again almost at once');
+    assert.ok(live.waitFor(503, {}, 4) > live.waitFor(503, {}, 1), 'and each refusal waits longer');
+    assert.equal(live.waitFor(503, {}, 20), 30_000, 'up to a cap');
+
     // --- a failure says which file and why, because the card is the only place anyone reads it
     // Neither on disk nor on the server: the fallback is not an excuse to finish without it.
-    site['assets/index-ddd.js'] = { status: 500, data: '' };
-    disk.delete('builds/commit-6/assets/index-ddd.js');
+    // `Retry-After: 0` only so this test does not sit through its own backoff.
+    asked.length = 0;
+    site['assets/index-ddd.js'] = { status: 500, data: '', headers: { 'Retry-After': '0' } };
+    disk.delete(`${basePath.replace(`${HOME}/`, '')}/assets/index-ddd.js`);
     dirs.delete('builds/commit-4');
     await assert.rejects(
       () => quietly(() => live.applyUpdate({ ...NEXT, webBuild: 'commit-4' }, () => {}, () => false)),
@@ -418,7 +448,19 @@ let siteChecks = Promise.resolve();
       },
       'A file that cannot be fetched fails the update rather than half-applying it',
     );
-    assert.equal(basePath, `${HOME}/builds/commit-6`, 'and what is being served does not move');
+    assert.equal(basePath, `${HOME}/builds/commit-7`, 'and what is being served does not move');
+    assert.equal(downloaded().filter((file) => file === 'assets/index-ddd.js').length, 5,
+      'A host having a moment is given every attempt before the update is called off');
+
+    // A file the host does not have is not a moment, and asking four more times is just rude.
+    asked.length = 0;
+    site['assets/index-ddd.js'] = { status: 404, data: '' };
+    await assert.rejects(
+      () => quietly(() => live.applyUpdate({ ...NEXT, webBuild: 'commit-8' }, () => {}, () => false)),
+      /404/,
+      'A file that is not there fails the update');
+    assert.equal(downloaded().filter((file) => file === 'assets/index-ddd.js').length, 1,
+      'and is asked for exactly once');
 
     // --- the parents are made twice over, on purpose
     // `mkdirp` makes them for the copies, and every write asks for them again (`recursive`). The
