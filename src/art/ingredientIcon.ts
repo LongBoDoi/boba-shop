@@ -1,7 +1,7 @@
 /** Order illustrations reuse the actual kitchen art, silhouettes and pictorial emblems. */
 import { CategoryId, getIngredient, ICE_LEVELS } from '../game/ingredients';
 import {
-  CUP_SPRITE, PIECE, ROOM_BG_TEA_SHELF, ROOM_BG_TOPPING_SHELF, SUGAR_SCOOP, TEA_DISPENSER_ART, TEA_DISPENSERS,
+  CUP_DECAL, PIECE, ROOM_BG_TEA_SHELF, ROOM_BG_TOPPING_SHELF, SUGAR_SCOOP, TEA_DISPENSER_ART, TEA_DISPENSERS,
 } from './kitchenArt';
 import { kitchenCreamCanSvg, kitchenMilkCartonSvg, milkIngredientSvg } from './kitchenEquipment';
 import { ingredientMarkSvg } from './ingredientMarks';
@@ -66,11 +66,23 @@ export function ingredientIconSvg(category: CategoryId, id: string, size: number
   return svgDoc(size,size,body,'0 0 48 48');
 }
 
-/** Size stays a functional S/M/L badge; the picture shows the glass the player picks up. */
+/** Strong glass contours and the actual cat decal stay visible against the pale order card. */
 export function cupSizeIconSvg(id: string, size: number): string {
-  const height = id === 'S' ? 33 : id === 'M' ? 39 : 45;
+  const height = id === 'S' ? 36 : id === 'M' ? 40 : 44;
   const width = height * 113 / 174;
-  return svgDoc(size,size,el('image',{href:String(CUP_SPRITE),x:(48-width)/2,y:47-height,width,height}),'0 0 48 48');
+  const glass = uid('order-cup-glass');
+  const body = `<defs><linearGradient id="${glass}"><stop stop-color="#C5DBD5"/><stop offset=".28" stop-color="#F3FAF7"/><stop offset=".65" stop-color="#E5F1ED"/><stop offset="1" stop-color="#BCD3CC"/></linearGradient></defs>` +
+    '<ellipse cx="24" cy="46" rx="12" ry="1.6" fill="#9E8260" opacity=".18"/>' +
+    `<g transform="translate(${(48-width)/2} ${47-height}) scale(${height/174})" stroke-linejoin="round">` +
+    `<path d="M7 16L20 157Q56.5 176 93 157L106 16Z" fill="url(#${glass})" stroke="#926D4C" stroke-width="5.5"/>` +
+    '<path d="M20 157Q56.5 171 93 157" fill="none" stroke="#B39672" stroke-width="3"/>' +
+    '<path d="M19 40L27 131 M91 43L84 130" fill="none" stroke="#FFFFFF" stroke-width="6" stroke-linecap="round" opacity=".9"/>' +
+    el('image',{href:String(CUP_DECAL),width:113,height:174}) +
+    '<ellipse cx="56.5" cy="16" rx="51" ry="12" fill="#F6FCF9" stroke="#926D4C" stroke-width="5.5"/>' +
+    '<ellipse cx="56.5" cy="16" rx="42" ry="6.5" fill="#D7E7E1" stroke="#B0C7BF" stroke-width="2.5"/>' +
+    '<path d="M16 15Q55 2 97 15" fill="none" stroke="#FFFFFF" stroke-width="3.5" stroke-linecap="round"/>' +
+    '</g>';
+  return svgDoc(size,size,body,'0 0 48 48');
 }
 
 /** A tiny shelf/tray diagram locates visually similar ingredients without a written name. */

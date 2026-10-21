@@ -13,7 +13,7 @@ import {
   TEA_DISPENSER_ART,
 } from '../art/kitchenArt';
 import { toppingPanBounds, ToppingPanShape } from '../art/toppingGeometry';
-import { CREAM_ART_SCALE_MIN, MILK_ART_SCALE_MIN } from './typography';
+import { MILK_CARTON_ART } from '../art/kitchenEquipment';
 import { CUP_ART, CUP_FOOT } from '../art/cupGeometry';
 
 /**
@@ -149,27 +149,17 @@ export function layoutKitchen(config: DayConfig, W: number, H: number, size: Cup
     ...(config.categories.includes('foam') ? [{ kind: 'foam' as const, id: 'cheese' }, { kind: 'foam' as const, id: 'brulee' }] : []),
   ];
   const extrasArt = ROOM_BG_EXTRAS;
-  // Keep container illustrations recognizable in the short sideways room. Pack their
-  // painted silhouettes together so enlarging one does not overlap its neighbour.
-  const containers = extras.filter(item => item.kind === 'milk' || item.kind === 'foam').map(item => {
-    const milk = item.kind === 'milk';
-    const artW = milk ? 72 : 64, artH = milk ? 154 : 150;
-    const displayedScale = Math.max(scale, milk ? MILK_ART_SCALE_MIN : CREAM_ART_SCALE_MIN);
-    const left = milk ? 6 : 8, right = milk ? 66 : 57;
-    return { ...item, artW, artH, displayedScale, left, right, visibleW: (right - left) * displayedScale };
-  });
-  const leftEdge = ROOM_BG_TEA_SHELF.x1 * scale;
-  const rightEdge = extrasArt.sugar.x * scale;
-  const visibleWidth = containers.reduce((sum, item) => sum + item.visibleW, 0);
-  const gap = Math.max(2, (rightEdge - leftEdge - visibleWidth) / (containers.length + 1));
-  let cursor = (leftEdge + rightEdge - visibleWidth - gap * (containers.length - 1)) / 2;
-  for (const item of containers) {
-    const ratio = item.displayedScale / scale;
-    const w = item.artW * ratio, h = item.artH * ratio;
-    const x = (cursor - item.left * item.displayedScale) / scale;
-    const base = 541 + (item.kind === 'milk' ? 4 * ratio : 0);
-    add(item.kind, item.id, x, base - h, w, h);
-    cursor += item.visibleW + gap;
+  // All containers follow the counter's perspective and room scale, including in landscape.
+  for (const kind of ['milk', 'foam'] as const) {
+    const milk = kind === 'milk';
+    const centers = milk ? extrasArt.milkCenters : extrasArt.foamCenters;
+    const w = milk ? extrasArt.milkWidth : extrasArt.foamWidth;
+    const h = milk ? extrasArt.milkHeight : extrasArt.foamHeight;
+    const foot = milk ? MILK_CARTON_ART.foot / MILK_CARTON_ART.height : 1;
+    const base = milk ? extrasArt.milkBase : extrasArt.foamBase;
+    extras.filter(item => item.kind === kind).forEach((item, i) => {
+      add(kind, item.id, centers[i] - w / 2, base - h * foot, w, h);
+    });
   }
   if (config.categories.includes('sweetness')) {
     const jar = extrasArt.sugar;

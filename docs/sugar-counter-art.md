@@ -1,5 +1,9 @@
 # Sugar counter artwork
 
+The current jar uses the user's attached artwork directly, including its original painted
+cream “Sugar” plaque, hand lettering and diamond decorations. No label is drawn over it.
+The supplied PNG is preserved in `tools/sheets/sugar-jar.png` and packaged by the script below.
+
 Created with the built-in imagegen tool using the user's supplied kitchen design as the jar reference, and `kitchen-warm-extended.png` as the room edit target.
 
 | File | Purpose |

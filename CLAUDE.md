@@ -894,7 +894,8 @@ What the painting is allowed to decide, and what the geometry is:
   back of the pile to the front while a near piece still covers a far one's wash.
 - **Ingredients are identified by pictures, without name tags.** Tea tanks have distinct
   leaf, jasmine, anise, rolled-leaf, taro and matcha emblems (`art/ingredientMarks.ts`). Topping
-  pans show their contents unobscured. Sugar and ice use cube motifs. Milk cartons show a cow
+  pans show their contents unobscured. Sugar uses a cube motif; the ice box keeps its original
+  background artwork and lettering without an added tag or graphic. Milk cartons show a cow
   or oats; cream dispensers show cheese or a caramel spiral, without printed words.
 - **Equipment and orders share artwork.** `kitchenMilkCartonSvg` and `kitchenCreamCanSvg` in
   `art/kitchenEquipment.ts` define the complete packages; `prepareEquipmentTextures` rasterises

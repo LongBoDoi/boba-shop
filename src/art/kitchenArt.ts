@@ -323,9 +323,9 @@ export const ROOM_BG_TEA_SHELF = {
 export const ROOM_BG_CUP_STATION = { x: 22, y: 242, width: 300, height: 291, stackTops: [312, 278, 242] };
 export const ROOM_BG_ICE_MACHINE = { x: 1818, y: 339, width: 430, height: 230 };
 export const ROOM_BG_EXTRAS = {
-  // Carton artwork ends at 150/154 of its box; its painted feet meet the jar's 541px base.
-  milkCenters: [878, 952], milkBase: 545, milkWidth: 72, milkHeight: 154,
-  foamCenters: [1022, 1093], foamBase: 541, foamWidth: 64,
+  // Painted feet, in room coordinates: cartons sit forward of the smaller cream cans.
+  milkCenters: [875, 951], milkBase: 548, milkWidth: 66, milkHeight: 66 * 154 / 72,
+  foamCenters: [1040, 1104], foamBase: 536, foamWidth: 50, foamHeight: 50 * 150 / 64,
   // The reference jar's 141×182 silhouette, on the counter just left of the utensil caddy.
   sugar: { x: 1166, y: 359, width: 141, height: 182 },
 };

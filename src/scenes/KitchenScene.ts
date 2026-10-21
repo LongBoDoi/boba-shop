@@ -4,7 +4,7 @@ import {
   CupSize, Drink, EMPTY_DRINK, getIngredient, MAX_ICE_SCOOPS, MAX_POUR, MILK_SPLASH, POUR_RATE, SUGAR_STEPS,
 } from '../game/ingredients';
 import { GameState } from '../game/reducer';
-import { CUP_HOLDER, ROOM_BG, ROOM_BG_CUP_STATION, SUGAR_JAR, TEA_DISPENSER_ART, TEA_DISPENSERS } from '../art/kitchenArt';
+import { CUP_HOLDER, ROOM_BG, SUGAR_JAR, TEA_DISPENSER_ART, TEA_DISPENSERS } from '../art/kitchenArt';
 import { TOPPING_PANS } from '../art/toppingArt';
 import { CUP_ART, CUP_FOOT } from '../art/cupGeometry';
 import { gameArea } from '../game/host';
@@ -14,7 +14,7 @@ import { dispatch, store } from '../store';
 import { nudge, uiState } from '../ui-state';
 import { CupView } from '../kitchen/CupView';
 import {
-  addTool, prepareEquipmentTextures, card, drawPan, drawShadow, fitText, measure, panExtent, roundRect, sourceImage,
+  addTool, prepareEquipmentTextures, card, drawPan, drawShadow, measure, panExtent, roundRect, sourceImage,
 } from '../kitchen/equipment';
 import { Atlas } from '../kitchen/atlas';
 import { cupSizeFor, findStation, hintFor, KitchenLayout, layoutKitchen, Station } from '../kitchen/layout';
@@ -187,17 +187,6 @@ export class KitchenScene extends Phaser.Scene {
     type Piece = { frame: string; x: number; y: number; w: number; h: number; dims?: boolean; name?: string; visible?: boolean };
     const pieces: { station?: Station; items: Piece[] }[] = [];
 
-    const rack = ROOM_BG_CUP_STATION;
-    (['S', 'M', 'L'] as const).forEach((size, i) => {
-      const w = Math.max(24, 52 * room.scale), h = Math.max(20, 29 * room.scale);
-      const frame = atlas.add(`rack-size:${size}:${sized(w,h)}`, w, h, c => {
-        card(c,w,h,3,'#FFF1D4',1,'#C3955E');
-        fitText(c,size,KITCHEN_TEXT_MIN,800,'#845933',w/2,h/2,w-6);
-      });
-      pieces.push({items:[{frame,x:(rack.x+ rack.width*(i+0.5)/3)*room.scale-w/2,
-        y:room.top+486*room.scale-h/2,w,h}]});
-    });
-
     for (const bin of layout.emptyBins) {
       const extent = panExtent(bin.w, bin.h, bin.panShape);
       const frame = atlas.add(`pan:empty:${sized(bin.w, bin.h)}:${bin.panShape ? Object.values(bin.panShape).map((v) => v.toFixed(3)).join(',') : ''}`,
@@ -246,25 +235,10 @@ export class KitchenScene extends Phaser.Scene {
           c.fill();
         });
         items.push({ frame, x, y, w, h: gh, name: 'glow', visible: false });
-        // Cover the background's baked word with an ice illustration, without a name plaque.
-        const iw = w * 0.26, ih = Math.max(20, h * 0.22);
-        const name = atlas.add(`ice-picture:${sized(iw, ih)}`, iw, ih, c => {
-          const fill = c.createLinearGradient(0, 0, 0, ih);
-          fill.addColorStop(0, '#FFE8C3'); fill.addColorStop(1, '#FFE1AF');
-          c.fillStyle = fill; c.fillRect(0, 0, iw, ih);
-          if (this.textures.exists('ingredient-mark-ice')) {
-            c.drawImage(sourceImage(this, 'ingredient-mark-ice'), (iw - ih) / 2, 0, ih, ih);
-          }
-        });
-        items.push({frame:name,x:station.cx-iw/2,y:y+h*0.84-ih/2,w:iw,h:ih});
       } else if (station.kind === 'sugar') {
         const jar = sourceImage(this, SUGAR_JAR);
         const frame = atlas.add(`sugar-jar:${sized(w, h)}`, w, h, (c) => {
           c.drawImage(jar, 0, 0, w, h);
-          if (this.textures.exists('ingredient-mark-sweetness')) {
-            const size = Math.min(w * 0.48, h * 0.27);
-            c.drawImage(sourceImage(this, 'ingredient-mark-sweetness'), (w - size) / 2, h * 0.82 - size / 2, size, size);
-          }
         });
         items.push({ frame, x, y, w, h, dims: true });
       } else {
@@ -854,7 +828,7 @@ export class KitchenScene extends Phaser.Scene {
     this.toolState = {
       // The room scrolls, while carried tools follow the finger in screen coordinates.
       originX: station.cx - this.pan - size / 2,
-      originY: station.y + station.h * 0.1,
+      originY: station.y + (station.kind === 'milk' || station.kind === 'foam' ? 0 : station.h * 0.1),
       x: 0, y: 0, tip: 0, show: 1, size,
     };
     this.toolState.x = this.toolState.originX;

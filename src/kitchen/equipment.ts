@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 
-import { CREAM_CAN_ART, SCOOP_ART, SCOOPFUL, SUGAR_SCOOP, SUGAR_SCOOP_ART, TEA_DISPENSER_ART, TEA_DISPENSERS } from '../art/kitchenArt';
+import { SCOOP_ART, SCOOPFUL, SUGAR_SCOOP, SUGAR_SCOOP_ART, TEA_DISPENSER_ART, TEA_DISPENSERS } from '../art/kitchenArt';
 import { TOPPING_PAN_ART, TOPPING_PANS, TOPPING_SCOOP_ART, TOPPING_SCOOPS } from '../art/toppingArt';
 import { toppingPanBands, ToppingPanShape } from '../art/toppingGeometry';
 import { kitchenCreamCanSvg, kitchenMilkCartonSvg, MILK_CARTON_ART } from '../art/kitchenEquipment';
@@ -8,7 +8,7 @@ import { canvasFont, svgTexture, tex } from '../game/view';
 import { Station } from './layout';
 import { ingredientMarkSvg } from '../art/ingredientMarks';
 import { TEAS } from '../game/ingredients';
-import { CREAM_ART_SCALE_MIN, KITCHEN_TEXT_MIN, MILK_ART_SCALE_MIN } from './typography';
+import { KITCHEN_TEXT_MIN } from './typography';
 
 /** One tea's dispenser, as a frame of the shared atlas. */
 export function teaFrame(scene: Phaser.Scene, teaId: string): string {
@@ -145,8 +145,7 @@ export async function prepareEquipmentTextures(scene: Phaser.Scene): Promise<voi
       kitchenCreamCanSvg(128, 300, id), 128, 300)),
     ...TEAS.map(tea => svgTexture(scene, `ingredient-mark-tea-${tea.id}`,
       ingredientMarkSvg('tea', tea.id, 96), 96, 96)),
-    ...(['ice', 'sweetness'] as const).map(category => svgTexture(scene, `ingredient-mark-${category}`,
-      ingredientMarkSvg(category, '', 96), 96, 96)),
+    svgTexture(scene, 'ingredient-mark-sweetness', ingredientMarkSvg('sweetness', '', 96), 96, 96),
   ]);
 }
 
@@ -163,8 +162,7 @@ export function addTool(scene: Phaser.Scene, station: Station, size: number): Ph
   if (station.kind === 'milk') {
     const key = `milk-carton-${station.id}`;
     if (!scene.textures.exists(key)) return [];
-    const scale = Math.max(MILK_ART_SCALE_MIN, S * 1.1 / MILK_CARTON_ART.height);
-    return [scene.add.image(0, 0, key).setOrigin(0).setDisplaySize(MILK_CARTON_ART.width * scale, MILK_CARTON_ART.height * scale)];
+    return [scene.add.image((S - station.w) / 2, 0, key).setOrigin(0).setDisplaySize(station.w, station.h)];
   }
   if (station.kind === 'ice') {
     const height = S * 0.9;
@@ -179,7 +177,6 @@ export function addTool(scene: Phaser.Scene, station: Station, size: number): Ph
   // The cream canister is carried whole, using the same artwork as the counter option.
   const key = `cream-can-${station.id}`;
   if (!scene.textures.exists(key)) return [];
-  const scale = Math.max(CREAM_ART_SCALE_MIN, S * 1.1 / CREAM_CAN_ART.height);
-  return [scene.add.image(0, 0, key).setOrigin(0).setDisplaySize(CREAM_CAN_ART.width * scale, CREAM_CAN_ART.height * scale)];
+  return [scene.add.image((S - station.w) / 2, 0, key).setOrigin(0).setDisplaySize(station.w, station.h)];
 }
 

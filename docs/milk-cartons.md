@@ -10,8 +10,9 @@ The 72×154 art box has its painted foot at y150. `prepareEquipmentTextures` ras
 once for the counter and carried tool. The order panel uses the same SVG carton and a larger
 ingredient inset.
 
-The milk/cream row packs between the tea shelf and sugar jar. Minimum display scale keeps the
-pictures recognizable in landscape; the painted bases stay on the sugar holder's y541 counter
-line. Recipes and pour quantities are unchanged. See [visual orders](visual-orders.md).
+The cartons are 66×141 room pixels, with their painted feet at y548. They stand together between
+the tea shelf and the smaller cream bottles, which sit slightly farther back. Both follow the
+background's scale in every orientation, and retain their counter dimensions when picked up.
+Recipes and pour quantities are unchanged. See [visual orders](visual-orders.md).
 
 Preview: [milk and cream beside the visual order](visual-order-preview.png).

@@ -58,6 +58,7 @@ export class CupView {
   private phase = 0;
   private dirty = true;
   private readonly sizeTag: Phaser.GameObjects.Image;
+  private sizeTagWidth = 0;
 
   constructor(private readonly scene: Phaser.Scene, readonly width: number, readonly height: number, drink: Drink) {
     this.key = `cup-canvas-${++viewCount}`;
@@ -80,7 +81,7 @@ export class CupView {
     const edge = scene.add.image(0, 0, tex(CUP_EDGE)).setOrigin(0).setDisplaySize(width, height);
     const decal = scene.add.image(0, 0, tex(CUP_DECAL)).setOrigin(0).setDisplaySize(width, height);
 
-    this.sizeTag = scene.add.image(width + 12, 0, '__DEFAULT').setOrigin(1, 0).setVisible(false);
+    this.sizeTag = scene.add.image(width + 6, 0, '__DEFAULT').setOrigin(1, 0).setVisible(false);
     this.container = scene.add.container(0, 0, [base, drawn, glints, edge, decal, this.sizeTag]);
     this.setDrink(drink, 0, true);
   }
@@ -125,7 +126,11 @@ export class CupView {
   /** Advance whatever is moving, and repaint if anything did. Called once a frame. */
   update(time: number, delta: number) {
     const tagScale = 1 / Math.max(0.01, Math.min(1, this.container.scaleX));
-    if (this.sizeTag.scaleX !== tagScale) this.sizeTag.setScale(tagScale);
+    const tagWidth = this.sizeTagWidth * tagScale;
+    // Preserve CSS dimensions: setting the raw scale also enlarges high-density textures.
+    if (this.sizeTagWidth && Math.abs(this.sizeTag.displayWidth - tagWidth) > 0.01) {
+      this.sizeTag.setDisplaySize(tagWidth, 14 * tagScale);
+    }
     const settling = (start: number) => start > -Infinity && time - start < SETTLE_MS + 20;
     const moving = this.iceStart.some(settling) || this.portionStart.some(settling);
     const target = this.pouring ? 1 : 0;
@@ -158,16 +163,17 @@ export class CupView {
     this.sizeTag.setVisible(Boolean(size));
     if (!size) return;
     const font = canvasFont(KITCHEN_TEXT_MIN, 700);
-    const w = measure(size, font) + 12;
-    const h = 17;
-    const key = bakeCanvas(this.scene, `size-tag:${size}`, w, h, (c) => {
-      card(c, w, h, 4, '#FFF4DC', 1, '#C99F6A');
+    const w = measure(size, font) + 6;
+    const h = 14;
+    const key = bakeCanvas(this.scene, `size-tag:compact:${size}`, w, h, (c) => {
+      card(c, w, h, 3, '#FFF4DC', 1, '#C99F6A');
       c.font = font;
       c.fillStyle = '#795331';
       c.textAlign = 'center';
       c.textBaseline = 'middle';
       c.fillText(size, w / 2, h / 2 + 1);
     });
+    this.sizeTagWidth = w;
     this.sizeTag.setTexture(key).setDisplaySize(w, h);
   }
 

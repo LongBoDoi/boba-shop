@@ -10,7 +10,8 @@ match the actual ingredients and equipment:
 - Milk cartons and cream dispensers share SVG drawings between the order panel, counter and
   carried tool. Enlarged cow, oat, cheese and caramel insets clarify their differences on phones.
 - Sugar uses the painted spoon with a percentage badge. Ice uses the painted cubes with ×1/×2
-  scoop badges. Cup sizes use the actual glass with S/M/L.
+  scoop badges. Cup sizes use a glass illustration with clear brown contours, a cool glass tint
+  and the game's cat decal, plus S/M/L. This keeps the empty glass visible on the pale panel.
 
 Tea icons also carry a 3×2 shelf diagram. The diagrams indicate the station's position in the
 full shelf/tray; their mapping comes from the same slot arrays as the kitchen layout.
