@@ -209,12 +209,16 @@ let siteChecks = Promise.resolve();
   // file of the build comes down as a blob, and telling them apart is how both are pinned.
   const asked = [];
   const downloaded = () => asked.filter(([, type]) => type === 'blob').map(([file]) => file);
-  let basePath = '';
+  // **What a freshly installed app answers**, and the reason two updates failed: an app serving
+  // the build inside its package reports its asset folder's name, which is neither a path nor
+  // empty. The stub starts there, because that is where every app starts.
+  let basePath = 'public';
   let persisted = 0;
   let mkdirWorks = true;
 
+  let platform = 'android';
   const core = {
-    Capacitor: { isNativePlatform: () => true },
+    Capacitor: { isNativePlatform: () => true, getPlatform: () => platform },
     CapacitorHttp: {
       get: async ({ url, responseType }) => {
         const file = url.replace(/^https:\/\/[^/]+\//, '');
@@ -228,8 +232,9 @@ let siteChecks = Promise.resolve();
       persistServerBasePath: async () => { persisted += 1; },
     },
   };
+  const where = new Set();
   const filesystem = {
-    Directory: { Data: 'DATA' },
+    Directory: { Data: 'DATA', Library: 'LIBRARY' },
     Encoding: { UTF8: 'utf8' },
     Filesystem: {
       mkdir: async ({ path, recursive }) => {
@@ -250,7 +255,8 @@ let siteChecks = Promise.resolve();
         for (const held of dirs) if (parentOf(held) === path) inside.add(held.split('/').pop());
         return { files: [...inside].map((name) => ({ name })) };
       },
-      writeFile: async ({ path, data, recursive }) => {
+      writeFile: async ({ path, data, recursive, directory }) => {
+        where.add(directory);
         if (!haveParent(path)) {
           if (!recursive) throw new Error('File does not exist');
           const parts = parentOf(path).split('/');
@@ -260,14 +266,29 @@ let siteChecks = Promise.resolve();
         order.push(`write ${path}`);
       },
       copy: async ({ from, to }) => {
-        if (!disk.has(from)) throw new Error('File does not exist');
+        // Recorded before it can fail, because "was a copy even attempted" is the question.
+        order.push(`copy ${to}`);
+        if (!disk.has(from)) throw new Error(`'copy' failed because file at '${from}' does not exist.`);
         // The real plugin refuses rather than making the destination's parent. See `mkdirp`.
         if (!haveParent(to)) throw new Error('Parent directory does not exist');
         disk.set(to, disk.get(from));
-        order.push(`copy ${to}`);
       },
       getUri: async ({ path }) => ({ uri: `file://${HOME}/${path}` }),
     },
+  };
+
+  // The app's **own** page, off its local server. `running()` asks for `update.json` relatively,
+  // and the server answers out of whatever it is hosting: the package's own build while that is
+  // `public`, and the downloaded directory once one is being served. Modelling that is the whole
+  // point — an app reading its package's manifest and taking it for a directory on disk is the
+  // bug this file exists to keep out.
+  const BUNDLED = { webBuild: 'commit-1', nativeVersion: 2, files: FILES };
+  globalThis.fetch = async (url) => {
+    assert.equal(url, 'update.json', 'The app reads its own manifest relatively, off its own server');
+    const held = basePath === 'public'
+      ? JSON.stringify(BUNDLED)
+      : disk.get(`${basePath.replace(`${HOME}/`, '')}/update.json`);
+    return held === undefined ? { ok: false } : { ok: true, json: async () => JSON.parse(held) };
   };
 
   const load = Module._load;
@@ -327,12 +348,17 @@ let siteChecks = Promise.resolve();
     assert.match(said.join('\n'), /answered 503/, 'as does a host that will not answer');
 
     // --- the first update an installed app does: nothing of its own to copy from
+    // It has 22 MB of artwork inside its own package and not one byte of it can be copied, because
+    // those files are in the APK rather than on the filesystem. An app that believes otherwise
+    // tries to copy out of `builds/<the build it is running>`, which has never been a directory.
     const manifest = await live.fetchManifest();
     const seen = [];
     await live.applyUpdate(manifest, (progress) => seen.push(progress.done), () => false);
 
     assert.deepEqual(downloaded().sort(), Object.keys(FILES).sort(),
       'Every file of the build is fetched, because an app has nothing on disk to copy from');
+    assert.deepEqual(order.filter((what) => what.startsWith('copy ')), [],
+      'and nothing is copied out of the package it is running, which is not a directory');
     assert.deepEqual(asked.filter(([, type]) => type === 'text').map(([file]) => file).slice(-2),
       ['update.json', 'index.html'],
       'The check itself reads as text, and reads the page to hold it against the manifest');
@@ -357,12 +383,6 @@ let siteChecks = Promise.resolve();
     };
     delete NEXT.files['assets/index-aaa.js'];
     for (const file of Object.keys(NEXT.files)) site[file] = { status: 200, data: body(file) };
-    // `running()` reads the app's **own** manifest off the local server, which is same-origin and
-    // so is a plain `fetch` — pinned here, because swapping it for the site's reader would break it.
-    globalThis.fetch = async (url) => {
-      assert.equal(url, 'update.json', 'The app reads its own manifest relatively, off its own server');
-      return { ok: true, json: async () => manifest };
-    };
     asked.length = 0;
     order.length = 0;
     await live.applyUpdate(NEXT, () => {}, () => false);
@@ -373,11 +393,24 @@ let siteChecks = Promise.resolve();
     assert.equal(disk.get('builds/commit-3/assets/cup-bbb.png'), 'base64:assets/cup-bbb.png',
       'A copied file is the file');
 
+    // --- a file that cannot be copied comes down again rather than failing the update
+    asked.length = 0;
+    order.length = 0;
+    disk.delete('builds/commit-3/assets/cup-bbb.png');
+    await quietly(() => live.applyUpdate({ ...NEXT, webBuild: 'commit-6' }, () => {}, () => false));
+    assert.ok(downloaded().includes('assets/cup-bbb.png'),
+      'A file the build on disk has lost is fetched instead of failing the whole update');
+    assert.equal(disk.get('builds/commit-6/assets/cup-bbb.png'), body('assets/cup-bbb.png'),
+      'and it lands all the same');
+    assert.match(said.join('\n'), /could not be copied/, 'and the log says how many and which');
+
     // --- a failure says which file and why, because the card is the only place anyone reads it
+    // Neither on disk nor on the server: the fallback is not an excuse to finish without it.
     site['assets/index-ddd.js'] = { status: 500, data: '' };
+    disk.delete('builds/commit-6/assets/index-ddd.js');
     dirs.delete('builds/commit-4');
     await assert.rejects(
-      () => live.applyUpdate({ ...NEXT, webBuild: 'commit-4' }, () => {}, () => false),
+      () => quietly(() => live.applyUpdate({ ...NEXT, webBuild: 'commit-4' }, () => {}, () => false)),
       (error) => {
         assert.match(error.message, /assets\/index-ddd\.js/, 'The failure names the file');
         assert.match(error.message, /500/, 'and what the server said about it');
@@ -385,7 +418,7 @@ let siteChecks = Promise.resolve();
       },
       'A file that cannot be fetched fails the update rather than half-applying it',
     );
-    assert.equal(basePath, `${HOME}/builds/commit-3`, 'and what is being served does not move');
+    assert.equal(basePath, `${HOME}/builds/commit-6`, 'and what is being served does not move');
 
     // --- the parents are made twice over, on purpose
     // `mkdirp` makes them for the copies, and every write asks for them again (`recursive`). The
@@ -401,6 +434,44 @@ let siteChecks = Promise.resolve();
       assert.equal(disk.get(`builds/commit-5/${file}`), body(file),
         `${file} lands even where no directory was made for it`);
     }
+
+    // --- and an app back on the build inside its package keeps nothing
+    // `public` must never be persisted as though it were a directory, and downloads nobody is
+    // being served are dead weight. This is last because it empties the whole of `builds`.
+    mkdirWorks = true;
+    basePath = 'public';
+    dirs.add('builds/leftover');
+    const persistedBefore = persisted;
+    await quietly(() => live.settle());
+    assert.equal(persisted, persistedBefore, 'An app serving its own package persists nothing');
+    assert.equal(dirs.has('builds/leftover'), false, 'and throws away what it is not serving');
+    assert.deepEqual([...where], ['DATA'], 'Android keeps its builds in the app data directory');
+
+    // --- iOS keeps its builds where iOS will look for them
+    // It throws away everything but the last component of the persisted path and roots that at
+    // `Library/NoCloud/ionic_built_snapshots`, without checking anything is there. A build written
+    // anywhere else serves for one launch and comes back to a white screen. The strings matter:
+    // they are Capacitor's, not ours.
+    platform = 'ios';
+    delete require.cache[require.resolve(path.join(root, 'src/updates/live.ts'))];
+    Module._load = (request, ...rest) => {
+      if (request === '@capacitor/core') return core;
+      if (request === '@capacitor/filesystem') return filesystem;
+      return load(request, ...rest);
+    };
+    let onIos;
+    try {
+      onIos = require(path.join(root, 'src/updates/live.ts'));
+    } finally {
+      Module._load = load;
+    }
+    where.clear();
+    order.length = 0;
+    basePath = 'public';
+    await quietly(() => onIos.applyUpdate(NEXT, () => {}, () => false));
+    assert.equal(order.at(-1), `serve ${HOME}/NoCloud/ionic_built_snapshots/commit-3`,
+      'An iOS build is served out of the one directory iOS will come back to');
+    assert.deepEqual([...where], ['LIBRARY'], 'which is under Library, not Documents');
   })();
 }
 

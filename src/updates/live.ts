@@ -29,8 +29,21 @@ import { directories, isWhole, parseManifest, plan, UpdateManifest } from './man
 
 /** Where the game is published. The app asks this, whatever build it is itself running. */
 export const SITE = 'https://boba-shop.expo.app';
-/** The app's data directory for downloaded builds, one directory per build. */
-const ROOT = 'builds';
+
+/**
+ * Where downloaded builds are kept, one directory per build — and **iOS does not get a choice**.
+ *
+ * Android remembers the whole path it was given and checks the directory still exists before
+ * serving it, so any directory in the app's data will do. iOS keeps only the **last component** of
+ * the persisted path and roots it at `Library/NoCloud/ionic_built_snapshots` on the next launch,
+ * with no check that anything is there (`instanceDescriptor` in `CAPBridgeViewController`). A
+ * build written anywhere else therefore works for exactly one launch and comes back to a white
+ * screen that no force-close can clear — the one failure this whole design exists to prevent, and
+ * the only one it cannot roll back from, because the build *did* boot and so *was* persisted.
+ */
+const IOS = Capacitor.getPlatform() === 'ios';
+const ROOT = IOS ? 'NoCloud/ionic_built_snapshots' : 'builds';
+const HOME = IOS ? Directory.Library : Directory.Data;
 /**
  * A whole update has this long to finish before it is called a failure.
  *
@@ -131,7 +144,7 @@ async function downloadInto(file: string, to: string): Promise<void> {
   });
   if (status < 200 || status >= 300) throw new Error(`máy chủ trả lịi ${status}`);
   if (typeof data !== 'string') throw new Error('không nhận được nội dung tệp');
-  await Filesystem.writeFile({ path: to, directory: Directory.Data, data, recursive: true });
+  await Filesystem.writeFile({ path: to, directory: HOME, data, recursive: true });
 }
 
 /** The build the site is serving, or null if it cannot be read or does not hang together. */
@@ -161,23 +174,44 @@ async function servedPageMatches(manifest: UpdateManifest): Promise<boolean> {
 }
 
 /**
+ * Which downloaded build the app is serving, by the name of its directory — or **null when it is
+ * serving the one inside its own package**, which is not a directory at all.
+ *
+ * `WebView.getServerBasePath()` does not answer that question on its own, and believing it did is
+ * what broke the first two updates anybody tried. A Capacitor app that has never been updated is
+ * serving its *assets*, and what the base path reads back as then is the literal string `public`:
+ * the name of a folder inside the APK, not a path, and **not empty**. Taken for a build on disk it
+ * names `builds/<whatever the package's own manifest says>` — a directory that has never existed
+ * — so every file the update meant to copy out of it is missing, and the update dies on the first
+ * one. Which is exactly how it died: the first copy, the first font, every time.
+ *
+ * So the question is not "is there a path" but "is it one of ours": an absolute path ending in a
+ * directory under `ROOT`. iOS says `public` too, as an absolute path inside its bundle, so it
+ * passes the first half of that and fails the second.
+ */
+function servedBuild(path: string | null | undefined): string | null {
+  const match = new RegExp(`^/.*/${ROOT}/([^/]+)/?$`).exec(path ?? '');
+  return match ? match[1] : null;
+}
+
+/**
  * The build this app is running, read back from the files it is being served.
  *
- * For an app still running what it was installed with, those files are inside the package and
- * `basePath` is empty — nothing of it can be copied, so this returns null and the first update is
- * a full download.
+ * For an app still running what it was installed with, those files are inside the package: nothing
+ * of it can be copied, so this returns null for both and the first update is a full download.
  *
- * This one is a plain `fetch` and should stay one: it reads the app's **own** page, off the local
+ * The `fetch` is a plain one and should stay one: it reads the app's **own** page, off the local
  * server, on the WebView's own origin. `readSite` above is for the site, which is somewhere else.
  */
-async function running(): Promise<{ basePath: string; manifest: UpdateManifest | null }> {
+async function running(): Promise<{ build: string | null; manifest: UpdateManifest | null }> {
   const { path } = await WebView.getServerBasePath();
-  if (!path) return { basePath: '', manifest: null };
+  const build = servedBuild(path);
+  if (!build) return { build: null, manifest: null };
   try {
     const response = await fetch('update.json', { cache: 'no-store' });
-    return { basePath: path, manifest: response.ok ? parseManifest(await response.json()) : null };
+    return { build, manifest: response.ok ? parseManifest(await response.json()) : null };
   } catch {
-    return { basePath: path, manifest: null };
+    return { build, manifest: null };
   }
 }
 
@@ -192,7 +226,7 @@ async function running(): Promise<{ basePath: string; manifest: UpdateManifest |
  */
 async function mkdirp(path: string) {
   try {
-    await Filesystem.mkdir({ path, directory: Directory.Data, recursive: true });
+    await Filesystem.mkdir({ path, directory: HOME, recursive: true });
   } catch (error: unknown) {
     if (!/exist/i.test(reasonFor(error))) throw new Error(`tạo thư mục ${path}: ${reasonFor(error)}`);
   }
@@ -218,11 +252,13 @@ export async function applyUpdate(
   const current = await running();
   const work = plan(current.manifest, manifest);
   const target = `${ROOT}/${manifest.webBuild}`;
-  const source = current.manifest ? `${ROOT}/${current.manifest.webBuild}` : null;
+  // Named after the directory that is actually being served, not after what a manifest inside it
+  // says it is: those two disagreeing is what this whole failure was.
+  const source = current.build ? `${ROOT}/${current.build}` : null;
 
   // A directory left over from an update that was interrupted is not worth reusing: it may hold
   // half a build. Start it again from nothing.
-  await Filesystem.rmdir({ path: target, directory: Directory.Data, recursive: true }).catch(() => {});
+  await Filesystem.rmdir({ path: target, directory: HOME, recursive: true }).catch(() => {});
   await mkdirp(target);
   // `downloadInto` makes its own parents; these are for `copy`, which refuses without them.
   for (const directory of directories(manifest)) await mkdirp(`${target}/${directory}`);
@@ -240,15 +276,29 @@ export async function applyUpdate(
     if (Date.now() - started > DEADLINE_MS) throw new Error('the update took too long');
   };
 
+  // A copy is only ever an **optimisation** — the same file, already on the device, under the same
+  // content-hashed name. So a copy that cannot be made is a file to fetch, not an update to
+  // abandon: whatever has become of the build on disk, the site still has every byte of this one.
+  // The update that found this out failed with a hundred and forty files sitting on the server.
+  const refetched: string[] = [];
   for (const path of work.copy) {
     check();
-    await doing(`sao lại ${path}`, () => Filesystem.copy({
-      from: `${source}/${path}`,
-      to: `${target}/${path}`,
-      directory: Directory.Data,
-      toDirectory: Directory.Data,
-    }));
+    try {
+      await Filesystem.copy({
+        from: `${source}/${path}`,
+        to: `${target}/${path}`,
+        directory: HOME,
+        toDirectory: HOME,
+      });
+    } catch {
+      refetched.push(path);
+      await doing(`tải lại ${path}`, () => downloadInto(path, `${target}/${path}`));
+    }
     step();
+  }
+  if (refetched.length) {
+    console.warn(`[update] ${refetched.length} file(s) could not be copied from ${source} and came` +
+      ` down again, starting with ${refetched[0]}`);
   }
   for (const path of work.fetch) {
     check();
@@ -261,13 +311,13 @@ export async function applyUpdate(
   check();
   await doing('ghi update.json', () => Filesystem.writeFile({
     path: `${target}/update.json`,
-    directory: Directory.Data,
+    directory: HOME,
     data: JSON.stringify(manifest),
     encoding: Encoding.UTF8,
   }));
 
   const uri = await doing('tìm thư mục bản mới',
-    async () => (await Filesystem.getUri({ path: target, directory: Directory.Data })).uri);
+    async () => (await Filesystem.getUri({ path: target, directory: HOME })).uri);
   await doing('chuyển sang bản mới', () => WebView.setServerBasePath({ path: filePath(uri) }));
   // The WebView is reloading into the new build; `settle()` there makes it permanent.
 }
@@ -295,17 +345,19 @@ export async function settle(): Promise<void> {
   if (!isApp()) return;
   try {
     const { path } = await WebView.getServerBasePath();
-    if (!path) {
-      // Running the build inside the app: anything downloaded is being served to nobody.
-      await Filesystem.rmdir({ path: ROOT, directory: Directory.Data, recursive: true }).catch(() => {});
+    const keep = servedBuild(path);
+    if (!keep) {
+      // Running the build inside the app: anything downloaded is being served to nobody. Note that
+      // this is the common case and not the odd one — see `servedBuild` for what `path` says here,
+      // which is neither empty nor a directory, and must not be persisted as one.
+      await Filesystem.rmdir({ path: ROOT, directory: HOME, recursive: true }).catch(() => {});
       return;
     }
     await WebView.persistServerBasePath();
-    const keep = path.split('/').pop();
-    const { files } = await Filesystem.readdir({ path: ROOT, directory: Directory.Data });
+    const { files } = await Filesystem.readdir({ path: ROOT, directory: HOME });
     for (const entry of files) {
       if (entry.name === keep) continue;
-      await Filesystem.rmdir({ path: `${ROOT}/${entry.name}`, directory: Directory.Data, recursive: true })
+      await Filesystem.rmdir({ path: `${ROOT}/${entry.name}`, directory: HOME, recursive: true })
         .catch(() => {});
     }
   } catch (error: unknown) {

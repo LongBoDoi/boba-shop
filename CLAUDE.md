@@ -174,6 +174,25 @@ These rules are each the difference between an update and an unusable app:
   mới", which costs a build and an install to turn into a diagnosis — it has already cost one.
   It is the only English in the game, and it is there to be repeated, not read, which is why it is
   also the one piece of text that is selectable.
+- **"Which build is running" is not "what the base path says".** An app serving the build inside
+  its own package reports a base path of `public` — the name of a folder in the APK, not a path,
+  and **not empty**. Read as a directory on disk it names one that has never existed, so every
+  file the update meant to copy out of it is missing and the update dies on the first copy, which
+  is the first font. That is what the first two updates anybody tried actually died of; the
+  downloader was only the suspect. `servedBuild` in `live.ts` is the one place that answers it:
+  an absolute path ending in a directory under `ROOT`, or null. iOS says `public` too, as an
+  absolute path inside its bundle, which is why the test is both halves and not either.
+- **A copy that cannot be made is a download, not a failed update.** Copying is only ever an
+  optimisation — the same file, already on the device, under the same content-hashed name — so
+  whatever has become of the build on disk, the site still has every byte. `applyUpdate` falls
+  back to fetching and says in the log how many it had to.
+- **iOS keeps builds where iOS will look for them, and the name is Capacitor's.** Android
+  remembers the whole persisted path and checks the directory exists before serving it. iOS keeps
+  only the path's **last component** and roots it at `Library/NoCloud/ionic_built_snapshots` on
+  the next launch, with no check that anything is there. So a build written anywhere else serves
+  for exactly one launch and comes back to a white screen that a force-close cannot clear — the
+  one failure the rollback cannot catch, because that build *did* boot and so *was* persisted.
+  `ROOT` and `HOME` at the top of `live.ts` are per-platform for that reason alone.
 - **Nothing is swapped until every file is written.** A half-written directory served to the
   WebView is a white screen with no way back.
 - **A build is made permanent only once it has booted.** `setServerBasePath` lasts for the launch;
@@ -880,11 +899,13 @@ What the painting is allowed to decide, and what the geometry is:
 - **Equipment and orders share artwork.** `kitchenMilkCartonSvg` and `kitchenCreamCanSvg` in
   `art/kitchenEquipment.ts` define the complete packages; `prepareEquipmentTextures` rasterises
   them and the station emblems once. Counter and carried equipment use the same textures.
-  Milk's painted foot remains at 150/154 of its box, on the sugar holder's counter line.
-  Minimum equipment scales keep the pictures recognizable in landscape. Cream counter objects
+  Milk's painted foot remains at 150/154 of its box. Cartons are 66×141 room pixels at y548;
+  smaller 50×117 cream cans sit slightly farther back at y536. Their proportions and positions
+  follow the background scale in every orientation, and stay the same when picked up. Cream counter objects
   hide while held. See `docs/milk-cartons.md`, `docs/cream-options.md` and `docs/visual-orders.md`.
 - **Functional kitchen lettering keeps an 11 CSS pixel minimum** (`kitchen/typography.ts`):
-  cup rack S/M/L, cup-size badges, quantities and hints. The cup-size badge compensates for
+  cup-size badges, quantities and hints. The cup rack keeps its original S/M/L lettering in the
+  background painting, without added label overlays. The cup-size badge compensates for
   docking scale. Ingredient names remain available to screen readers; there are no visible
   ingredient name captions or plaques.
 - **Cream is a painted star-nozzle spiral** (`kitchen/creamPainter.ts`), using the transparent
@@ -1287,8 +1308,9 @@ stands plainly inside the shelf; divided across the board it laps over the ends 
   manifest mean — is `tools/check-updates.cjs`, which also drives `fetchManifest` **and the whole
   apply** against a fake device: a stub of the two plugins that is strict where the device is
   strict, so that a write or a copy into a directory nobody made is refused there too. It covers
-  the first update (nothing on disk to copy from), the second (only the changed files come down),
-  what a failure says, and that what is being served does not move when one fails. One thing more
+  the first update (nothing on disk to copy from, because the base path says `public`), the second
+  (only the changed files come down), a file the build on disk has lost, what a failure says, that
+  what is being served does not move when one fails, and where each platform puts a build. One thing more
   a desk can check, and it is the one that was missed: whether the app is allowed to read the site
   at all. Serve a page on `http://localhost:<port>` — any origin that is not the site — and
   `fetch` the site's `update.json` from it; blocked there is blocked in the app, for the same
