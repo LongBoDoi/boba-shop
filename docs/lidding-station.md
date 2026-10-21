@@ -2,7 +2,7 @@
 
 Current kitchen: [overhead redesign](overhead-kitchen.md). The new plate keeps the same
 insertion, press, straw and serving rules, with remeasured machine coordinates. Lidded cups
-return to the right finishing mat. The restoration below records the previous side-view version.
+return to the single shared cup mat. The restoration below records the previous side-view version.
 
 ## Previous side-view restoration
 

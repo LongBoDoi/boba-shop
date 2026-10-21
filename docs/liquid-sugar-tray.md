@@ -1,6 +1,10 @@
 # Liquid sugar tray
 
-The current tray is an edit of a crop of the actual ice bin: it preserves the slanted sides, thin rim and overhead perspective. Both trays share the same x, width and height; sugar starts eight logical pixels below ice.
+The sugar tray is now painted into the active room background alongside the ice tray, with straight
+aligned edges. Its separate sprite is no longer rendered or preloaded. Both station bounds share
+the same x, width and height; sugar starts eight logical pixels below ice. The silver ladle still
+appears while carrying sugar. See [integrated trays](background-trays.md) for the current asset,
+generation prompt and verification. The notes below record the earlier separate-asset design.
 
 Sugar now uses a shallow stainless-steel tray of pale golden syrup, directly below the ice bin on the left of the counter. Its scrolling station bounds follow the artwork. The former jar is no longer rendered. A silver syrup ladle replaces the sugar-cube spoon both while carrying sugar and in recipe pictures; sweetness amounts and tap/drag controls stay the same.
 

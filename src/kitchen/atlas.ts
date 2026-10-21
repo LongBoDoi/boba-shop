@@ -40,16 +40,27 @@ export class Atlas {
   /** Pack and paint everything into the texture `key` (replacing any texture of that name). */
   build(scene: Phaser.Scene, key: string) {
     let scale = DPR;
-    let packed = this.pack(scale);
+    const renderer = scene.game.renderer;
+    const limit = renderer instanceof Phaser.Renderer.WebGL.WebGLRenderer
+      ? Math.min(4096, renderer.getMaxTextureSize()) : MAX_SIZE;
+    let maxSize = Math.min(MAX_SIZE, limit);
+    let packed = this.pack(scale, maxSize);
+    // Keep full device density on large screens before sacrificing detail to the 2048px limit.
+    // Small rooms still use the smaller atlas; older GPUs retain the existing fallback.
+    if (!packed && maxSize < limit) {
+      maxSize = limit;
+      packed = this.pack(scale, maxSize);
+    }
     while (!packed && scale > 0.5) {
       scale *= 0.85;
-      packed = this.pack(scale);
+      packed = this.pack(scale, maxSize);
     }
     if (!packed) throw new Error('the room does not fit in one texture');
     const canvas = document.createElement('canvas');
     canvas.width = packed.width;
     canvas.height = packed.height;
     const context = canvas.getContext('2d')!;
+    context.imageSmoothingQuality = 'high';
     for (const item of this.items) {
       context.save();
       context.translate(item.x!, item.y!);
@@ -66,7 +77,7 @@ export class Atlas {
   }
 
   /** Shelf packing, tallest first. Returns the sheet's size, or null if it would not fit. */
-  private pack(scale: number): { width: number; height: number } | null {
+  private pack(scale: number, maxSize: number): { width: number; height: number } | null {
     const sorted = [...this.items].sort((a, b) => b.h - a.h);
     let x = 0;
     let y = 0;
@@ -75,8 +86,8 @@ export class Atlas {
     for (const item of sorted) {
       const w = Math.ceil(item.w * scale) + GAP;
       const h = Math.ceil(item.h * scale) + GAP;
-      if (w > MAX_SIZE) return null;
-      if (x + w > MAX_SIZE) {
+      if (w > maxSize) return null;
+      if (x + w > maxSize) {
         x = 0;
         y += shelf;
         shelf = 0;
@@ -88,6 +99,6 @@ export class Atlas {
       width = Math.max(width, x);
     }
     const height = y + shelf;
-    return height <= MAX_SIZE ? { width, height } : null;
+    return height <= maxSize ? { width, height } : null;
   }
 }

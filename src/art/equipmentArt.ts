@@ -1,9 +1,8 @@
-import paintedEquipment from '../assets/kitchen/counter-props-overhead.png';
-import paintedMilk from '../assets/kitchen/counter-props-overhead.png';
+import paintedEquipment from '../assets/kitchen/milk-cream-natural.png';
 import { el, svgDoc } from './svg';
 
 export const PAINTED_EQUIPMENT = paintedEquipment;
-export const PAINTED_MILK = paintedMilk;
+export const PAINTED_MILK = paintedEquipment;
 export type PaintedEquipmentId = 'whole' | 'oat' | 'cheese' | 'brulee';
 interface Crop { x: number; y: number; width: number; height: number }
 
@@ -11,12 +10,12 @@ interface Crop { x: number; y: number; width: number; height: number }
 export const EQUIPMENT_ATLAS = {
   width: 1536, height: 1024,
   cells: {
-    cheese: { x: 1154, y: 53, width: 245, height: 451 },
-    brulee: { x: 183, y: 517, width: 248, height: 458 },
+    cheese: { x: 316, y: 520, width: 240, height: 464 },
+    brulee: { x: 986, y: 520, width: 241, height: 464 },
   } satisfies Record<'cheese' | 'brulee', Crop>,
   details: {
-    cheese: { x: 1200, y: 320, width: 160, height: 160 },
-    brulee: { x: 208, y: 780, width: 170, height: 170 },
+    cheese: { x: 351, y: 771, width: 190, height: 169 },
+    brulee: { x: 1013, y: 778, width: 184, height: 154 },
   } satisfies Record<'cheese' | 'brulee', Crop>,
 };
 
@@ -24,12 +23,12 @@ export const EQUIPMENT_ATLAS = {
 export const MILK_ATLAS = {
   width: 1536, height: 1024,
   cells: {
-    whole: { x: 152, y: 21, width: 318, height: 481 },
-    oat: { x: 635, y: 24, width: 320, height: 485 },
+    whole: { x: 277, y: 7, width: 317, height: 493 },
+    oat: { x: 945, y: 19, width: 307, height: 481 },
   } satisfies Record<'whole' | 'oat', Crop>,
   details: {
-    whole: { x: 176, y: 275, width: 205, height: 205 },
-    oat: { x: 660, y: 273, width: 190, height: 190 },
+    whole: { x: 295, y: 250, width: 210, height: 200 },
+    oat: { x: 961, y: 244, width: 198, height: 232 },
   } satisfies Record<'whole' | 'oat', Crop>,
 };
 

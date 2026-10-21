@@ -62,9 +62,6 @@ export interface KitchenLayout {
   cupH: number;
   homeX: number;
   homeY: number;
-  finishHomeX: number;
-  finishHomeY: number;
-  finishHolder: { left: number; top: number; width: number; height: number };
   /** The painting, as drawn: `cover` of the kitchen's height, panned horizontally. */
   room: { scale: number; top: number; width: number; height: number; maxPan: number };
   holder: { left: number; top: number; width: number; height: number };
@@ -88,17 +85,20 @@ export function kitchenTableFor(width: number, height: number) {
   return { top: top + ROOM_BG_TABLE.top * scale, base: top + ROOM_BG_TABLE.base * scale };
 }
 
-/** Two mats share the foreground; their size follows the painting and fits a narrow screen. */
+/** One shared mat sits on the clear worktop, with room around the largest cup's base. */
 export function kitchenHolderFor(width: number, height: number) {
   const { scale, top } = fitBackground(width, height, ROOM_BG_SIZE.width, ROOM_BG_SIZE.height);
   // Leave the left-hand syrup tray clear even when the room is panned fully left.
   const trayRight = (ROOM_BG_EXTRAS.sugar.x + ROOM_BG_EXTRAS.sugar.width) * scale + 10;
-  const holderWidth = Math.min(ROOM_BG_CUP_HOLDER.width * scale, (width - trayRight - 32) / 2);
+  const holderWidth = Math.min(width - trayRight - 30,
+    Math.max(ROOM_BG_CUP_HOLDER.width * scale, cupSizeFor(width, height, 'L').width * 1.35));
+  const holderHeight = holderWidth * ROOM_BG_CUP_HOLDER.height / ROOM_BG_CUP_HOLDER.width;
+  const front = Math.min(height - 12, top + (ROOM_BG_TABLE.base - 32) * scale);
   return {
-    left: Math.max(trayRight, (width - holderWidth * 2 - 20) / 2),
-    top: top + ROOM_BG_CUP_HOLDER.y * scale,
+    left: Math.max(trayRight + 14, (width - holderWidth) / 2),
+    top: Math.min(top + ROOM_BG_CUP_HOLDER.y * scale, front - holderHeight),
     width: holderWidth,
-    height: holderWidth * ROOM_BG_CUP_HOLDER.height / ROOM_BG_CUP_HOLDER.width,
+    height: holderHeight,
   };
 }
 
@@ -168,9 +168,9 @@ export function layoutKitchen(config: DayConfig, W: number, H: number, size: Cup
     const w = milk ? extrasArt.milkWidth : extrasArt.foamWidth;
     const h = milk ? extrasArt.milkHeight : extrasArt.foamHeight;
     const foot = milk ? MILK_CARTON_ART.foot / MILK_CARTON_ART.height : 1;
-    const base = milk ? extrasArt.milkBase : extrasArt.foamBase;
+    const bases = milk ? extrasArt.milkBases : extrasArt.foamBases;
     extras.filter(item => item.kind === kind).forEach((item, i) => {
-      add(kind, item.id, centers[i] - w / 2, base - h * foot, w, h);
+      add(kind, item.id, centers[i] - w / 2, bases[i] - h * foot, w, h);
     });
   }
   if (config.categories.includes('sweetness')) {
@@ -207,15 +207,12 @@ export function layoutKitchen(config: DayConfig, W: number, H: number, size: Cup
   });
 
   const holder = kitchenHolderFor(W, H);
-  const finishHolder = { ...holder, left: holder.left + holder.width + 20 };
   return {
     stations, emptyBins, cupW, cupH,
     homeX: holder.left + (holder.width - cupW) / 2,
     homeY: holder.top + holder.height / 2 - cupH * CUP_FOOT / CUP_ART.h,
     room: { scale, top, width: drawnWidth, height: drawnHeight, maxPan: Math.max(0, drawnWidth - W) },
-    holder, finishHolder,
-    finishHomeX: finishHolder.left + (finishHolder.width - cupW) / 2,
-    finishHomeY: finishHolder.top + finishHolder.height / 2 - cupH * CUP_FOOT / CUP_ART.h,
+    holder,
     rack,
   };
 }

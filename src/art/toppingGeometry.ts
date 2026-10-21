@@ -8,15 +8,19 @@ export interface ToppingPanShape {
 
 export interface ToppingTrayEdge { x0: number; x1: number; y: number }
 
-/** Calibrate the tray's two ends; every divider between them stays on the same straight line. */
-// Follow the overhead kitchen basin, with equal clearance from its rims.
-const TRAY_BACK: ToppingTrayEdge = { x0: 1450, x1: 1833, y: 437 };
-const TRAY_FRONT: ToppingTrayEdge = { x0: 1475, x1: 1890, y: 724 };
-export const TOPPING_TRAY_EDGES: ToppingTrayEdge[] = [0, 1 / 3, 2 / 3, 1].map(t => ({
-  x0: TRAY_BACK.x0 + (TRAY_FRONT.x0 - TRAY_BACK.x0) * t,
-  x1: TRAY_BACK.x1 + (TRAY_FRONT.x1 - TRAY_BACK.x1) * t,
-  y: TRAY_BACK.y + (TRAY_FRONT.y - TRAY_BACK.y) * t,
-}));
+/** Measured pan rims in kitchen-room-aligned-trays.png, before the 350-unit wall offset. */
+// The rows deepen toward the viewer; equal thirds leave the overlay below the back row's rim.
+// Columns still share straight edges across the entire tray plane.
+const TRAY_BACK: ToppingTrayEdge = { x0: 1436, x1: 1834, y: 427 };
+const TRAY_FRONT: ToppingTrayEdge = { x0: 1461, x1: 1894, y: 725 };
+export const TOPPING_TRAY_EDGES: ToppingTrayEdge[] = [427, 516, 616, 725].map(y => {
+  const t = (y - TRAY_BACK.y) / (TRAY_FRONT.y - TRAY_BACK.y);
+  return {
+    x0: TRAY_BACK.x0 + (TRAY_FRONT.x0 - TRAY_BACK.x0) * t,
+    x1: TRAY_BACK.x1 + (TRAY_FRONT.x1 - TRAY_BACK.x1) * t,
+    y,
+  };
+});
 
 /** Divide one tray plane into cells with shared edges, rather than nine separate tapers. */
 export function toppingPanBounds(back: ToppingTrayEdge, front: ToppingTrayEdge, column: number) {

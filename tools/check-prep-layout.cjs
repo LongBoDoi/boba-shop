@@ -23,7 +23,10 @@ require.extensions['.ts'] = (module, filename) => {
   module._compile(result.outputText, filename);
 };
 
-const { ROOM_BG_KEEP, ROOM_BG_REACH, ROOM_BG_SIZE, ROOM_BG_FOCUS_Y } = require(path.join(__dirname, '../src/art/kitchenArt.ts'));
+const { ROOM_BG_KEEP, ROOM_BG_REACH, ROOM_BG_SIZE, ROOM_BG_FOCUS_Y, ROOM_BG_TABLE, ROOM_BG_EXTRAS } = require(path.join(__dirname, '../src/art/kitchenArt.ts'));
+const { layoutKitchen } = require('../src/kitchen/layout.ts');
+const { getDayConfig } = require('../src/game/levels.ts');
+const { CUP_ART, CUP_FOOT } = require('../src/art/cupGeometry.ts');
 const {
   isWideLayout, panelWidthFor, prepLayoutFor, PREP_BAND_HEIGHT, PREP_ACTIONS_HEIGHT,
 } = require(path.join(__dirname, '../src/ui/responsive.ts'));
@@ -95,4 +98,22 @@ for (const width of [760, 900, 1284, 1600, 2400]) {
   assert.ok(panel <= Math.max(248, width * 0.5) + 1, `${width}: the card is still a card (${panel})`);
 }
 
-console.log('check-prep-layout: the room keeps its painting in every sideways arrangement, and the card is as narrow as it reads.');
+// One cup mat fits on the free marble, clear of the syrup tray and counter's front edge.
+for (const [width, height] of [[390, 540], [375, 330], [450, 315], [500, 355], [974, 724]]) {
+  for (const size of ['S', 'M', 'L']) {
+    const layout = layoutKitchen(getDayConfig(1), width, height, size);
+    const { holder, room } = layout;
+    assert(!('finishHolder' in layout), 'Preparation and finishing share one mat');
+    assert(holder.left > (ROOM_BG_EXTRAS.sugar.x + ROOM_BG_EXTRAS.sugar.width) * room.scale,
+      'The mat leaves the sugar tray clear');
+    assert(holder.left >= 0 && holder.left + holder.width <= width, 'The entire mat stays on screen');
+    assert(holder.top >= room.top + ROOM_BG_TABLE.top * room.scale, 'The mat rests on clear worktop');
+    assert(holder.top + holder.height < Math.min(height, room.top + ROOM_BG_TABLE.base * room.scale),
+      'The mat leaves space before the counter front');
+    assert(holder.width > layout.cupW, `${size}: the mat has space around the cup`);
+    assert(Math.abs(layout.homeX + layout.cupW / 2 - holder.left - holder.width / 2) < 1e-7);
+    assert(Math.abs(layout.homeY + layout.cupH * CUP_FOOT / CUP_ART.h - holder.top - holder.height / 2) < 1e-7,
+      'The cup stands by its painted base, in the center of the shared mat');
+  }
+}
+console.log('check-prep-layout: the painting stays visible, the card fits, and one shared mat holds S/M/L on the clear worktop.');

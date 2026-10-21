@@ -17,4 +17,11 @@ Preserve ALL other elements exactly: tall EMPTY two-tier tea rack on left, cream
 
 ## Verification
 
-Typecheck, regression suite and production build pass. Browser checks select S, M and L cups from the moved stacks at 1284×800, 390×844, 375×667 and 932×430. Desktop and phone previews confirm that the long shelf is absent and the compact organizer sits on the counter. Production checks verify the new background and cup lidding/straw interactions.
+The S/M/L plaques now use measured centers on the wooden front, rather than the stack touch
+targets. Smaller warm-paper cards have a fine edge, tiny fasteners and subtle contact shadows;
+the letters are centered using their glyph bounds. Browser checks at 1284×800, 390×844, 375×667
+and 932×430 confirm their alignment and S/M/L selection. Typecheck and production build pass.
+The current regression run passes gameplay checks but fails the existing native-shell fingerprint
+check in `check-updates.cjs`; this label change does not modify native files.
+
+For the earlier organizer artwork edit, typecheck, regression suite and production build passed. Browser checks selected S, M and L cups from the moved stacks at 1284×800, 390×844, 375×667 and 932×430. Desktop and phone previews confirmed that the long shelf was absent and the compact organizer sat on the counter. Production checks verified the new background and cup lidding/straw interactions.

@@ -61,7 +61,15 @@ function fingerprint() {
   for (const file of SHELL) {
     const full = path.join(root, file);
     hash.update(file);
-    hash.update(fs.existsSync(full) ? fs.readFileSync(full) : Buffer.from('(missing)'));
+    // Normalised to LF before hashing. Every one of these is a text file, git is left to
+    // check them out with whatever line ending the machine prefers (there is no .gitattributes),
+    // and on Windows that is CRLF — so the bytes on disk differ from the bytes in the commit
+    // while the shell is plainly identical. Hashing them raw made this fail on one developer's
+    // machine and pass in CI, which is the worst way for a check like this to be wrong: it cries
+    // native change at somebody who has not touched the shell, and the way to make it stop is to
+    // bump NATIVE_VERSION and ship a build nobody needed.
+    const text = fs.existsSync(full) ? fs.readFileSync(full, 'utf8') : '(missing)';
+    hash.update(text.replace(/\r\n/g, '\n'));
   }
   return hash.digest('hex').slice(0, 16);
 }

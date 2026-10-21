@@ -1,22 +1,24 @@
 # Overhead kitchen artwork
 
-The kitchen now uses an elevated top-down view based on the user's reference: honey-wood shelves and boards, a cream stone worktop, open ingredient pans, and two yellow preparation mats. The ice station occupies the left counter; the lidding machine and straw box occupy the upper right.
+The kitchen now uses an elevated top-down view based on the user's reference: honey-wood shelves and boards, a cream stone worktop, open ingredient pans, and one compact yellow cup mat. The ice station occupies the left counter; the lidding machine and straw box occupy the upper right.
 
 Active assets in `src/assets/kitchen/`:
 
-- `kitchen-room-counter-cups.png`: active room with the tall rack, continuous wall and [cup organizer resting directly on the counter](counter-cup-station.md), drawn as one background.
+- `kitchen-room-aligned-trays.png`: active room, including [ice and sugar trays with aligned edges](background-trays.md), the tall rack, continuous wall and cup organizer, drawn as one background.
+- `kitchen-room-counter-cups.png`: earlier room with the [cup organizer resting directly on the counter](counter-cup-station.md), retained as the source for the integrated trays edit.
 - `kitchen-room-continuous-wall.png`: earlier [wall repair](continuous-kitchen-wall.md) before removal of the shelf behind the cups.
 - `kitchen-overhead.png`: original, unchanged 1672×941 design reference.
 - `kitchen-room-tall.png`: earlier taller imagegen source for the joined rack.
 - `tea-dispensers-overhead.png`: six transparent tea dispensers.
-- `counter-props-overhead.png`: milk, oat milk, two creams, sugar jar, and cloth mat.
+- `milk-cream-natural.png`: active [milk cartons on the left board and cream cans on the right](board-equipment.md), with paper folds, metal reflections and functional dispensing heads.
+- `counter-props-overhead.png`: cloth mat and earlier milk, cream and sugar artwork retained as references.
 - `topping-pans-overhead.png`: nine ingredient pans plus an empty pan.
 
 Generated with the built-in imagegen tool. Atlas crops preserve transparency and are shared between the kitchen and order illustrations. The original side-view assets remain available for reference.
 
 The room is now taller and the two-tier rack holds all six tanks at the first version’s apparent size. The preparation board below stays clear. See [tall tea shelf](tall-tea-shelf.md).
 
-Swipe empty counter space to pan between stations; the bottom station shortcuts have been removed. Two foreground mats stay in view: preparation on the left, finishing on the right. The cup returns to the finishing mat after its lidding cycle. Cup-stack badges identify S/M/L. Touch targets and the machine press crop use the new artwork's coordinates.
+Swipe empty counter space to pan between stations; the bottom station shortcuts have been removed. One [shared cup mat](single-cup-mat.md) stays in view on the foreground marble. Cups return to the same mat after lidding. Cup-stack badges identify S/M/L. Touch targets and the machine press crop use the new artwork's coordinates.
 
 ## Prompt set
 

@@ -4,9 +4,9 @@ import {
   CupSize, Drink, EMPTY_DRINK, getIngredient, MAX_ICE_SCOOPS, MAX_POUR, MILK_SPLASH, POUR_RATE, SUGAR_STEPS,
 } from '../game/ingredients';
 import { GameState } from '../game/reducer';
-import { CUP_HOLDER, CUP_HOLDER_ART, ROOM_BG_LIDDING, ROOM_BG_SIZE, SUGAR_TRAY, TEA_DISPENSER_ART, TEA_DISPENSERS } from '../art/kitchenArt';
+import { CUP_HOLDER, CUP_HOLDER_ART, ROOM_BG_CUP_STATION, ROOM_BG_LIDDING, ROOM_BG_SIZE, TEA_DISPENSER_ART, TEA_DISPENSERS } from '../art/kitchenArt';
 import { TOPPING_PANS } from '../art/toppingArt';
-import { KITCHEN_ROOM_RENDER } from '../art/kitchenRoomArt';
+import { KITCHEN_ROOM_ART, KITCHEN_ROOM_RENDER, KITCHEN_ROOM_TRAYS, KITCHEN_ROOM_TRAY_PATCH } from '../art/kitchenRoomArt';
 import { CUP_ART, CUP_FOOT } from '../art/cupGeometry';
 import { gameArea } from '../game/host';
 import { bakeCanvas, canvasFont, placeCamera, tex } from '../game/view';
@@ -64,7 +64,6 @@ export class KitchenScene extends Phaser.Scene {
 
   private room!: Phaser.GameObjects.Container;
   private holder!: Phaser.GameObjects.Image;
-  private finishHolder!: Phaser.GameObjects.Image;
   private matLabel: Phaser.GameObjects.Image | null = null;
   private stationViews = new Map<string, { container: Phaser.GameObjects.Container; art: Phaser.GameObjects.Container; locked?: boolean }>();
   private teaLabels = new Map<string, Phaser.GameObjects.Image>();
@@ -114,7 +113,6 @@ export class KitchenScene extends Phaser.Scene {
   create() {
     this.room = this.add.container(0, 0).setDepth(DEPTH.room);
     this.holder = this.add.image(0, 0, tex(CUP_HOLDER)).setOrigin(0).setDepth(DEPTH.holder);
-    this.finishHolder = this.add.image(0, 0, tex(CUP_HOLDER)).setOrigin(0).setDepth(DEPTH.holder);
     this.cupShadow = this.add.image(0, 0, cupShadowTexture(this)).setOrigin(0).setDepth(DEPTH.shadow).setVisible(false);
     this.level = store.state.build.fill;
 
@@ -193,6 +191,17 @@ export class KitchenScene extends Phaser.Scene {
     // Render the repaired wall and room together: separate strips left a visible blurred join.
     this.room.add(this.add.image(0, room.top, tex(KITCHEN_ROOM_RENDER))
       .setOrigin(0).setDisplaySize(room.width, ROOM_BG_SIZE.height * room.scale));
+    // Keep the original pixels throughout the room; crop only the requested tray changes.
+    // Drawing directly from the source avoids another downsample into an intermediate canvas.
+    const trayPatch = KITCHEN_ROOM_TRAY_PATCH;
+    const trayTexture = this.textures.get(tex(KITCHEN_ROOM_TRAYS));
+    if (!trayTexture.has('aligned-trays')) {
+      trayTexture.add('aligned-trays', 0, trayPatch.x, trayPatch.y, trayPatch.width, trayPatch.height);
+    }
+    this.room.add(this.add.image(trayPatch.x / KITCHEN_ROOM_ART.width * room.width,
+      room.top + trayPatch.y / KITCHEN_ROOM_ART.height * room.height, tex(KITCHEN_ROOM_TRAYS), 'aligned-trays')
+      .setOrigin(0).setDisplaySize(trayPatch.width / KITCHEN_ROOM_ART.width * room.width,
+        trayPatch.height / KITCHEN_ROOM_ART.height * room.height));
     this.lidderHead?.destroy();
     const head = ROOM_BG_LIDDING.head;
     const pressKey = bakeCanvas(this, `lidder-head:${room.scale}`, head.width * room.scale, head.height * room.scale, (c) => {
@@ -211,16 +220,33 @@ export class KitchenScene extends Phaser.Scene {
     type Piece = { frame: string; x: number; y: number; w: number; h: number; dims?: boolean; name?: string; visible?: boolean };
     const pieces: { station?: Station; items: Piece[] }[] = [];
 
-    // The new painted rack has no lettering; place size badges on its wooden front.
-    for (const stack of layout.rack) {
-      const w = Math.max(28, stack.w * 0.55), h = 20;
-      const frame = atlas.add(`cup-size:${stack.size}:${w}`, w, h, c => {
-        card(c, w, h, 5, '#FFF2D7', 1, '#B58B5F');
-        c.font = canvasFont(12, 800); c.textAlign = 'center'; c.textBaseline = 'middle'; c.fillStyle = '#795331';
-        c.fillText(stack.size, w / 2, h / 2);
+    // Small paper plaques sit on the wooden front, centered under the actual painted stacks.
+    const labels = ROOM_BG_CUP_STATION.labels;
+    layout.rack.forEach((stack, index) => {
+      const w = Math.max(26, labels.width * room.scale);
+      const h = Math.max(14, labels.height * room.scale);
+      const frame = atlas.add(`cup-size:${stack.size}:${sized(w, h)}`, w, h, c => {
+        // A tight contact shadow and warm paper shading keep these part of the organizer.
+        roundRect(c, 1, 1.5, w - 2, h - 2, 2);
+        c.fillStyle = 'rgba(100, 57, 23, 0.22)'; c.fill();
+        const paper = c.createLinearGradient(0, 1, 0, h - 2);
+        paper.addColorStop(0, '#FFF0CF'); paper.addColorStop(1, '#EAC995');
+        roundRect(c, 1, 0.5, w - 2, h - 2, 2);
+        c.fillStyle = paper; c.fill();
+        c.strokeStyle = '#BA8C55'; c.lineWidth = 0.65; c.stroke();
+        c.fillStyle = 'rgba(255, 250, 225, 0.7)'; c.fillRect(3, 1.5, w - 6, 0.6);
+        c.fillStyle = '#BB915E';
+        for (const x of [4, w - 4]) {
+          c.beginPath(); c.arc(x, (h - 1) / 2, 0.65, 0, Math.PI * 2); c.fill();
+        }
+        c.font = canvasFont(Math.max(KITCHEN_TEXT_MIN, h * 0.58), 700);
+        c.textAlign = 'center'; c.textBaseline = 'alphabetic'; c.fillStyle = '#79502F';
+        const glyph = c.measureText(stack.size);
+        c.fillText(stack.size, w / 2, (h - 1 + glyph.actualBoundingBoxAscent - glyph.actualBoundingBoxDescent) / 2);
       });
-      pieces.push({ items: [{ frame, x: stack.x + (stack.w - w) / 2, y: stack.y + stack.h - h, w, h }] });
-    }
+      pieces.push({ items: [{ frame, x: labels.centers[index] * room.scale - w / 2,
+        y: room.top + labels.y * room.scale - h / 2, w, h }] });
+    });
 
     for (const bin of layout.emptyBins) {
       const extent = panExtent(bin.w, bin.h, bin.panShape);
@@ -261,8 +287,8 @@ export class KitchenScene extends Phaser.Scene {
           drawPan(c, pans, station.id, w, h, station.panShape);
         });
         items.push({ frame, x: x + extent.left, y, w: extent.width, h, dims: true });
-      } else if (station.kind === 'ice' || station.kind === 'lid' || station.kind === 'straw') {
-        // The machine is painted into the room; only its touch highlight is drawn over it.
+      } else if (station.kind === 'ice' || station.kind === 'sugar' || station.kind === 'lid' || station.kind === 'straw') {
+        // Trays and machines are in the background; only their touch highlights are overlaid.
         const gh = Math.max(44, h);
         const frame = atlas.add(`ice-glow:${sized(w, gh)}`, w, gh, (c) => {
           roundRect(c, 0, 0, w, gh, 12);
@@ -270,7 +296,7 @@ export class KitchenScene extends Phaser.Scene {
           c.fill();
         });
         items.push({ frame, x, y, w, h: gh, name: 'glow', visible: false });
-        if (station.kind !== 'ice') {
+        if (station.kind === 'lid' || station.kind === 'straw') {
           const labelH = 20;
           const labelW = Math.max(station.kind === 'lid' ? 90 : 55, w);
           const frame = atlas.add(`finish-label:${station.kind}:${labelW}`, labelW, labelH, (c) => {
@@ -280,18 +306,12 @@ export class KitchenScene extends Phaser.Scene {
           });
           items.push({ frame, x: station.cx - labelW / 2, y: y + h + 4, w: labelW, h: labelH, dims: true });
         }
-      } else if (station.kind === 'sugar') {
-        const tray = sourceImage(this, SUGAR_TRAY);
-        const frame = atlas.add(`sugar-tray:${sized(w, h)}`, w, h, (c) => {
-          c.drawImage(tray, 0, 0, w, h);
-        });
-        items.push({ frame, x, y, w, h, dims: true });
       } else {
         const rx = w * 0.46;
         const ry = Math.max(3, w * 0.11);
         const shadow = atlas.add(`shadow:${sized(rx, ry)}`, rx * 2, ry * 2, (c) => drawShadow(c, rx, ry));
         const foot = station.kind === 'milk' ? h * 150 / 154 : h;
-        items.push({ frame: shadow, x: station.cx - rx, y: y + foot - ry, w: rx * 2, h: ry * 2, name: 'shadow' });
+        items.push({ frame: shadow, x: station.cx - rx, y: y + foot - ry * 1.6, w: rx * 2, h: ry * 2, name: 'shadow' });
         const equipmentKey = station.kind === 'foam' ? `cream-can-${station.id}` : `milk-carton-${station.id}`;
         const art = this.textures.exists(equipmentKey) ? sourceImage(this, equipmentKey) : null;
         if (art) {
@@ -330,18 +350,13 @@ export class KitchenScene extends Phaser.Scene {
     // A rebuild (a resize mid-carry) draws the whole counter back, including what is in a hand.
     if (this.held) this.showStationObject(this.held, false);
 
-    for (const [image, box, label] of [
-      [this.holder, layout.holder, 'Pha chế'], [this.finishHolder, layout.finishHolder, 'Hoàn thiện'],
-    ] as const) {
-      const key = bakeCanvas(this, `work-mat:${label}:${sized(box.width, box.height)}`, box.width * 2, box.height * 2, c => {
-        c.scale(2, 2);
-        const crop = CUP_HOLDER_ART;
-        c.drawImage(sourceImage(this, CUP_HOLDER), crop.x, crop.y, crop.width, crop.height, 0, 0, box.width, box.height);
-        c.font = canvasFont(12, 700); c.textAlign = 'center'; c.fillStyle = '#8B653F';
-        c.fillText(label, box.width / 2, box.height - 12);
-      });
-      image.setTexture(key).setPosition(box.left, box.top).setDisplaySize(box.width, box.height);
-    }
+    const box = layout.holder;
+    const matKey = bakeCanvas(this, `work-mat:shared:${sized(box.width, box.height)}`, box.width * 2, box.height * 2, c => {
+      c.scale(2, 2);
+      const crop = CUP_HOLDER_ART;
+      c.drawImage(sourceImage(this, CUP_HOLDER), crop.x, crop.y, crop.width, crop.height, 0, 0, box.width, box.height);
+    });
+    this.holder.setTexture(matKey).setPosition(box.left, box.top).setDisplaySize(box.width, box.height);
   }
 
   /** Locks, labels and the active tap: everything about the equipment that follows the drink. */
@@ -408,7 +423,7 @@ export class KitchenScene extends Phaser.Scene {
     this.spill?.container.destroy();
     this.spill = null;
     this.dock = null;
-    this.cupPos = { x: store.state.build.lidded ? layout.finishHomeX : layout.homeX, y: store.state.build.lidded ? layout.finishHomeY : layout.homeY, scale: 1 };
+    this.cupPos = { x: layout.homeX, y: layout.homeY, scale: 1 };
     if (store.state.build.inLidder) this.restoreLidderCup();
     // A new cup drops onto the mat; one that is merely re-sized or re-laid-out just stands there,
     // and one that flew there has been on screen the whole way and must not be dropped in on top.
@@ -449,8 +464,7 @@ export class KitchenScene extends Phaser.Scene {
     const wasDocked = Boolean(this.dock);
     this.dock = null;
     if (this.pouring) this.stopPour(false);
-    const finished = store.state.build.lidded;
-    const home = { x: finished ? this.layout.finishHomeX : this.layout.homeX, y: finished ? this.layout.finishHomeY : this.layout.homeY, scale: 1 };
+    const home = { x: this.layout.homeX, y: this.layout.homeY, scale: 1 };
     if (instant) {
       for (const tween of this.cupTweens) tween.stop();
       Object.assign(this.cupPos, home);

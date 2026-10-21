@@ -1,5 +1,8 @@
 # Painted cup holder extraction
 
+Current kitchen: [one compact shared mat](single-cup-mat.md), using the overhead cloth artwork.
+The source notes below describe the earlier side-view extraction.
+
 The holder under the cup is painted into the kitchen background, and the background pans behind a
 cup that stays put — so the holder is lifted out of the painting and drawn over it instead.
 

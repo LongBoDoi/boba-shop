@@ -19,7 +19,7 @@ const { TEA_DISPENSER_ART, ROOM_BG_TEA_SHELF, ROOM_BG_TOPPING_SHELF } = require(
 const { TOPPING_PAN_ART, TOPPING_PANS, TOPPING_SCOOP_ART, TOPPING_SCOOPS } = require('../src/art/toppingArt.ts');
 const { equipmentFrame } = require('../src/art/equipmentArt.ts');
 const { PRELOAD, ROOM_BG } = require('../src/art/kitchenArt.ts');
-const { KITCHEN_ROOM_ART, KITCHEN_ROOM_RENDER } = require('../src/art/kitchenRoomArt.ts');
+const { KITCHEN_ROOM_ART, KITCHEN_ROOM_RENDER, KITCHEN_ROOM_TRAYS, KITCHEN_ROOM_TRAY_PATCH } = require('../src/art/kitchenRoomArt.ts');
 const { ORIGINAL_TEA_WIDTH, ORIGINAL_ROOM_SIZE } = require('../src/art/roomGeometry.ts');
 const { layoutKitchen } = require('../src/kitchen/layout.ts');
 const { getDayConfig } = require('../src/game/levels.ts');
@@ -33,6 +33,15 @@ const roomPng = fs.readFileSync(KITCHEN_ROOM_RENDER);
 assert.equal(roomPng.readUInt32BE(16), KITCHEN_ROOM_ART.width);
 assert.equal(roomPng.readUInt32BE(20), KITCHEN_ROOM_ART.height);
 assert(PRELOAD.includes(KITCHEN_ROOM_RENDER), 'The continuous room must load before play');
+assert.equal(crypto.createHash('sha256').update(roomPng).digest('hex'),
+  'b00a0387aafe06ddb56a187c2b212edae5c12ec15e2e96e6723b977979b7bd5a',
+  'Use the original room pixels instead of the repeatedly regenerated room');
+assert(PRELOAD.includes(KITCHEN_ROOM_TRAYS), 'The local tray edit loads before play');
+const patch = KITCHEN_ROOM_TRAY_PATCH;
+assert(patch.x >= 0 && patch.y >= 0 && patch.x + patch.width <= KITCHEN_ROOM_ART.width
+  && patch.y + patch.height <= KITCHEN_ROOM_ART.height, 'The tray crop fits its source');
+assert(patch.width * patch.height < KITCHEN_ROOM_ART.width * KITCHEN_ROOM_ART.height * 0.05,
+  'Tray edits cannot replace or soften the rest of the room');
 
 // A taller room must not shrink the tanks back below the first top-down design's apparent size.
 for (const [width, height] of [[390, 541], [375, 364], [450, 315], [500, 355], [715, 532]]) {
@@ -66,6 +75,25 @@ for (const id of ['whole', 'oat', 'cheese', 'brulee']) {
   assert(t.x >= 0 && t.y >= 0 && t.x + t.width <= width && t.y + t.height <= height,
     `${id}: painted silhouette fits its equipment frame`);
   assert(Math.abs(t.width / t.height - s.width / s.height) < 1e-8, `${id}: preserve painted proportions`);
+}
+
+// Packages stand inside the wooden board surfaces measured in the active background.
+for (const [width, height] of [[390, 541], [375, 364], [450, 315], [715, 532]]) {
+  const layout = layoutKitchen(getDayConfig(1), width, height);
+  const { scale, top } = layout.room;
+  const milkHeights = [], creamHeights = [];
+  for (const station of layout.stations.filter(s => s.kind === 'milk' || s.kind === 'foam')) {
+    const milk = station.kind === 'milk';
+    const foot = station.y + station.h * (milk ? 150 / 154 : 1);
+    const x = station.cx / scale * 1452 / 1920;
+    const y = (foot - top) / scale * 1083 / 1430;
+    assert(y > 600 && y < 690, `${station.id}: its foot stays on the board surface`);
+    assert(milk ? x > 100 && x < 520 : x > 620 && x < 1010,
+      `${station.id}: milk uses the left board and cream the right`);
+    const frame = equipmentFrame(station.id);
+    (milk ? milkHeights : creamHeights).push(station.h * frame.target.height / frame.height);
+  }
+  assert(Math.min(...milkHeights) > Math.max(...creamHeights), 'Milk cartons remain larger than cream dispensers');
 }
 
 // The overhead pan sheet has its own dimensions and row ordering.

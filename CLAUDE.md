@@ -930,17 +930,20 @@ What the painting is allowed to decide, and what the geometry is:
   background artwork and lettering without an added tag or graphic. Milk cartons show a cow
   or oats; cream dispensers show cheese or a caramel spiral, without printed words.
 - **Equipment and orders share hand-painted artwork.** `art/equipmentArt.ts` defines package
-  crops, printed ingredient close-ups and proportional placement from `milk-cartons-frontal-v2.png`
-  (upright cartons) and `milk-cream-painted.png` (cream cans).
+  crops, printed ingredient close-ups and proportional placement from `milk-cream-natural.png`.
+  Folded paper cartons and brushed-metal cream dispensers share the room's elevated viewpoint;
+  cream cans have rigid plastic valves and short outlet spouts.
   Canvas prepares counter/hand textures once; SVG wrappers use the same sprites on orders.
-  `PRELOAD` includes the atlas. See `docs/equipment-painted-art.md` for the imagegen prompt.
-  Milk's painted foot remains at 150/154 of its 72×154 frame. Cartons are 66×141 room pixels at y548;
-  smaller 50×117 cream cans sit slightly farther back at y536. Their proportions and positions
+  `PRELOAD` includes the atlas. See `docs/board-equipment.md` for the imagegen prompts.
+  Milk's painted foot remains at 150/154 of its 72×154 frame. Carton frames are 118×252 room units
+  on the left board, feet y876/893; smaller 76×178 cream frames occupy the right, feet y873/889.
+  Soft directional shadows and tight contact shading ground the packages. Their proportions and positions
   follow the background scale in every orientation, and stay the same when picked up. Cream counter objects
   hide while held. See `docs/milk-cartons.md`, `docs/cream-options.md` and `docs/visual-orders.md`.
 - **Functional kitchen lettering keeps an 11 CSS pixel minimum** (`kitchen/typography.ts`):
-  cup-size badges, quantities and hints. The cup rack keeps its original S/M/L lettering in the
-  background painting, without added label overlays. The cup-size badge compensates for
+  cup-size badges, quantities and hints. Small warm-paper S/M/L plaques sit centered beneath the
+  painted stacks on the rack's wooden front; their anchors follow `ROOM_BG_CUP_STATION.labels`,
+  independently of touch-target minimums. The cup-size badge compensates for
   docking scale. Ingredient names remain available to screen readers; there are no visible
   ingredient name captions or plaques.
 - **Cream is a painted star-nozzle spiral** (`kitchen/creamPainter.ts`), using the transparent
@@ -994,7 +997,7 @@ is clipped to the real liquid. The texture has 40 units of headroom rather than 
 
 
 ### The kitchen's artwork
-The active room is `kitchen-room-counter-cups.png`, with an elevated top-down viewpoint and broad
+The active room is `kitchen-room-aligned-trays.png`, with an elevated top-down viewpoint and broad
 wooden work boards. `tea-dispensers-overhead.png`, `counter-props-overhead.png` and
 `topping-pans-overhead.png` supply matching equipment, shared with order illustrations.
 The original plate uses 1920×1080 coordinates; its counter anchors are offset by a 350-unit upper extension,
@@ -1009,7 +1012,11 @@ the long shelf behind it is removed. Its lower selection targets and size badges
 prompt, and [tall tea shelf](docs/tall-tea-shelf.md) for the room and tank anchors.
 See [overhead kitchen artwork](docs/overhead-kitchen.md) for the original asset provenance.
 The counter pans by swiping; there are no bottom station shortcuts or reserved shortcut bar.
-Two foreground mats stay in view; lidded cups return to the right finishing mat.
+One compact foreground mat serves preparation and finishing; lidded cups return to that same mat.
+The ice and liquid-sugar trays are painted into that background, sharing straight aligned edges.
+Only touch highlights and carried scoops/ladles are separate layers; do not draw or preload a
+separate sugar-tray sprite. Their station bounds share x/width/height, separated by eight logical
+pixels. See [integrated trays](docs/background-trays.md) for artwork provenance and validation.
 
 Nearly everything in the prep room is a **painted sprite**. `tools/cut-sheets.py` cuts
 `tools/sheets/*.png` into `src/assets/kitchen/`; `tools/cut-topping-boxes.py` cuts the new
@@ -1240,14 +1247,19 @@ The active room uses `ROOM_BG_SIZE` (1920×1430 logical coordinates), with the o
 vertical offset and horizontal pan. The old `ROOM` measurements remain for legacy art only.
 Re-measure `ROOM_BG_*` anchors and topping tray edges when changing the active plate.
 
-`kitchenHolderFor` places the preparation mat in the left half of the viewport, with a second
-finishing mat alongside it. Both preserve the generated mat's proportions and stay fixed while
-the room pans. The cup's foot uses `CUP_FOOT`; an unsealed cup returns to the preparation mat,
-and a lidded cup returns to the finishing mat. The room opens panned all the way to the left.
+`kitchenHolderFor` places one shared mat near the center of the clear foreground marble, with
+space before the counter edge and beside the sugar tray. Its preferred width is 250 logical
+units; it preserves the painted aspect ratio and enough clearance around an L cup on short screens.
+The mat stays fixed while the room pans. Both preparation and finished cups stand by `CUP_FOOT`
+at the same mat center; there is no separate finishing home. See [single mat](docs/single-cup-mat.md).
+The room opens panned all the way to the left.
 
 The background contains empty pans, so the topping atlas fills their measured plane. Each row
 shares its boundaries with the next; `toppingGeometry.ts` projects the painted rims as horizontal
-bands. The press head is cropped from the active room and moves to the inserted cup's rim.
+bands. Row boundaries follow the active background's compartments at logical y427/516/616/725
+before the wall offset, rather than equal thirds. These same bounds place the topping touch
+targets. See [topping alignment](docs/topping-bin-alignment.md). The press head is cropped from
+the active room and moves to the inserted cup's rim.
 
 
 ## Conventions

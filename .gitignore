@@ -46,3 +46,6 @@ yarn-error.*
 
 # a local copy of ffmpeg for tools/audio/build-foley.cjs
 tools/audio/bin/
+
+# scratch: screenshots and one-off scripts from driving the game in a browser
+.expo/

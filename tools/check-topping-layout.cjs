@@ -22,20 +22,33 @@ function project(m, x, y) {
 // Independently moving a middle row's corner must fail this check, even if its pans still touch.
 const trayBack = TOPPING_TRAY_EDGES[0];
 const trayFront = TOPPING_TRAY_EDGES[TOPPING_TRAY_EDGES.length - 1];
-// Both fitted sides must follow the painted rims, with matching clearance.
-// Measure away from the rounded corners; allow one background pixel over the full depth.
-// Overhead kitchen rims in logical 1920×1080 plate coordinates, away from rounded corners.
-const paintedLeftSlope = 25 / 287;
+// The active 1452×1083 background's pan rims, measured away from rounded corners.
+// Check their projection independently of the geometry's logical room coordinates.
+const paintedLeftSlope = 25 / 298;
 assert(Math.abs(trayFront.x0 - trayBack.x0 - paintedLeftSlope * (trayFront.y - trayBack.y)) < 1,
   'Left topping edge must remain parallel to the painted tray rim');
-const paintedRightSlope = 57 / 287;
+const paintedRightSlope = 60 / 298;
 assert(Math.abs(trayFront.x1 - trayBack.x1 - paintedRightSlope * (trayFront.y - trayBack.y)) < 1,
   'Right topping edge must remain parallel to the painted tray rim');
-for (const { y, left, right } of [{ y: 437, left: 1435, right: 1848 }, { y: 724, left: 1460, right: 1905 }]) {
-  const t = (y - trayBack.y) / (trayFront.y - trayBack.y);
-  const leftInset = trayBack.x0 + (trayFront.x0 - trayBack.x0) * t - left;
-  const rightInset = right - (trayBack.x1 + (trayFront.x1 - trayBack.x1) * t);
-  assert(Math.abs(leftInset - rightInset) < 1, 'Both topping edges must have matching rim clearance');
+const paintedRows = [
+  { y: 589, left: 1086, right: 1386 },
+  { y: 656, left: 1092, right: 1400 },
+  { y: 731, left: 1099, right: 1416 },
+  { y: 814, left: 1105, right: 1432 },
+];
+TOPPING_TRAY_EDGES.forEach((edge, index) => {
+  const painted = paintedRows[index];
+  assert(Math.abs((edge.y + 350) * 1083 / 1430 - painted.y) < 2,
+    `Row boundary ${index} follows the painted horizontal rim`);
+  assert(Math.abs(edge.x0 * 1452 / 1920 - painted.left) < 2,
+    `Row boundary ${index} follows the painted left rim`);
+  assert(Math.abs(edge.x1 * 1452 / 1920 - painted.right) < 2,
+    `Row boundary ${index} follows the painted right rim`);
+});
+for (let row = 1; row < 3; row++) {
+  assert(TOPPING_TRAY_EDGES[row + 1].y - TOPPING_TRAY_EDGES[row].y
+    > TOPPING_TRAY_EDGES[row].y - TOPPING_TRAY_EDGES[row - 1].y,
+  'Painted compartments deepen toward the front of the counter');
 }
 for (let divider = 0; divider <= 3; divider++) {
   const fraction = divider / 3;

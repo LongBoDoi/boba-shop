@@ -112,17 +112,24 @@ export function wrap(text: string, font: string, width: number, max = 2): string
   return lines;
 }
 
-/**
- * The soft pool a thing standing on a surface casts around its foot: nested ellipses, each barely
- * there, piling up towards the middle (`Shadow` in KitchenRoom), filling a `2rx`×`2ry` box.
- */
+/** Soft cast shadow to the lower left of upper-right light, with a tighter contact underneath. */
 export function drawShadow(c: CanvasRenderingContext2D, rx: number, ry: number) {
-  for (const k of [1, 0.86, 0.72, 0.58, 0.44, 0.3]) {
-    c.fillStyle = 'rgba(92,58,24,0.055)';
-    c.beginPath();
-    c.ellipse(rx, ry, rx * k, ry * k, 0, 0, Math.PI * 2);
-    c.fill();
-  }
+  c.save();
+  c.scale(1, ry / rx);
+  const cast = c.createRadialGradient(rx * 0.85, rx, 0, rx * 0.85, rx, rx * 0.85);
+  cast.addColorStop(0, 'rgba(92,58,24,0.22)');
+  cast.addColorStop(0.5, 'rgba(92,58,24,0.1)');
+  cast.addColorStop(1, 'rgba(92,58,24,0)');
+  c.fillStyle = cast; c.fillRect(0, 0, rx * 2, rx * 2);
+  c.restore();
+  c.save();
+  c.translate(rx * 1.08, ry * 1.22);
+  c.scale(1, ry / rx * 0.45);
+  const contact = c.createRadialGradient(0, 0, 0, 0, 0, rx * 0.72);
+  contact.addColorStop(0, 'rgba(77,48,23,0.22)');
+  contact.addColorStop(1, 'rgba(77,48,23,0)');
+  c.fillStyle = contact; c.fillRect(-rx, -rx, rx * 2, rx * 2);
+  c.restore();
 }
 
 /** Centred text at or above the shared minimum. Callers wrap long labels instead of shrinking. */
