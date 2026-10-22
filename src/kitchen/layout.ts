@@ -218,6 +218,20 @@ export function layoutKitchen(config: DayConfig, W: number, H: number, size: Cup
 }
 
 /** A visible tap directly above the released cup, accounting for the pan. */
+/** Closely packed containers keep generous touch areas; overlaps choose the nearest center. */
+export function findDairyStation(stations: Station[], x: number, y: number): Station | null {
+  let best: Station | null = null;
+  let distance = Infinity;
+  for (const station of stations) {
+    if (station.kind !== 'milk' && station.kind !== 'foam') continue;
+    const dx = Math.abs(x - station.cx);
+    if (dx <= station.slot / 2 && y >= station.y - 6 && y <= station.y + station.h + 24 && dx < distance) {
+      best = station; distance = dx;
+    }
+  }
+  return best;
+}
+
 export function findStation(stations: Station[], x: number, y: number, cupW: number, cupH: number, offset: number, width: number): Station | null {
   let best: Station | null = null;
   let score = Infinity;

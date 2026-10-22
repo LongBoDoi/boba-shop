@@ -1,4 +1,4 @@
-import paintedEquipment from '../assets/kitchen/milk-cream-natural.png';
+import paintedEquipment from '../assets/kitchen/milk-cream-front-v3.png';
 import { el, svgDoc } from './svg';
 
 export const PAINTED_EQUIPMENT = paintedEquipment;
@@ -6,29 +6,29 @@ export const PAINTED_MILK = paintedEquipment;
 export type PaintedEquipmentId = 'whole' | 'oat' | 'cheese' | 'brulee';
 interface Crop { x: number; y: number; width: number; height: number }
 
-/** Alpha bounds and printed ingredient details, measured on the original transparent atlas. */
+/** Alpha bounds and printed ingredient details, measured on the refined transparent atlas. */
 export const EQUIPMENT_ATLAS = {
   width: 1536, height: 1024,
   cells: {
-    cheese: { x: 316, y: 520, width: 240, height: 464 },
-    brulee: { x: 986, y: 520, width: 241, height: 464 },
+    cheese: { x: 411, y: 528, width: 181, height: 463 },
+    brulee: { x: 947, y: 528, width: 182, height: 462 },
   } satisfies Record<'cheese' | 'brulee', Crop>,
   details: {
-    cheese: { x: 351, y: 771, width: 190, height: 169 },
-    brulee: { x: 1013, y: 778, width: 184, height: 154 },
+    cheese: { x: 435, y: 740, width: 140, height: 144 },
+    brulee: { x: 958, y: 750, width: 160, height: 144 },
   } satisfies Record<'cheese' | 'brulee', Crop>,
 };
 
-/** Elevated cartons reveal their folded tops and illustrated ingredient panels. */
+/** Front-facing cartons retain gently elevated folded tops and horizontal bases. */
 export const MILK_ATLAS = {
   width: 1536, height: 1024,
   cells: {
-    whole: { x: 277, y: 7, width: 317, height: 493 },
-    oat: { x: 945, y: 19, width: 307, height: 481 },
+    whole: { x: 385, y: 14, width: 222, height: 500 },
+    oat: { x: 926, y: 14, width: 221, height: 500 },
   } satisfies Record<'whole' | 'oat', Crop>,
   details: {
-    whole: { x: 295, y: 250, width: 210, height: 200 },
-    oat: { x: 961, y: 244, width: 198, height: 232 },
+    whole: { x: 391, y: 225, width: 207, height: 240 },
+    oat: { x: 949, y: 202, width: 184, height: 290 },
   } satisfies Record<'whole' | 'oat', Crop>,
 };
 

@@ -112,23 +112,101 @@ export function wrap(text: string, font: string, width: number, max = 2): string
   return lines;
 }
 
-/** Soft cast shadow to the lower left of upper-right light, with a tighter contact underneath. */
-export function drawShadow(c: CanvasRenderingContext2D, rx: number, ry: number) {
+/** Room light projects the package silhouette down-left from its actual foot. */
+export function equipmentShadowExtent(w: number, h: number, foot: number) {
+  const pad = Math.max(3, w * 0.1);
+  const originY = pad + w * 0.15;
+  return { left: -h * 0.24 - pad, top: foot - originY,
+    width: w + h * 0.24 + pad * 2, height: h * 0.15 + originY + pad, originY };
+}
+
+const canBaseProfiles = new WeakMap<CanvasImageSource, { base: Float32Array; image: HTMLCanvasElement }>();
+
+/** Read the painted lower rim once per source texture, including its curved sides. */
+function canBaseProfile(image: CanvasImageSource, id: PaintedEquipmentId) {
+  const cached = canBaseProfiles.get(image);
+  if (cached) return cached;
+  const frame = equipmentFrame(id);
+  const canvas = document.createElement('canvas');
+  canvas.width = frame.width * 4; canvas.height = frame.height * 4;
+  const context = canvas.getContext('2d')!;
+  context.drawImage(image, 0, 0, canvas.width, canvas.height);
+  const pixels = context.getImageData(0, 0, canvas.width, canvas.height).data;
+  const base = new Float32Array(canvas.width).fill(-1);
+  for (let x = 0; x < canvas.width; x++) {
+    for (let y = canvas.height - 1; y >= canvas.height * 0.8; y--) {
+      if (pixels[(y * canvas.width + x) * 4 + 3] >= 128) {
+        base[x] = (y + 0.5) / canvas.height;
+        break;
+      }
+    }
+  }
+  const profile = { base, image: canvas };
+  canBaseProfiles.set(image, profile);
+  return profile;
+}
+
+export function drawEquipmentShadow(c: CanvasRenderingContext2D, image: CanvasImageSource,
+  id: PaintedEquipmentId, w: number, h: number, foot: number) {
+  const box = equipmentShadowExtent(w, h, foot);
+  const frame = equipmentFrame(id);
+  const bodyWidth = w * frame.target.width / frame.width;
+  const cx = -box.left + w / 2, cy = box.originY;
+  const profile = id === 'cheese' || id === 'brulee' ? canBaseProfile(image, id) : null;
+  const base = profile?.base;
+  // source-in must stay inside this atlas frame; otherwise it erases earlier equipment frames.
   c.save();
-  c.scale(1, ry / rx);
-  const cast = c.createRadialGradient(rx * 0.85, rx, 0, rx * 0.85, rx, rx * 0.85);
-  cast.addColorStop(0, 'rgba(92,58,24,0.22)');
-  cast.addColorStop(0.5, 'rgba(92,58,24,0.1)');
-  cast.addColorStop(1, 'rgba(92,58,24,0)');
-  c.fillStyle = cast; c.fillRect(0, 0, rx * 2, rx * 2);
+  c.beginPath(); c.rect(0, 0, box.width, box.height); c.clip();
+  c.save();
+  c.shadowColor = '#000'; c.shadowBlur = Math.max(1.6, w * 0.06);
+  c.translate(-box.left, box.originY);
+  if (profile && base) {
+    // Each strip starts at its own painted bottom, rather than reflecting the curved rim
+    // below a flat baseline. At y=ground the projected point stays exactly on that rim.
+    const strip = 0.5;
+    for (let x = 0; x < w; x += strip) {
+      const index = Math.min(base.length - 1, Math.floor((x + strip / 2) / w * base.length));
+      if (base[index] < 0) continue;
+      const ground = base[index] * h;
+      c.save();
+      c.transform(1, 0, 0.24, -0.15, -ground * 0.24, ground * 1.15 - foot);
+      // Draw only this source strip; source coordinates share the cached rim's resolution.
+      c.drawImage(profile.image, x / w * profile.image.width, 0,
+        Math.min(strip, w - x) / w * profile.image.width, profile.image.height,
+        x, 0, Math.min(strip, w - x), h);
+      c.restore();
+    }
+  } else {
+    c.transform(1, 0, 0.24, -0.15, -foot * 0.24, foot * 0.15);
+    c.drawImage(image, 0, 0, w, h);
+  }
   c.restore();
   c.save();
-  c.translate(rx * 1.08, ry * 1.22);
-  c.scale(1, ry / rx * 0.45);
-  const contact = c.createRadialGradient(0, 0, 0, 0, 0, rx * 0.72);
-  contact.addColorStop(0, 'rgba(77,48,23,0.22)');
-  contact.addColorStop(1, 'rgba(77,48,23,0)');
-  c.fillStyle = contact; c.fillRect(-rx, -rx, rx * 2, rx * 2);
+  c.globalCompositeOperation = 'source-in';
+  const fade = c.createLinearGradient(0, box.originY, 0, box.height);
+  fade.addColorStop(0, 'rgba(65,55,44,0.18)');
+  fade.addColorStop(1, 'rgba(65,55,44,0.02)');
+  c.fillStyle = fade; c.fillRect(0, 0, box.width, box.height);
+  c.restore();
+  c.save();
+  c.shadowColor = 'rgba(58,48,37,0.25)'; c.shadowBlur = Math.max(0.4, w * 0.012);
+  if (base) {
+    c.beginPath();
+    let started = false;
+    for (let i = 0; i < base.length; i++) {
+      if (base[i] < 0) continue;
+      const x = (i + 0.5) / base.length * w - box.left;
+      const y = base[i] * h - foot + cy;
+      if (started) c.lineTo(x, y); else { c.moveTo(x, y); started = true; }
+    }
+    c.strokeStyle = 'rgba(58,48,37,0.27)'; c.lineWidth = Math.max(0.5, bodyWidth * 0.025); c.stroke();
+  } else {
+    c.fillStyle = 'rgba(58,48,37,0.32)';
+    roundRect(c, cx - bodyWidth * 0.44, cy - bodyWidth * 0.025,
+      bodyWidth * 0.88, bodyWidth * 0.065, bodyWidth * 0.025);
+    c.fill();
+  }
+  c.restore();
   c.restore();
 }
 

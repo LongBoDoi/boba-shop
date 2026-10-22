@@ -1,5 +1,9 @@
 # Milk and cream on the boards
 
+The boards have since been replaced by [flat serving trays](dairy-serving-trays.md), with the
+same package artwork, sizes and depth staggering. The following records the earlier board layout
+and the package generation prompts.
+
 Milk cartons stand on the left board at logical x280/520, feet y876/893. Smaller cream cans
 stand on the right board at x990/1200, feet y873/889. Slight depth staggering avoids an
 artificial straight shelf line. Smooth cast shadows extend toward the lower left of the room's

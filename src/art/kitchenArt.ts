@@ -102,7 +102,7 @@ import iconCup from '../assets/kitchen/icon-cup.png';
 
 import { TOPPING_PANS, TOPPING_PIECES, TOPPING_SCOOPS } from './toppingArt';
 import { EXTENDED_ROOM_SIZE, EXTENDED_TEA_WIDTH, ORIGINAL_ROOM_SIZE, ROOM_EXTRA_HEIGHT } from './roomGeometry';
-import { KITCHEN_ROOM_RENDER, KITCHEN_ROOM_TRAYS } from './kitchenRoomArt';
+import { KITCHEN_ROOM_RENDER, KITCHEN_ROOM_TRAYS, KITCHEN_ROOM_DAIRY } from './kitchenRoomArt';
 import { TOPPING_TRAY_EDGES } from './toppingGeometry';
 import { PAINTED_EQUIPMENT, PAINTED_MILK } from './equipmentArt';
 
@@ -334,10 +334,9 @@ export const ROOM_BG_LIDDING = {
   head: { x: 1510, y: 166 + ROOM_EXTRA_HEIGHT, width: 197, height: 34 },
 };
 export const ROOM_BG_EXTRAS = {
-  // Feet rest on the two painted boards: milk on the left, smaller cream cans on the right.
-  // Slightly staggered bases follow the boards' depth instead of forming a flat shelf line.
-  milkCenters: [280, 520], milkBases: [876, 893], milkWidth: 118, milkHeight: 118 * 154 / 72,
-  foamCenters: [990, 1200], foamBases: [873, 889], foamWidth: 76, foamHeight: 76 * 150 / 64,
+  // All four packages share one compact tray and one front-facing row.
+  milkCenters: [452, 556], milkBases: [932, 932], milkWidth: 104, milkHeight: 104 * 154 / 72,
+  foamCenters: [648, 724], foamBases: [932, 932], foamWidth: 76, foamHeight: 76 * 150 / 64,
   // Both trays are painted into the room, with matching straight edges and a narrow gap.
   sugar: {
     x: ROOM_BG_ICE_MACHINE.x,
@@ -591,6 +590,7 @@ export const PRELOAD: Sprite[] = [
   // the room itself, and what stands in it
   KITCHEN_ROOM_RENDER,
   KITCHEN_ROOM_TRAYS,
+  KITCHEN_ROOM_DAIRY,
   SUGAR_SCOOP,
   PAINTED_EQUIPMENT,
   PAINTED_MILK,

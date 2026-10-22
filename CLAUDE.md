@@ -788,19 +788,28 @@ boxes measured in the plate's own pixels — `ROOM_BG_TEA_SHELF`, `ROOM_BG_TOPPI
 is placed in the same space, and `findStation` tests a touch in that space too. The cup does not
 pan: it is the one thing that belongs to the player's hand.
 
-- **Everything that can be dragged can be tapped, and a tap does the carrying.** The quick way is
-  never a shortcut past the room: whatever the drag would have moved, moves — the cup walks itself
-  from the rack to the mat, a tool takes itself over the cup and tips in there, and a tap on a tank
-  fetches the cup under its spout. Nothing is teleported and nothing lands on the mat out of thin
-  air, which is the whole reason these are carried and not chosen off a list. One thing a tap will
-  not do for the player is **hold the tap open**: how long it is held *is* the pour, so a tapped
-  tank docks the cup and stops there. `flightTime` sets how long a carry takes from how far it
-  goes, between the room's own two durations, so a cup let go of over its own mat settles at once
-  and one fetched from the rack takes the longer move.
+- **Everything that can be dragged can be tapped, and a tap is immediate.** It does what the drag
+  would have done and draws nothing travelling: the cup stands on the mat, the ingredient is in the
+  cup, the cup is under the tapped tank. The tap *used* to carry each of those across the room —
+  the cup walking itself off the rack, a tool flying over the cup and tipping in — and that was
+  asked for and then asked to be taken out again; don't put it back without being asked. One thing
+  a tap still will not do for the player is **hold the tap open**: how long it is held *is* the
+  pour, so a tapped tank docks the cup and stops there.
+- **`TAP_DISTANCE` (8px) is the only thing between the quick way and a drag**, and it now decides
+  three things rather than one. A touch on a tool builds the carried sprite but leaves it hidden
+  (`show: 0`); only the first move past that threshold shows it, which is also when the carton or
+  tub leaves the counter (see `holdStation`). So a tap never puts a tool on screen, and
+  `tipToolIn` and `putToolBack` return early when there is nothing shown — a tap has nothing to
+  tip or to carry home. **Drags keep their motion**: the tool follows the finger and tips into the
+  cup, and a cup let go of over the mat settles onto it.
 - **Pour by docking.** Tap a tank, or drag the cup under it and release to snap beneath its spout;
   the cup scales to the shelf gap and stands on the lowest shelf surface with a small contact
   shadow. Hold the tap to raise the live level; releasing commits the amount and leaves the cup
-  docked, ready for another pour. Drag it away to undock. A tank cannot pour until the cup is docked
+  docked, ready for another pour. Drag it away to undock. **Coming off the spout is immediate**
+  (`standCupDown(true)`) every way it happens without a finger on the cup — touching the room,
+  panning the wall, a refusal from the lid machine, the game being put down; only a cup the player
+  is actually holding glides the last stretch to its mat, because there it is their own drag
+  finishing. A tank cannot pour until the cup is docked
   beneath it, and a cup holding a different tea locks every other tank
   (`Ly đã có trà khác — đổ bỏ để pha lại`). Panning returns a docked cup to its holder. The stream
   draws behind and in front of the cup, split at its lip, and spills over the brim. A tank tapped
@@ -930,13 +939,18 @@ What the painting is allowed to decide, and what the geometry is:
   background artwork and lettering without an added tag or graphic. Milk cartons show a cow
   or oats; cream dispensers show cheese or a caramel spiral, without printed words.
 - **Equipment and orders share hand-painted artwork.** `art/equipmentArt.ts` defines package
-  crops, printed ingredient close-ups and proportional placement from `milk-cream-natural.png`.
+  crops, printed ingredient close-ups and proportional placement from `milk-cream-front-v3.png`.
   Folded paper cartons and brushed-metal cream dispensers share the room's elevated viewpoint;
   cream cans have rigid plastic valves and short outlet spouts.
   Canvas prepares counter/hand textures once; SVG wrappers use the same sprites on orders.
-  `PRELOAD` includes the atlas. See `docs/board-equipment.md` for the imagegen prompts.
-  Milk's painted foot remains at 150/154 of its 72×154 frame. Carton frames are 118×252 room units
-  on the left board, feet y876/893; smaller 76×178 cream frames occupy the right, feet y873/889.
+  `PRELOAD` includes the atlas. See `docs/dairy-front-group.md` for the imagegen prompts.
+  Milk's painted foot remains at 150/154 of its 72×154 frame. Front-facing carton frames are
+  104×222 room units at x452/556, followed closely by 76×178 cream frames at x648/724.
+  All four share foot y932 on one tray below the tea shelf, beside the ice station.
+  Carton and cream silhouettes project down-left. Cream projections use each source column's
+  measured opaque lower rim instead of a flat baseline; the contact stroke follows that same
+  curve. The profile is cached once per source texture. Source-in shading clips to its own
+  atlas frame. Overlapping dairy touch targets select the nearest container center.
   Soft directional shadows and tight contact shading ground the packages. Their proportions and positions
   follow the background scale in every orientation, and stay the same when picked up. Cream counter objects
   hide while held. See `docs/milk-cartons.md`, `docs/cream-options.md` and `docs/visual-orders.md`.
@@ -997,8 +1011,11 @@ is clipped to the real liquid. The texture has 40 units of headroom rather than 
 
 
 ### The kitchen's artwork
-The active room is `kitchen-room-aligned-trays.png`, with an elevated top-down viewpoint and broad
-wooden work boards. `tea-dispensers-overhead.png`, `counter-props-overhead.png` and
+The active room keeps `kitchen-room-counter-cups.png` as its sharp base, with local ice/sugar and
+milk/cream tray crops. `kitchen-room-dairy-left.png` replaces the two thick boards with one
+compact steel tray and a flat ivory insert. Only the board area is drawn from that edit; its
+outer boundary blends over bare marble. See `docs/dairy-left-placement.md`.
+`tea-dispensers-overhead.png`, `counter-props-overhead.png` and
 `topping-pans-overhead.png` supply matching equipment, shared with order illustrations.
 The original plate uses 1920×1080 coordinates; its counter anchors are offset by a 350-unit upper extension,
 for a 1920×1430 room. The original file remains untouched as a design reference.
