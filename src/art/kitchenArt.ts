@@ -22,13 +22,6 @@ import drinkThaiMilkyTop from '../assets/kitchen/drink-thai-milky-top.png';
 import drinkOolongMilkyTop from '../assets/kitchen/drink-oolong-milky-top.png';
 import drinkTaroMilkyTop from '../assets/kitchen/drink-taro-milky-top.png';
 import drinkMatchaMilkyTop from '../assets/kitchen/drink-matcha-milky-top.png';
-import jarBlack from '../assets/kitchen/jar-black.png';
-import jarGreen from '../assets/kitchen/jar-green.png';
-import jarThai from '../assets/kitchen/jar-thai.png';
-import jarOolong from '../assets/kitchen/jar-oolong.png';
-import jarTaro from '../assets/kitchen/jar-taro.png';
-import jarMatcha from '../assets/kitchen/jar-matcha.png';
-import teaTank from '../assets/kitchen/tea-tank.png';
 import teaDispensers from '../assets/kitchen/tea-dispensers-overhead.png';
 import cup from '../assets/kitchen/cup.png';
 import cupCreamPainted from '../assets/kitchen/cup-cream-contrast.png';
@@ -36,9 +29,6 @@ import cupBase from '../assets/kitchen/cup-base.png';
 import cupEdge from '../assets/kitchen/cup-edge.png';
 import cupDecal from '../assets/kitchen/cup-decal.png';
 import scoop from '../assets/kitchen/scoop.png';
-import syrup from '../assets/kitchen/syrup.png';
-import milkWhole from '../assets/kitchen/milk-whole.png';
-import milkOat from '../assets/kitchen/milk-oat.png';
 import foamCheese from '../assets/kitchen/foam-cheese.png';
 import foamBrulee from '../assets/kitchen/foam-brulee.png';
 import binPearls from '../assets/kitchen/bin-pearls.png';
@@ -47,14 +37,6 @@ import binPudding from '../assets/kitchen/bin-pudding.png';
 import binPandan from '../assets/kitchen/bin-pandan.png';
 import binLychee from '../assets/kitchen/bin-lychee.png';
 import binGrass from '../assets/kitchen/bin-grass.png';
-import binEmpty from '../assets/kitchen/bin-empty.png';
-import toppingBoxPearls from '../assets/kitchen/topping-box-pearls.png';
-import toppingBoxPopping from '../assets/kitchen/topping-box-popping.png';
-import toppingBoxPudding from '../assets/kitchen/topping-box-pudding.png';
-import toppingBoxPandan from '../assets/kitchen/topping-box-pandan.png';
-import toppingBoxLychee from '../assets/kitchen/topping-box-lychee.png';
-import toppingBoxGrass from '../assets/kitchen/topping-box-grass.png';
-import toppingBoxEmpty from '../assets/kitchen/topping-box-empty.png';
 import scoopPearls from '../assets/kitchen/scoop-pearls.png';
 import scoopPopping from '../assets/kitchen/scoop-popping.png';
 import scoopPudding from '../assets/kitchen/scoop-pudding.png';
@@ -73,35 +55,11 @@ import pieceIceClear from '../assets/kitchen/piece-ice-clear.png';
 import kitchenOverhead from '../assets/kitchen/kitchen-overhead.png';
 import sugarScoop from '../assets/kitchen/liquid-sugar-ladle.png';
 import cupHolder from '../assets/kitchen/counter-props-overhead.png';
-import teaRoom from '../assets/kitchen/tea-room.png';
-import teaFrontLeft from '../assets/kitchen/tea-front-left.png';
-import teaFrontRight from '../assets/kitchen/tea-front-right.png';
-import wall from '../assets/kitchen/wall.png';
-import lamp from '../assets/kitchen/lamp.png';
-import shelfPlank from '../assets/kitchen/shelf-plank.png';
-import plankTop from '../assets/kitchen/plank-top.png';
-import shelfFoot from '../assets/kitchen/shelf-foot.png';
-import barSplash from '../assets/kitchen/bar-splash.png';
-import barDeck from '../assets/kitchen/bar-deck.png';
-import barFront from '../assets/kitchen/bar-front.png';
-import drawerFront from '../assets/kitchen/drawer-front.png';
-import cabinetFront from '../assets/kitchen/cabinet-front.png';
-import railCap from '../assets/kitchen/rail-cap.png';
-import railBar from '../assets/kitchen/rail-bar.png';
-import railClip from '../assets/kitchen/rail-clip.png';
-import coaster from '../assets/kitchen/coaster.png';
-import plant from '../assets/kitchen/plant.png';
-import poster from '../assets/kitchen/poster.png';
-import cupStack from '../assets/kitchen/cup-stack.png';
-import tableProps from '../assets/kitchen/table-props.png';
-import towel from '../assets/kitchen/towel.png';
-import card from '../assets/kitchen/card.png';
-import cardBlank from '../assets/kitchen/card-blank.png';
 import iconTrash from '../assets/kitchen/icon-trash.png';
 import iconCup from '../assets/kitchen/icon-cup.png';
 
 import { TOPPING_PANS, TOPPING_PIECES, TOPPING_SCOOPS } from './toppingArt';
-import { EXTENDED_ROOM_SIZE, EXTENDED_TEA_WIDTH, ORIGINAL_ROOM_SIZE, ROOM_EXTRA_HEIGHT } from './roomGeometry';
+import { EXTENDED_ROOM_SIZE, EXTENDED_TEA_WIDTH, ROOM_EXTRA_HEIGHT } from './roomGeometry';
 import { KITCHEN_ROOM_RENDER, KITCHEN_ROOM_TRAYS, KITCHEN_ROOM_DAIRY } from './kitchenRoomArt';
 import { TOPPING_TRAY_EDGES } from './toppingGeometry';
 import { PAINTED_EQUIPMENT, PAINTED_MILK } from './equipmentArt';
@@ -119,7 +77,6 @@ export type Sprite = string;
  * adding to this one. Sprites that something is drawn *through* (a dispenser's glass, the cup) have
  * a window cleared out of them; the fractions for those are at the bottom of this file.
  */
-
 
 // ------------------------------------------------------------------ what you work with
 /**
@@ -161,19 +118,6 @@ export const DRINK_MILKY_TOP: Record<string, Sprite> = {
   matcha: drinkMatchaMilkyTop,
 };
 
-export const JAR_TEA: Record<string, Sprite> = {
-  black: jarBlack,
-  green: jarGreen,
-  thai: jarThai,
-  oolong: jarOolong,
-  taro: jarTaro,
-  matcha: jarMatcha,
-};
-
-/** Dark-lidded glass dispenser frame; tea is visible through its transparent chamber. */
-export const TEA_TANK = teaTank;
-// Geometry measured in the generated frame; see tools/tea-tank-prompt.md for its source.
-export const TEA_TANK_ART = { width: 971, height: 1619, collar: 0.83, spout: 0.96 };
 /** Painted squat glass reservoirs matching the warm kitchen reference, in one transparent atlas. */
 export const TEA_DISPENSERS = teaDispensers;
 export const TEA_DISPENSER_ART = {
@@ -200,12 +144,6 @@ export const CUP_BASE = cupBase;
 export const CUP_EDGE = cupEdge;
 export const CUP_DECAL = cupDecal;
 export const SCOOP = scoop;
-export const SYRUP = syrup;
-
-export const MILK: Record<string, Sprite> = {
-  whole: milkWhole,
-  oat: milkOat,
-};
 
 export const CREAM_CAN_ART = { width: 64, height: 150 };
 
@@ -232,21 +170,6 @@ export const BIN: Record<string, Sprite> = {
   grass: binGrass,
 };
 
-/** A bin with nothing in it, for a place on the tray the week has not reached yet. It is cut into
- *  the same box as the full ones, so every bin on the tray is exactly the same size. */
-export const BIN_EMPTY = binEmpty;
-
-/** Upright glass topping boxes, cut from the new shelf-container sprite sheet. */
-export const TOPPING_BOX: Record<string, Sprite> = {
-  pearls: toppingBoxPearls,
-  popping: toppingBoxPopping,
-  pudding: toppingBoxPudding,
-  pandan: toppingBoxPandan,
-  lychee: toppingBoxLychee,
-  grass: toppingBoxGrass,
-};
-export const TOPPING_BOX_EMPTY = toppingBoxEmpty;
-
 export const SCOOPFUL: Record<string, Sprite> = {
   pearls: scoopPearls,
   popping: scoopPopping,
@@ -269,17 +192,6 @@ export const PIECE: Record<string, Sprite> = {
 
 /** Clear, softly melted ice used only inside the drink, separate from the scoop and icons. */
 export const CUP_ICE = pieceIceClear;
-
-/** Each piece's own proportions, so a pearl stays round and a cube stays square. */
-export const PIECE_ART: Record<string, number> = {
-  pearls: 96 / 93,
-  popping: 96 / 95,
-  pudding: 87 / 96,
-  pandan: 88 / 96,
-  lychee: 96 / 95,
-  grass: 89 / 96,
-  ice: 1,
-};
 
 /** And each scoopful's, since what is heaped over the bowl differs from topping to topping. */
 export const SCOOP_ART: Record<string, number> = {
@@ -308,8 +220,6 @@ export const SUGAR_SCOOP_ART = { width: 400, height: 260 };
 export const CUP_HOLDER = cupHolder;
 export const CUP_HOLDER_ART = { x: 1029, y: 655, width: 455, height: 283 };
 export const ROOM_BG_SIZE = EXTENDED_ROOM_SIZE;
-export const ROOM_BG_ORIGINAL_SIZE = ORIGINAL_ROOM_SIZE;
-export const ROOM_BG_EXTRA_HEIGHT = ROOM_EXTRA_HEIGHT;
 export const ROOM_BG_TABLE = { top: 740 + ROOM_EXTRA_HEIGHT, base: 1025 + ROOM_EXTRA_HEIGHT };
 export const ROOM_BG_TEA_SHELF = {
   x0: 70, x1: 760, tankWidth: EXTENDED_TEA_WIDTH,
@@ -440,95 +350,6 @@ export const ROOM = {
   floor: 1463,
 };
 
-/**
- * The tea station, opened: its frame, the board its sign is painted on, the three shelves and
- * the work top under them, all in one plate. Cut off `tools/sheets/tea-room.png` by
- * `cut-sheets.py`, which lifts it off the black it is painted on so its rounded corners and the
- * vines hanging past them read against the room behind.
- */
-export const TEA_BG = teaRoom;
-
-/**
- * The greenery down either side of that window, cut back out of it by `tools/cut-tea-front.ps1`
- * so it can be drawn a second time *over* the jars. The vines and the potted plant hang in front
- * of the shelves, and a jar swiped out to either end of the shelf was climbing over them; these
- * are the plate's own pixels, so laid back over the plate they cannot be seen at all.
- */
-export const TEA_FRONT = {
-  left: teaFrontLeft,
-  right: teaFrontRight,
-};
-
-/**
- * Where that plate draws its surfaces, in its own 1156x1286 pixels — the same arrangement as
- * `ROOM` above, and re-measure these if the plate is re-cut. The sprite is the window *and* what
- * hangs past it, so the frame itself is `panel`.
- */
-export const TEA_ROOM = {
-  width: 1156,
-  height: 1286,
-  /** The frame, inside the sprite: the sign board stands above its top edge and the vines past
-   *  its corners. */
-  panel: { x0: 2, x1: 1153, top: 30, base: 1283 },
-  /** The face of that sign board, which the station's name is written across. */
-  sign: { x0: 325, x1: 835, top: 14, base: 120 },
-  /**
-   * The three boards, top to bottom. A board's top face is painted as a lit strip seen from a
-   * little above — 567 to 589 on the middle one — and `stand` is the *front* of that strip, where
-   * a thing standing on the board has its feet. Standing it on the back edge, against the wall,
-   * reads as floating behind the board rather than on it. `base` is the foot of the board, which
-   * is what the shelf above has to clear.
-   */
-  shelves: [
-    { stand: 313, base: 353 },
-    { stand: 586, base: 625 },
-    { stand: 842, base: 876 },
-  ],
-  /** The work top: its back edge, the line a cup stands on, and the edge it turns down at. */
-  table: { top: 960, stand: 1080, front: 1116 },
-  /**
-   * The cup, in the middle of the work top. It is taller than the gap above that top because it
-   * stands in *front* of the shelves rather than under them, which is also why it is drawn after
-   * them.
-   */
-  cup: { cx: 578, stand: 1080, height: 280 },
-  /** The face of the card on the right, which the measure is drawn on. */
-  board: { x0: 900, x1: 1115, top: 755, base: 960 },
-  /** The button that shuts the window, over the frame's top right corner. */
-  shut: { cx: 1070, cy: 110, d: 111 },
-  /** Where each `TEA_FRONT` sprite came off the plate, which is where it goes back. */
-  front: {
-    left: { x: 10, y: 22, w: 296, h: 878 },
-    right: { x: 853, y: 22, w: 292, h: 669 },
-  },
-};
-
-export const WALL = wall;
-export const LAMP = lamp;
-export const SHELF_PLANK = shelfPlank;
-export const PLANK_TOP = plankTop;
-export const SHELF_FOOT = shelfFoot;
-/** The pack's stainless counter, sliced across: its raised back, its deck, its front edge. */
-export const BAR_SPLASH = barSplash;
-export const BAR_DECK = barDeck;
-export const BAR_FRONT = barFront;
-/** The pink units along the floor: a single at each end, a double in the middle. Their fronts
- *  alone — the steel top each ships with would stand under the counter's front as a second
- *  ledge. */
-export const DRAWER = drawerFront;
-export const CABINET = cabinetFront;
-export const RAIL_CAP = railCap;
-export const RAIL_BAR = railBar;
-export const RAIL_CLIP = railClip;
-export const COASTER = coaster;
-export const PLANT = plant;
-export const POSTER = poster;
-export const CUP_STACK = cupStack;
-/** The straw tin, the plant and the chalkboard together, cut off the design as one group. */
-export const TABLE_PROPS = tableProps;
-export const TOWEL = towel;
-export const CARD = card;
-export const CARD_BLANK = cardBlank;
 export const ICON_TRASH = iconTrash;
 export const ICON_CUP = iconCup;
 
@@ -558,18 +379,6 @@ export const ART = {
   tableProps: 241 / 264,
   towel: 154 / 142,
 };
-
-// ------------------------------------------------------------------ where things line up
-/** How far down a dispenser its tap lets go of the tea. */
-export const JAR_SPOUT = 0.87;
-/**
- * How far down a pan sprite its own rim starts: the top of the sprite is the scoop standing in
- * it, which reaches well above the counter.
- */
-export const PAN_BODY = 40 / 239;
-/** The bowl of the carried scoop — what you picked up is heaped here. */
-export const SCOOP_BOWL = { cx: 0.34, cy: 0.57, r: 0.17 };
-
 
 /**
  * Everything the game draws, for the loading screen to fetch before the shop opens.

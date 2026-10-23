@@ -10,7 +10,6 @@ export const DURATION = { fast: 150, base: 250, slow: 450 } as const;
 
 /** `Easing.out(Easing.cubic)` and `Easing.inOut(Easing.cubic)`, as CSS. */
 export const CSS_EASE = 'cubic-bezier(0.33, 1, 0.68, 1)';
-export const CSS_EASE_IN_OUT = 'cubic-bezier(0.65, 0, 0.35, 1)';
 
 export const easeOut = (t: number) => 1 - Math.pow(1 - t, 3);
 export const easeInOut = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
@@ -47,7 +46,3 @@ export function noise(index: number, salt: number) {
   return x - Math.floor(x);
 }
 
-/** The interface still works with motion turned down; it just stops moving. */
-export function prefersReducedMotion() {
-  return typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
-}

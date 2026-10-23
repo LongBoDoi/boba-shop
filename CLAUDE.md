@@ -36,7 +36,11 @@ Run `npm run typecheck` and `npm test` before calling a change done. The regress
 serving behaviour, saving and restoring, the cup sizes, the sound (its assets, its catalogue and
 its whole lifecycle against a fake audio context), the topping tray's geometry, the sideways
 layouts and the backup code; see "Verifying changes" below. There is **no lint step** — the old one was
-`eslint-config-expo` and went with Expo; `tsc` is strict and is the gate.
+`eslint-config-expo` and went with Expo; `tsc` is strict and is the gate, and it is the gate for
+dead code too: `noUnusedLocals` and `noUnusedParameters` are on, so an import or a local nothing
+reads is a build error rather than something that accumulates for a year. An unused *export* is
+the one thing it cannot see — nothing in the toolchain can — so that still needs somebody to walk
+the import graph; see "Verifying changes".
 
 `/art-test.html` on the dev server draws every piece of SVG art in `src/art/` with a spread of
 parameters, including rasterised through an `Image` the way a texture is made. It is not part of
@@ -528,11 +532,13 @@ the saved shop and the artwork are all in, and the bar is weighted the way the w
 
 Three things not to undo:
 
-- **`PRELOAD` is not every sprite in `kitchenArt.ts`**, because that file still exports the room's
-  old planks and counters and the teas' old jars, and nothing draws them (see "The kitchen's
-  artwork"). Fetching that lot would about double the wait for sprites that never appear. When
-  something in there starts being drawn, add it: a sprite left out still loads, just late, in the
-  middle of play, which is the stutter this exists to remove.
+- **`PRELOAD` is what is actually drawn, and `kitchenArt.ts` now names nothing else.** It used to
+  be the smaller of two lists, because that file still exported the room's old planks, counters,
+  rails and the teas' old jars, and fetching that lot would about double the wait for sprites that
+  never appear. Those are gone — both the exports and the forty PNGs they named — so the file and
+  the preload list say the same thing again. Keep it that way: when a sprite starts being drawn,
+  add it to `PRELOAD`, because one left out still loads, just late, in the middle of play, which
+  is the stutter this exists to remove.
 - **It gives up after ten seconds** and opens the shop anyway, with a warning naming how many
   arrived. A slow connection must never be able to lock a player out of their own game; the
   stragglers carry on loading behind the menu, which is exactly what used to happen to all of them.
@@ -1080,9 +1086,9 @@ their own. The kitchen now uses `TeaLiquid` for shaded, animated liquid; see "Li
 Anything that has to *move* is drawn against a window the script cleared out of the artwork, which
 keeps the painted ticks, highlights and the cat decal on top of it:
 
-- a **dispenser** uses the transparent `TEA_TANK` frame over its tea, which is shaded, has an oval
-  surface and ripples while it pours. `JAR_TEA` retains the older complete jar sprites; the current
-  shelf does not draw those;
+- a **dispenser** is a cell of `TEA_DISPENSERS` (`TEA_DISPENSER_ART`, drawn by `KitchenScene`)
+  over its tea, which is shaded, has an oval surface and ripples while it pours. The single
+  `TEA_TANK` frame and the teas' older complete jars are gone, with the sprites behind them;
 - the **cup** is painted by [cupPainter.ts](src/kitchen/cupPainter.ts) into one texture in its
   113×174 sprite space — see "Liquid and glass layers" — and drawn by `kitchen/CupView.ts`, which
   repaints it only while something in it is moving;
@@ -1101,11 +1107,12 @@ keeps the painted ticks, highlights and the cat decal on top of it:
   it painted rather than assembled. It used to be assembled: a wall tile set to repeat, a shelf
   plank and a stainless counter each sliced into bands and stretched across the room, a run of
   cabinet fronts, a group of props cut out of the mockup — every one of them a line to compute
-  and a seam to get wrong. Those sprites are still cut (a station may yet want the stainless),
-  but the room no longer draws any of them. Each piece of equipment sits in a contact shadow of
-  its own, because there is no well in a counter to sink it into. The active topping cabinet is
-  measured in the panoramic background by `ROOM_BG_TOPPING_SHELF`. The portrait plate and
-  `ROOM.tray` remain legacy geometry.
+  and a seam to get wrong. **Those sprites have been deleted**, along with the exports that named
+  them: the cutters in `tools/` still know how to make them, so a station that one day wants the
+  stainless re-runs `cut-sheets.py` rather than keeping four megabytes against the chance. Each
+  piece of equipment sits in a contact shadow of its own, because there is no well in a counter to
+  sink it into. The active topping cabinet is measured in the panoramic background by
+  `ROOM_BG_TOPPING_SHELF`.
 
 **The prep page is all kitchen.** There is no ticket rail, and no row of shortcut buttons for
 walking to a station — the room fills everything between the order panel and the action buttons,
@@ -1146,9 +1153,11 @@ squat for anything else is held to.
   and the buttons give back a few pixels of height. **It is taken only while it costs the
   painting nothing** — `ROOM_KEEP_ASPECT`, measured against what is left after the two bands'
   ~180px. Tablets have that height to spare and keep the arrangement the game is drawn for; a
-  short landscape window does not. It used to be allowed down to `ROOM_REACH_ASPECT`, and what
-  that looked like in a 1284x610 window was the order panel sitting on top of the tea tanks with
-  their lids cut off — reported as exactly that.
+  short landscape window does not. It used to be allowed down to the *reach* band instead, and
+  what that looked like in a 1284x610 window was the order panel sitting on top of the tea tanks
+  with their lids cut off — reported as exactly that. The constant for that looser line is gone
+  with the rule; `ROOM_BG_REACH` is still measured, as the floor a window too squat for anything
+  else is held to.
 - **`column`** — sideways and short with it. The order and the buttons stand *beside* the
   kitchen, which spends width the wall can pan back instead of height it cannot. A phone on its
   side gets this, and so does any window too short for the band.
@@ -1261,7 +1270,7 @@ becomes "Trà sữa Thái", "Hồng trà" becomes "Hồng trà sữa".
 The active room uses `ROOM_BG_SIZE` (1920×1430 logical coordinates), with the original
 1920×1080 counter plate offset below the upper extension.
 `fitBackground` covers and centers the working band; room equipment shares its scale,
-vertical offset and horizontal pan. The old `ROOM` measurements remain for legacy art only.
+vertical offset and horizontal pan.
 Re-measure `ROOM_BG_*` anchors and topping tray edges when changing the active plate.
 
 `kitchenHolderFor` places one shared mat near the center of the clear foreground marble, with
@@ -1359,6 +1368,19 @@ the active room and moves to the inserted cup's rim.
   reach a later day quickly, load a save with `window.__shop.load`. The money shows in three places
   (the HUD and the opening sign, both the till; the day-end screen, which is the only one that
   reports a single day's takings).
+- Dead code and dead art: `tsc` catches an unused import or local, and **nothing catches an unused
+  export** — it typechecks, it builds, and it ships. Finding those means walking the import graph
+  from the entry points (`src/main.tsx` and `src/art/art-test.ts`, plus whatever the scripts in
+  `tools/` require out of `src/`) and asking two questions of what the walk did not reach: is this
+  name imported anywhere, and is this file imported anywhere. A sprite is an import like any other
+  ("A sprite is its own URL"), so the same walk answers for the artwork — and the artwork is where
+  the weight is: the last sweep took 42 exports and 40 PNGs out and `dist` fell from 29 MB to 25.
+  Two traps in doing it: an asset can be reached from CSS rather than from TypeScript (the fonts
+  are, through `@font-face`), and a file nothing imports is not necessarily dead — `src/env.d.ts`
+  is read by the compiler, and the licence beside the fonts and `CREDITS.md` beside the audio are
+  there for reasons no import graph knows about. The big paintings under `src/assets/kitchen/` are
+  in the same class: they are the imagegen sources the sprites were cut out of, they do not ship
+  (Vite bundles only what is imported), and they stay.
 - The phone apps: `npm run sync` copies `dist/` into `android/` and `ios/` and re-writes their
   plugin lists — run it after adding a plugin, and expect `check-updates.cjs` to fail until
   `NATIVE_VERSION` moves with it. A real build needs the **Build apps** workflow or a local

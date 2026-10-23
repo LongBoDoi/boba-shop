@@ -1,25 +1,14 @@
 import Phaser from 'phaser';
 
-import { SCOOP_ART, SCOOPFUL, SUGAR_SCOOP, SUGAR_SCOOP_ART, TEA_DISPENSER_ART, TEA_DISPENSERS } from '../art/kitchenArt';
-import { TOPPING_PAN_ART, TOPPING_PANS, TOPPING_SCOOP_ART, TOPPING_SCOOPS } from '../art/toppingArt';
+import { SCOOP_ART, SCOOPFUL, SUGAR_SCOOP, SUGAR_SCOOP_ART } from '../art/kitchenArt';
+import { TOPPING_PAN_ART, TOPPING_SCOOP_ART, TOPPING_SCOOPS } from '../art/toppingArt';
 import { toppingPanBands, ToppingPanShape } from '../art/toppingGeometry';
 import { equipmentFrame, paintEquipment, PaintedEquipmentId } from '../art/equipmentArt';
-import { bakeCanvas, canvasFont, svgTexture, tex } from '../game/view';
+import { bakeCanvas, svgTexture, tex } from '../game/view';
 import { Station } from './layout';
 import { paintStraw } from '../art/finishingArt';
 import { ingredientMarkSvg } from '../art/ingredientMarks';
 import { TEAS } from '../game/ingredients';
-import { KITCHEN_TEXT_MIN } from './typography';
-
-/** One tea's dispenser, as a frame of the shared atlas. */
-export function teaFrame(scene: Phaser.Scene, teaId: string): string {
-  const texture = scene.textures.get(tex(TEA_DISPENSERS));
-  if (!texture.has(teaId)) {
-    const cell = TEA_DISPENSER_ART.cells[teaId];
-    texture.add(teaId, 0, cell.x, cell.y, TEA_DISPENSER_ART.width, TEA_DISPENSER_ART.height);
-  }
-  return teaId;
-}
 
 /** One topping's scoopful, as a frame of its atlas. */
 export function scoopFrame(scene: Phaser.Scene, id: string): string | null {
@@ -208,17 +197,6 @@ export function drawEquipmentShadow(c: CanvasRenderingContext2D, image: CanvasIm
   }
   c.restore();
   c.restore();
-}
-
-/** Centred text at or above the shared minimum. Callers wrap long labels instead of shrinking. */
-export function fitText(c: CanvasRenderingContext2D, text: string, size: number, weight: 500 | 600 | 700 | 800, color: string,
-  x: number, y: number, _width: number) {
-  const actualSize = Math.max(KITCHEN_TEXT_MIN, size);
-  c.font = canvasFont(actualSize, weight);
-  c.fillStyle = color;
-  c.textAlign = 'center';
-  c.textBaseline = 'middle';
-  c.fillText(text, x, y + actualSize * 0.06);
 }
 
 /** Equipment pictures and emblems are shared with the order-panel illustrations. */

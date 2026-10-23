@@ -7,7 +7,7 @@
  * arrangement (`band`) or stands the order and the buttons beside the kitchen (`column`). See
  * "Turning it on its side" in CLAUDE.md.
  */
-import { ROOM_BG_FOCUS_Y, ROOM_BG_KEEP, ROOM_BG_REACH, ROOM_BG_SIZE } from '../art/kitchenArt';
+import { ROOM_BG_FOCUS_Y, ROOM_BG_KEEP, ROOM_BG_SIZE } from '../art/kitchenArt';
 
 /** The order card's fixed height upright (`ORDER_PANEL_HEIGHT` in `OrderBubble.tsx`). */
 export const ORDER_PANEL_HEIGHT = 132;
@@ -30,7 +30,6 @@ function roomAspect(band: { top: number; bottom: number }) {
 }
 
 export const ROOM_KEEP_ASPECT = roomAspect(ROOM_BG_KEEP);
-export const ROOM_REACH_ASPECT = roomAspect(ROOM_BG_REACH);
 
 /**
  * How wide the side column is in the `column` layout: **as narrow as the card can be read at**,

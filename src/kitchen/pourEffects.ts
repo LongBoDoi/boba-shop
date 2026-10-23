@@ -30,7 +30,7 @@ export class Stream {
   private tailAt = -1;
   running = false;
 
-  constructor(private readonly scene: Phaser.Scene, readonly x: number, readonly top: number, readonly color: string,
+  constructor(scene: Phaser.Scene, readonly x: number, readonly top: number, readonly color: string,
     frontDepth: number, backDepth: number) {
     const key = streamTexture(scene, color);
     this.front = scene.add.image(x, top, key).setOrigin(0.5, 0).setDepth(frontDepth);
@@ -123,7 +123,7 @@ export class Spill {
   readonly container: Phaser.GameObjects.Container;
   private readonly drops: Phaser.GameObjects.Image[];
 
-  constructor(scene: Phaser.Scene, private readonly cupW: number, private readonly cupH: number, color: string) {
+  constructor(scene: Phaser.Scene, cupW: number, private readonly cupH: number, color: string) {
     const key = bakeCanvas(scene, `spill-drop:${color}`, 4, 7, (c) => {
       c.globalAlpha = 0.85;
       c.fillStyle = color;
