@@ -18,7 +18,7 @@ import { easeOut } from './motion';
 /** The glass backing: cool grey plastic, see-through enough to show the room behind it. */
 const GLASS = 0xDFE6EE;
 const GLASS_TINT = 0.45;
-const SETTLE_MS = 250;
+const SETTLE_MS = 340;
 
 let viewCount = 0;
 

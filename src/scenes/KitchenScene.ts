@@ -5,11 +5,14 @@ import {
 } from '../game/ingredients';
 import { GameState } from '../game/reducer';
 import { CUP_HOLDER, CUP_HOLDER_ART, ROOM_BG_CUP_STATION, ROOM_BG_LIDDING, ROOM_BG_SIZE, TEA_DISPENSER_ART, TEA_DISPENSERS } from '../art/kitchenArt';
+import { ORIGINAL_ROOM_SIZE, ROOM_EXTRA_HEIGHT } from '../art/roomGeometry';
 import { TOPPING_PANS } from '../art/toppingArt';
 import { PaintedEquipmentId } from '../art/equipmentArt';
 import {
-  KITCHEN_ROOM_ART, KITCHEN_ROOM_RENDER, KITCHEN_ROOM_TRAYS, KITCHEN_ROOM_TRAY_PATCH,
-  KITCHEN_ROOM_DAIRY, KITCHEN_ROOM_DAIRY_PATCH,
+  KITCHEN_ROOM_ART, KITCHEN_ROOM_RENDER, KITCHEN_ROOM_TRAYS,
+  KITCHEN_ORIGINAL_COUNTER, KITCHEN_ORIGINAL_COUNTER_ART, KITCHEN_ROOM_TRAY_CELLS,
+  KITCHEN_BOARDS, KITCHEN_BOARD_ART, KITCHEN_CLEAR_BOARDS, KITCHEN_CLEAR_BOARDS_PATCH,
+  KITCHEN_ROOM_TRAY_RAISE, KITCHEN_ROOM_CLEAR_ICE, KITCHEN_ROOM_CLEAR_ICE_PATCH,
 } from '../art/kitchenRoomArt';
 import { CUP_ART, CUP_FOOT } from '../art/cupGeometry';
 import { gameArea } from '../game/host';
@@ -201,39 +204,88 @@ export class KitchenScene extends Phaser.Scene {
     // Render the repaired wall and room together: separate strips left a visible blurred join.
     this.room.add(this.add.image(0, room.top, tex(KITCHEN_ROOM_RENDER))
       .setOrigin(0).setDisplaySize(room.width, ROOM_BG_SIZE.height * room.scale));
-    // Preserve the original room. Only the edges of the local dairy edit blend over bare marble.
-    const dairy = KITCHEN_ROOM_DAIRY_PATCH;
-    const dairyKey = bakeCanvas(this, 'room-serving-trays', dairy.width, dairy.height, c => {
-      c.drawImage(sourceImage(this, KITCHEN_ROOM_DAIRY), dairy.x, dairy.y, dairy.width, dairy.height,
-        0, 0, dairy.width, dairy.height);
-      c.globalCompositeOperation = 'destination-in';
-      const across = c.createLinearGradient(0, 0, dairy.width, 0);
-      across.addColorStop(0, '#000');
-      across.addColorStop(1 - dairy.feather / dairy.width, '#000');
-      across.addColorStop(1, 'transparent');
-      c.fillStyle = across; c.fillRect(0, 0, dairy.width, dairy.height);
-      const down = c.createLinearGradient(0, 0, 0, dairy.height);
-      down.addColorStop(0, 'transparent');
-      down.addColorStop(dairy.feather / dairy.height, '#000');
-      down.addColorStop(1 - dairy.feather / dairy.height, '#000');
-      down.addColorStop(1, 'transparent');
-      c.fillStyle = down; c.fillRect(0, 0, dairy.width, dairy.height);
-      c.globalCompositeOperation = 'source-over';
-    });
-    this.room.add(this.add.image(dairy.x / KITCHEN_ROOM_ART.width * room.width,
-      room.top + dairy.y / KITCHEN_ROOM_ART.height * room.height, dairyKey)
-      .setOrigin(0).setDisplaySize(dairy.width / KITCHEN_ROOM_ART.width * room.width,
-        dairy.height / KITCHEN_ROOM_ART.height * room.height));
-    // Ice/sugar retain their direct source crop, without an intermediate downsample.
-    const trayPatch = KITCHEN_ROOM_TRAY_PATCH;
-    const trayTexture = this.textures.get(tex(KITCHEN_ROOM_TRAYS));
-    if (!trayTexture.has('aligned-trays')) {
-      trayTexture.add('aligned-trays', 0, trayPatch.x, trayPatch.y, trayPatch.width, trayPatch.height);
+    // Read the first design directly, without regenerating or baking its boards and counter.
+    const counter = KITCHEN_ORIGINAL_COUNTER_ART;
+    const counterTexture = this.textures.get(tex(KITCHEN_ORIGINAL_COUNTER));
+    if (!counterTexture.has('original-counter')) {
+      counterTexture.add('original-counter', 0, 0, counter.top, counter.width, counter.height - counter.top);
     }
-    this.room.add(this.add.image(trayPatch.x / KITCHEN_ROOM_ART.width * room.width,
-      room.top + trayPatch.y / KITCHEN_ROOM_ART.height * room.height, tex(KITCHEN_ROOM_TRAYS), 'aligned-trays')
-      .setOrigin(0).setDisplaySize(trayPatch.width / KITCHEN_ROOM_ART.width * room.width,
-        trayPatch.height / KITCHEN_ROOM_ART.height * room.height));
+    const counterTop = ROOM_EXTRA_HEIGHT + counter.top / counter.height * ORIGINAL_ROOM_SIZE.height;
+    this.room.add(this.add.image(0, room.top + counterTop * room.scale, tex(KITCHEN_ORIGINAL_COUNTER), 'original-counter')
+      .setOrigin(0).setDisplaySize(room.width, (ROOM_BG_SIZE.height - counterTop) * room.scale));
+    // Consume removal pixels only inside the two old board footprints and their shadows.
+    const cleared = KITCHEN_CLEAR_BOARDS_PATCH;
+    const clearBoardsKey = bakeCanvas(this, 'clear-old-board-footprints', cleared.width, cleared.height, c => {
+      c.drawImage(sourceImage(this, KITCHEN_CLEAR_BOARDS), cleared.x, cleared.y, cleared.width, cleared.height,
+        0, 0, cleared.width, cleared.height);
+      c.globalCompositeOperation = 'destination-in';
+      c.translate(0, -cleared.y); c.filter = 'blur(3px)';
+      c.beginPath(); c.moveTo(96, 342); c.lineTo(1170, 342);
+      c.quadraticCurveTo(1215, 342, 1219, 377); c.lineTo(1224, 590);
+      c.lineTo(0, 590); c.lineTo(0, 490); c.lineTo(42, 374);
+      c.quadraticCurveTo(50, 342, 96, 342); c.closePath(); c.fill();
+      c.filter = 'none';
+      const fade = c.createLinearGradient(0, 565, 0, 590);
+      fade.addColorStop(0, '#000'); fade.addColorStop(1, 'transparent');
+      c.fillStyle = fade; c.fillRect(0, cleared.y, cleared.width, cleared.height);
+    });
+    const originalScale = ORIGINAL_ROOM_SIZE.width / counter.width;
+    this.room.add(this.add.image(cleared.x * originalScale * room.scale,
+      room.top + (ROOM_EXTRA_HEIGHT + cleared.y * originalScale) * room.scale, clearBoardsKey)
+      .setOrigin(0).setDisplaySize(cleared.width * originalScale * room.scale, cleared.height * originalScale * room.scale));
+    // Boards and packages share an elevated camera; each board keeps its native proportions.
+    for (const [index, board] of KITCHEN_BOARDS.entries()) {
+      const crop = board.source;
+      const padding = 20;
+      const key = bakeCanvas(this, `overhead-board:${index}`, crop.width + padding * 2, crop.height + padding * 2, c => {
+        c.shadowColor = '#57391c40'; c.shadowBlur = 9; c.shadowOffsetX = -7; c.shadowOffsetY = 7;
+        c.drawImage(sourceImage(this, KITCHEN_BOARD_ART), crop.x, crop.y, crop.width, crop.height,
+          padding, padding, crop.width, crop.height);
+      });
+      const sx = board.width / crop.width, sy = board.height / crop.height;
+      this.room.add(this.add.image((board.x - padding * sx) * room.scale,
+        room.top + (board.y - padding * sy) * room.scale, key).setOrigin(0)
+        .setDisplaySize((board.width + padding * 2 * sx) * room.scale, (board.height + padding * 2 * sy) * room.scale));
+    }
+    // Preserve the original room; local counter edits blend only at their marble boundaries.
+    for (const [image, patch, key, targetY] of [
+      [KITCHEN_ROOM_CLEAR_ICE, KITCHEN_ROOM_CLEAR_ICE_PATCH, 'room-clear-old-ice', KITCHEN_ROOM_CLEAR_ICE_PATCH.y],
+    ] as const) {
+      const patchKey = bakeCanvas(this, key, patch.width, patch.height, c => {
+        c.drawImage(sourceImage(this, image), patch.x, patch.y, patch.width, patch.height,
+          0, 0, patch.width, patch.height);
+        c.globalCompositeOperation = 'destination-in';
+        const across = c.createLinearGradient(0, 0, patch.width, 0);
+        across.addColorStop(0, patch.x > 0 ? 'transparent' : '#000');
+        if (patch.x > 0) across.addColorStop(patch.feather / patch.width, '#000');
+        across.addColorStop(1 - patch.feather / patch.width, '#000');
+        across.addColorStop(1, 'transparent');
+        c.fillStyle = across; c.fillRect(0, 0, patch.width, patch.height);
+        const down = c.createLinearGradient(0, 0, 0, patch.height);
+        down.addColorStop(0, 'transparent');
+        down.addColorStop(patch.topFeather / patch.height, '#000');
+        down.addColorStop(1 - patch.feather / patch.height, '#000');
+        down.addColorStop(1, 'transparent');
+        c.fillStyle = down; c.fillRect(0, 0, patch.width, patch.height);
+        c.globalCompositeOperation = 'source-over';
+      });
+      this.room.add(this.add.image(patch.x / KITCHEN_ROOM_ART.width * room.width,
+        room.top + targetY / KITCHEN_ROOM_ART.height * room.height, patchKey)
+        .setOrigin(0).setDisplaySize(patch.width / KITCHEN_ROOM_ART.width * room.width,
+          patch.height / KITCHEN_ROOM_ART.height * room.height));
+    }
+    // Clip each moved pan to its own rim: no marble rectangle can cover the restored wood.
+    for (const [index, pan] of KITCHEN_ROOM_TRAY_CELLS.entries()) {
+      const key = bakeCanvas(this, `raised-pan:${index}`, pan.width, pan.height, c => {
+        roundRect(c, 0, 0, pan.width, pan.height, 7); c.clip();
+        c.drawImage(sourceImage(this, KITCHEN_ROOM_TRAYS), pan.x, pan.y, pan.width, pan.height,
+          0, 0, pan.width, pan.height);
+      });
+      this.room.add(this.add.image(pan.x / KITCHEN_ROOM_ART.width * room.width,
+        room.top + (pan.y - KITCHEN_ROOM_TRAY_RAISE) / KITCHEN_ROOM_ART.height * room.height, key)
+        .setOrigin(0).setDisplaySize(pan.width / KITCHEN_ROOM_ART.width * room.width,
+          pan.height / KITCHEN_ROOM_ART.height * room.height));
+    }
     this.lidderHead?.destroy();
     const head = ROOM_BG_LIDDING.head;
     const pressKey = bakeCanvas(this, `lidder-head:${room.scale}`, head.width * room.scale, head.height * room.scale, (c) => {
@@ -487,11 +539,11 @@ export class KitchenScene extends Phaser.Scene {
   }
 
   /**
-   * Send the cup back to its mat, wherever it was left. `instant` is for every way the cup leaves
-   * a tap without a finger on it — touching the room, panning the wall, a refusal, the game being
-   * put down: undocking is not a journey, the same way the quick way in is not. The glide is kept
-   * for the one case where the player is holding the cup, since there it is their own drag
-   * finishing rather than the room moving something for them.
+   * Send the cup back to its mat, wherever it was left, gliding down from a tank's spout the way
+   * it went up. **The dock is given up before the glide starts**, so nothing is held by it: a tool
+   * can be picked up, another tank tapped or the cup itself grabbed while it is still on its way
+   * down, and whatever that does simply takes over the tween. `instant` is for the one case with
+   * no journey in it at all — a relayout, where the cup is already being put back where it stands.
    */
   private standCupDown(instant = false) {
     if (!this.layout) return;
@@ -610,8 +662,8 @@ export class KitchenScene extends Phaser.Scene {
       if (this.inside(rx, y, stack.x, stack.y, stack.w, stack.h)) return this.grabRack(stack, x, y);
     }
 
-    // 4. The room: touching it stands a cup under a tap straight back on its mat, and a drag pans it.
-    this.standCupDown(true);
+    // 4. The room: touching it sends a cup under a tap back home, and a drag pans it.
+    this.standCupDown();
     this.panVelocity = 0;
     this.gesture = { kind: 'pan', startX: x, startPan: this.pan, lastX: x, lastT: this.time.now, velocity: 0 };
   }
@@ -641,12 +693,6 @@ export class KitchenScene extends Phaser.Scene {
         gesture.distance = Math.max(gesture.distance, Math.hypot(x - gesture.startX, y - gesture.startY));
         this.toolState.x = this.toolState.originX + (x - gesture.startX);
         this.toolState.y = this.toolState.originY + (y - gesture.startY);
-        // Past the tap threshold this is a drag, and that is when the tool actually leaves the
-        // counter — a tap never shows one, so there is nothing to carry back or tip over.
-        if (!this.toolState.show && gesture.distance >= TAP_DISTANCE) {
-          this.toolState.show = 1;
-          this.holdStation(gesture.station);
-        }
         break;
       case 'rack':
         if (this.rackCup) {
@@ -751,6 +797,16 @@ export class KitchenScene extends Phaser.Scene {
     this.applyPan(this.panTarget);
   }
 
+  /**
+   * How long a quick-added thing takes to cross the room: the length of the move, bounded by the
+   * two durations the rest of the kitchen moves in. It times a picture and nothing else — the
+   * shop's state has already changed before any of these start — so no rule, refusal or dispatch
+   * is ever waiting on one of them.
+   */
+  private flightTime(dx: number, dy: number) {
+    return Math.round(Phaser.Math.Clamp(Math.hypot(dx, dy) * 2.15, DURATION.fast, DURATION.slow));
+  }
+
   /** The game is put down mid-gesture: empty the hands, and let go of the tap without pouring. */
   private abortAll() {
     if (this.pouring?.running) {
@@ -763,7 +819,7 @@ export class KitchenScene extends Phaser.Scene {
     this.cancelTool();
     this.dropRackCup();
     this.settlePan();
-    this.standCupDown(true);
+    this.standCupDown();
   }
 
   private cancelGesture() {
@@ -819,7 +875,7 @@ export class KitchenScene extends Phaser.Scene {
       : build.inLidder ? 'Máy đang đậy nắp…' : null;
     if (refusal) {
       playSound('nudge'); nudge(refusal);
-      if (!build.inLidder) this.standCupDown(true);
+      if (!build.inLidder) this.standCupDown();
       return;
     }
     this.cancelTool();
@@ -917,12 +973,20 @@ export class KitchenScene extends Phaser.Scene {
         nudge('Ly đã có trà khác — đổ bỏ để pha lại');
         return;
       }
-      // Touching a tank puts the cup under its spout, which is the drag the player would have
+      // Touching a tank fetches the cup under its spout, which is the drag the player would have
       // made. It does not pour: how long the tap is held is the pour, and that stays in their hand.
-      // It arrives there at once — the quick way carries nothing across the room.
-      this.tweenPan(this.panForDock(station), 0);
-      playSound('cupDown');
-      this.dockCup(station, 0);
+      // The cup counts as docked from this instant; the sliding is only how it looks getting there,
+      // so the tap can be held for the pour before it has arrived.
+      const layout = this.layout!;
+      const scale = station.dockScale;
+      const to = this.panForDock(station);
+      const duration = this.flightTime(
+        station.cx - to - layout.cupW * scale / 2 - this.cupPos.x,
+        station.dockY - layout.cupH * scale - this.cupPos.y);
+      this.tweenPan(to, duration);
+      playSound('cupPickup');
+      playSound('cupDown', duration);
+      this.dockCup(station, duration);
       // No word about it: docking is what sets the hint line to how the tap is held.
       return;
     }
@@ -1012,11 +1076,11 @@ export class KitchenScene extends Phaser.Scene {
       // The room scrolls, while carried tools follow the finger in screen coordinates.
       originX: station.cx - this.pan - size / 2,
       originY: station.y + (station.kind === 'milk' || station.kind === 'foam' ? 0 : station.h * 0.1),
-      // Nothing is in hand until the finger moves: a tap adds the ingredient where it stands.
-      x: 0, y: 0, tip: 0, show: 0, size,
+      x: 0, y: 0, tip: 0, show: 1, size,
     };
     this.toolState.x = this.toolState.originX;
     this.toolState.y = this.toolState.originY;
+    this.holdStation(station);
     playSound('pickup');
     if (station.kind === 'topping') nudge(getIngredient('toppings', station.id)?.name ?? station.name);
     else if (station.kind === 'ice') nudge('1 muỗng: ít đá · 2 muỗng: đá thường');
@@ -1051,7 +1115,7 @@ export class KitchenScene extends Phaser.Scene {
     }
     const refusal = this.refuseTool(station);
     if (refusal) return this.putToolBack(refusal);
-    return this.tipToolIn(station);
+    return this.tipToolIn(station, tapped);
   }
 
   /** What stops this tool going into the cup, said the way the cup would say it. */
@@ -1079,8 +1143,12 @@ export class KitchenScene extends Phaser.Scene {
     }
   }
 
-  /** Tip it in over the cup, then it's gone. */
-  private tipToolIn(station: Station) {
+  /**
+   * Tip it in over the cup, then it's gone. **The cup has it the moment this runs** — the carrying
+   * afterwards is only the picture of it, which is what lets the quick way be tapped again before
+   * the last one has landed.
+   */
+  private tipToolIn(station: Station, quick = false) {
     if (this.toolCupId !== store.state.cupId) return this.putToolBack();
     const refusal = this.busyMessage() ?? this.refuseTool(station);
     if (refusal) return this.putToolBack(refusal);
@@ -1111,12 +1179,43 @@ export class KitchenScene extends Phaser.Scene {
         break;
     }
     for (const tween of this.toolTweens) tween.stop();
-    // A tap never took it off the counter, so there is nothing to tip: the cup simply has it.
-    if (!this.toolState.show) return;
+    if (quick) return this.sendToolToCup(station);
     this.toolTweens = [
-      this.tweens.add({ targets: this.toolState, tip: 1, duration: 320, ease: EASE }),
-      this.tweens.add({ targets: this.toolState, show: 0, delay: 300, duration: 1 }),
+      this.tweens.add({ targets: this.toolState, tip: 1, duration: 430, ease: EASE }),
+      this.tweens.add({ targets: this.toolState, show: 0, delay: 410, duration: 1 }),
     ];
+  }
+
+  /**
+   * The quick way's flight, and it is **only** a flight: whatever was in the tool is already in the
+   * cup, so this hands the sprite its own tweens and forgets about it. Nothing in the room waits
+   * for it — the next station can be tapped while it is still in the air, and that tap builds its
+   * own tool rather than stealing this one out of the sky, which is what used to drop an
+   * ingredient when two were tapped quickly.
+   */
+  private sendToolToCup(station: Station) {
+    const flier = this.tool;
+    const layout = this.layout;
+    if (!flier || !layout) return;
+    this.tool = null;
+    this.toolTweens = [];
+    const finishing = this.finishingTool;
+    const s = this.toolState.size;
+    const to = { x: this.cupPos.x + layout.cupW / 2, y: this.cupPos.y + layout.cupH * 0.12 + s * 0.1 };
+    const duration = this.flightTime(to.x - flier.x, to.y - flier.y);
+    const landed = () => {
+      // Milk and cream are carried whole: the counter has its own back once this one is gone.
+      if (this.held === station) this.holdStation(null);
+      flier.destroy();
+    };
+    this.tweens.add({
+      targets: flier, x: to.x, y: to.y, duration, ease: EASE,
+      onComplete: () => this.tweens.add({
+        targets: flier, alpha: 0, duration: 430, ease: EASE,
+        rotation: finishing ? 0 : Phaser.Math.DegToRad(118),
+        onComplete: landed,
+      }),
+    });
   }
 
   /** Back on its shelf, with a word about why if there is one. */
@@ -1126,7 +1225,6 @@ export class KitchenScene extends Phaser.Scene {
       nudge(message);
     }
     for (const tween of this.toolTweens) tween.stop();
-    if (!this.toolState.show) return;
     this.toolTweens = [
       this.tweens.add({ targets: this.toolState, x: this.toolState.originX, y: this.toolState.originY, duration: DURATION.base, ease: EASE }),
       this.tweens.add({ targets: this.toolState, show: 0, delay: DURATION.base, duration: 1 }),
@@ -1167,13 +1265,13 @@ export class KitchenScene extends Phaser.Scene {
   }
 
   /**
-   * The cup becomes the shop's standing on the mat. The one the shop makes stands exactly where
-   * this one is put — same size, same place — so the handover is not seen; that is what
-   * {@link flewIn} is for, since a cup that arrives this way must not then be dropped in on top of
-   * itself. A tap puts it there at once; a drag let go of over the mat settles the last few pixels,
-   * which is the finger's own movement finishing rather than a journey of its own.
+   * The cup is the shop's **before** it has walked anywhere: the rack's sprite is handed over at
+   * once (same size, same place, so the swap is not seen — that is what {@link flewIn} is for) and
+   * what travels to the mat is the real cup. So the walk holds nothing up; it can be grabbed,
+   * dragged, docked under a tank or scooped into while it is still on its way, and whatever is
+   * done to it simply takes over from the tween.
    */
-  private cupToMat(size: CupSize, instant: boolean) {
+  private cupToMat(size: CupSize) {
     const rack = this.rackCup;
     const layout = this.layout;
     if (!rack || !layout) return;
@@ -1183,28 +1281,25 @@ export class KitchenScene extends Phaser.Scene {
       nudge('Đổ bỏ ly đang pha trước khi lấy ly mới');
       return;
     }
-    const land = () => {
-      this.flewIn = true;
-      dispatch({ type: 'PICK_CUP', size });
-      this.flewIn = false;
-      this.dropRackCup();
-    };
-    if (instant) {
-      playSound('cupDown');
-      return land();
-    }
-    const cup = cupSizeFor(this.W, this.H, size);
-    const toX = layout.holder.left + (layout.holder.width - cup.width) / 2;
-    const toY = layout.holder.top + layout.holder.height / 2 - cup.height * CUP_FOOT / CUP_ART.h;
-    playSound('cupDown', DURATION.base);
-    this.tweens.add({ targets: rack, x: toX, y: toY, duration: DURATION.base, ease: EASE, onComplete: land });
+    const from = { x: rack.x, y: rack.y };
+    this.flewIn = true;
+    dispatch({ type: 'PICK_CUP', size });
+    this.flewIn = false;
+    this.dropRackCup();
+    // `PICK_CUP` has already laid the room out again and stood the cup on its mat; walk it in from
+    // where the rack one was.
+    const home = { x: this.layout!.homeX, y: this.layout!.homeY };
+    const duration = this.flightTime(home.x - from.x, home.y - from.y);
+    Object.assign(this.cupPos, from);
+    playSound('cupDown', duration);
+    this.tweenCup({ ...home, scale: 1 }, duration);
   }
 
   private releaseRack(gesture: Extract<Gesture, { kind: 'rack' }>) {
     const rack = this.rackCup;
     if (!rack) return;
-    // A tap is the quick way: the cup stands on the mat at once.
-    if (gesture.distance < TAP_DISTANCE) return this.cupToMat(gesture.size, true);
+    // A tap is the quick way: the cup walks itself over, and is the shop's from the first frame.
+    if (gesture.distance < TAP_DISTANCE) return this.cupToMat(gesture.size);
     // Anywhere on the mat counts: the cup is tested by the point it would stand on.
     const holder = this.layout!.holder;
     const cup = cupSizeFor(this.W, this.H, gesture.size);
@@ -1214,9 +1309,9 @@ export class KitchenScene extends Phaser.Scene {
     const padY = 24 + cup.height * 0.45;
     const overMat = footX >= holder.left - padX && footX <= holder.left + holder.width + padX
       && footY >= holder.top - padY && footY <= holder.top + holder.height + padY;
-    if (overMat && !store.state.cup.size) return this.cupToMat(gesture.size, false);
+    if (overMat && !store.state.cup.size) return this.cupToMat(gesture.size);
     this.tweens.add({ targets: rack, x: gesture.originX, y: gesture.originY, duration: DURATION.base, ease: EASE });
-    this.tweens.add({ targets: rack, alpha: 0, delay: 220, duration: 100, onComplete: () => this.dropRackCup() });
+    this.tweens.add({ targets: rack, alpha: 0, delay: 300, duration: 135, onComplete: () => this.dropRackCup() });
     nudge('Thả ly lên thảm — hoặc chỉ cần chạm vào ly trên kệ');
   }
 

@@ -18,10 +18,12 @@ const { CATEGORIES } = require('../src/game/ingredients.ts');
 const { TEA_DISPENSER_ART, ROOM_BG_TEA_SHELF, ROOM_BG_TOPPING_SHELF } = require('../src/art/kitchenArt.ts');
 const { TOPPING_PAN_ART, TOPPING_PANS, TOPPING_SCOOP_ART, TOPPING_SCOOPS } = require('../src/art/toppingArt.ts');
 const { equipmentFrame } = require('../src/art/equipmentArt.ts');
-const { PRELOAD, ROOM_BG } = require('../src/art/kitchenArt.ts');
+const { PRELOAD, ROOM_BG, ROOM_BG_ICE_MACHINE, ROOM_BG_EXTRAS } = require('../src/art/kitchenArt.ts');
 const {
   KITCHEN_ROOM_ART, KITCHEN_ROOM_RENDER, KITCHEN_ROOM_TRAYS, KITCHEN_ROOM_TRAY_PATCH,
-  KITCHEN_ROOM_DAIRY, KITCHEN_ROOM_DAIRY_PATCH,
+  KITCHEN_ORIGINAL_COUNTER, KITCHEN_ORIGINAL_COUNTER_ART, KITCHEN_ROOM_TRAY_CELLS,
+  KITCHEN_BOARDS, KITCHEN_BOARD_ART, KITCHEN_BOARD_ATLAS, KITCHEN_CLEAR_BOARDS, KITCHEN_CLEAR_BOARDS_PATCH,
+  KITCHEN_ROOM_TRAY_RAISE, KITCHEN_ROOM_CLEAR_ICE, KITCHEN_ROOM_CLEAR_ICE_PATCH,
 } = require('../src/art/kitchenRoomArt.ts');
 const { ORIGINAL_TEA_WIDTH, ORIGINAL_ROOM_SIZE } = require('../src/art/roomGeometry.ts');
 const { layoutKitchen, findDairyStation } = require('../src/kitchen/layout.ts');
@@ -45,14 +47,50 @@ assert(patch.x >= 0 && patch.y >= 0 && patch.x + patch.width <= KITCHEN_ROOM_ART
   && patch.y + patch.height <= KITCHEN_ROOM_ART.height, 'The tray crop fits its source');
 assert(patch.width * patch.height < KITCHEN_ROOM_ART.width * KITCHEN_ROOM_ART.height * 0.05,
   'Tray edits cannot replace or soften the rest of the room');
-const dairyPng = fs.readFileSync(KITCHEN_ROOM_DAIRY);
-assert.equal(dairyPng.readUInt32BE(16), KITCHEN_ROOM_ART.width);
-assert.equal(dairyPng.readUInt32BE(20), KITCHEN_ROOM_ART.height);
-assert(PRELOAD.includes(KITCHEN_ROOM_DAIRY), 'The serving tray edit loads before play');
-const dairy = KITCHEN_ROOM_DAIRY_PATCH;
-assert(dairy.x + dairy.width <= KITCHEN_ROOM_ART.width && dairy.y + dairy.height <= KITCHEN_ROOM_ART.height);
-assert(dairy.width * dairy.height < KITCHEN_ROOM_ART.width * KITCHEN_ROOM_ART.height * 0.18,
-  'Replacing the boards preserves the rest of the original room');
+assert(PRELOAD.includes(KITCHEN_ROOM_CLEAR_ICE));
+const clearedCounter = fs.readFileSync(KITCHEN_ROOM_CLEAR_ICE);
+assert.equal(clearedCounter.readUInt32BE(16), KITCHEN_ROOM_ART.width);
+assert.equal(clearedCounter.readUInt32BE(20), KITCHEN_ROOM_ART.height);
+const clear = KITCHEN_ROOM_CLEAR_ICE_PATCH;
+assert(clear.x + clear.width <= KITCHEN_ROOM_ART.width && clear.y + clear.height <= KITCHEN_ROOM_ART.height);
+assert(clear.y >= 734, 'Clearing the old ice cannot overwrite the restored boards');
+assert(clear.width * clear.height < KITCHEN_ROOM_ART.width * KITCHEN_ROOM_ART.height * 0.04,
+  'Clearing the old ice footprint preserves the surrounding stations');
+assert(Math.abs(ROOM_BG_ICE_MACHINE.y - ROOM_BG_TOPPING_SHELF.edges[0].y) < 16,
+  'The ice tray starts at the same counter level as the topping station');
+assert(Math.abs((979 - ROOM_BG_ICE_MACHINE.y) / 1430 * 1083 - KITCHEN_ROOM_TRAY_RAISE) < 0.001,
+  'Ice touch bounds move with the painted tray');
+assert.equal(ROOM_BG_EXTRAS.sugar.y, ROOM_BG_ICE_MACHINE.y + ROOM_BG_ICE_MACHINE.height + 8);
+assert.equal(KITCHEN_ORIGINAL_COUNTER, ROOM_BG, 'Restore the boards directly from the untouched first design');
+assert(PRELOAD.includes(KITCHEN_ORIGINAL_COUNTER));
+const counterPng = fs.readFileSync(KITCHEN_ORIGINAL_COUNTER);
+assert.equal(counterPng.readUInt32BE(16), KITCHEN_ORIGINAL_COUNTER_ART.width);
+assert.equal(counterPng.readUInt32BE(20), KITCHEN_ORIGINAL_COUNTER_ART.height);
+assert(KITCHEN_ORIGINAL_COUNTER_ART.top < 350, 'The original counter crop includes both complete boards');
+assert(PRELOAD.includes(KITCHEN_CLEAR_BOARDS));
+assert(KITCHEN_CLEAR_BOARDS_PATCH.x + KITCHEN_CLEAR_BOARDS_PATCH.width < 1230,
+  'The board removal source stops before the topping station');
+assert(KITCHEN_CLEAR_BOARDS_PATCH.y + KITCHEN_CLEAR_BOARDS_PATCH.height <= 590,
+  'Only a short marble blend extends below the old board shadows');
+assert(KITCHEN_BOARDS[0].x > (KITCHEN_ROOM_TRAY_CELLS[0].x + KITCHEN_ROOM_TRAY_CELLS[0].width)
+  / KITCHEN_ROOM_ART.width * 1920 + 80, 'The compact boards clear the raised trays');
+assert(KITCHEN_BOARDS[1].x > KITCHEN_BOARDS[0].x + KITCHEN_BOARDS[0].width + 12,
+  'Both boards have a visible marble gap');
+assert(PRELOAD.includes(KITCHEN_BOARD_ART), 'The boards load with the matching package atlas');
+const boardPng = fs.readFileSync(KITCHEN_BOARD_ART);
+assert.equal(boardPng.readUInt32BE(16), KITCHEN_BOARD_ATLAS.width);
+assert.equal(boardPng.readUInt32BE(20), KITCHEN_BOARD_ATLAS.height);
+for (const board of KITCHEN_BOARDS) {
+  const s = board.source;
+  assert(s.x >= 0 && s.y >= 0 && s.x + s.width <= KITCHEN_BOARD_ATLAS.width
+    && s.y + s.height <= KITCHEN_BOARD_ATLAS.height, 'Board crops stay in the transparent atlas');
+  assert(Math.abs(board.width / board.height - s.width / s.height) < 1e-8,
+    'Preserve the painted board perspective without stretching its top plane');
+}
+for (const pan of KITCHEN_ROOM_TRAY_CELLS) {
+  assert(pan.x >= 0 && pan.y >= 0 && pan.x + pan.width <= KITCHEN_ROOM_ART.width
+    && pan.y + pan.height <= KITCHEN_ROOM_ART.height, 'Each isolated pan fits its source');
+}
 
 // A taller room must not shrink the tanks back below the first top-down design's apparent size.
 for (const [width, height] of [[390, 541], [375, 364], [450, 315], [500, 355], [715, 532]]) {
@@ -88,7 +126,7 @@ for (const id of ['whole', 'oat', 'cheese', 'brulee']) {
   assert(Math.abs(t.width / t.height - s.width / s.height) < 1e-8, `${id}: preserve painted proportions`);
 }
 
-// All four painted footprints fit one tray, with small visible gaps and a shared baseline.
+// Each pair fits its compact board, including room behind the front edge for cast shadows.
 for (const [width, height] of [[390, 541], [375, 364], [450, 315], [715, 532]]) {
   const layout = layoutKitchen(getDayConfig(1), width, height);
   const { scale, top } = layout.room;
@@ -97,20 +135,21 @@ for (const [width, height] of [[390, 541], [375, 364], [450, 315], [715, 532]]) 
   for (const station of layout.stations.filter(s => s.kind === 'milk' || s.kind === 'foam')) {
     const milk = station.kind === 'milk';
     const foot = station.y + station.h * (milk ? 150 / 154 : 1);
-    const x = station.cx / scale * 1452 / 1920;
-    const y = (foot - top) / scale * 1083 / 1430;
+    const x = station.cx / scale;
+    const y = (foot - top) / scale;
     const frame = equipmentFrame(station.id);
-    const halfWidth = station.w * frame.target.width / frame.width / scale * 1452 / 1920 / 2;
-    const floor = { left: 292, right: 594 };
-    assert(y > 690 && y < 730, `${station.id}: its foot rests on the flat tray insert`);
-    assert(x - halfWidth > floor.left && x + halfWidth < floor.right,
-      `${station.id}: the whole package clears its tray's side rims`);
+    const halfWidth = station.w * frame.target.width / frame.width / scale / 2;
+    const board = KITCHEN_BOARDS[milk ? 0 : 1];
+    assert(y > board.y + board.height * 0.25 && y < board.y + board.height * 0.68,
+      `${station.id}: its foot leaves room for the shadow on the wooden top`);
+    assert(x - halfWidth > board.x + 20 && x + halfWidth < board.x + board.width - 20,
+      `${station.id}: the whole package fits the wooden board`);
     for (const fraction of [0.3, 0.5, 0.7]) {
       assert.equal(findDairyStation(layout.stations, station.x + station.w * fraction,
         station.y + station.h * 0.48)?.key, station.key,
       'Touching a container selects it even where the expanded touch areas overlap');
     }
-    footprints.push({ left: x - halfWidth, right: x + halfWidth, y });
+    footprints.push({ left: x - halfWidth, right: x + halfWidth, y, milk });
     (milk ? milkHeights : creamHeights).push(station.h * frame.target.height / frame.height);
   }
   assert(Math.min(...milkHeights) > Math.max(...creamHeights), 'Milk cartons remain larger than cream dispensers');
@@ -118,8 +157,12 @@ for (const [width, height] of [[390, 541], [375, 364], [450, 315], [715, 532]]) 
   assert.equal(footprints.length, 4);
   for (let i = 1; i < footprints.length; i++) {
     const gap = footprints[i].left - footprints[i - 1].right;
-    assert(gap > 5 && gap < 20, 'Milk and cream stay close together without overlapping');
-    assert(Math.abs(footprints[i].y - footprints[0].y) < 0.01, 'All four share the tray baseline');
+    assert(gap > 15, 'Packages never overlap');
+    if (footprints[i].milk === footprints[i - 1].milk) {
+      assert(gap < 65, 'Each pair stays together on its own board');
+      assert(Math.abs(footprints[i].y - footprints[i - 1].y) <= 8,
+        'A small depth stagger keeps both feet on the same surface');
+    }
   }
 }
 

@@ -1,5 +1,7 @@
 # Dairy tray beside the ice station
 
+Superseded by [restoring the original wooden boards](restored-original-boards.md). The generated steel-tray overlay below is no longer rendered. Milk and cream now stand together on the original left board; their shadow rendering remains unchanged.
+
 The milk and cream tray now occupies the open left counter below the tea shelf, to the right of the ice bin. This leaves the cup organizer and central preparation area clear. The four front-facing packages remain closely spaced in the same order and at the same sizes.
 
 [In-game preview](dairy-trays-preview.png).

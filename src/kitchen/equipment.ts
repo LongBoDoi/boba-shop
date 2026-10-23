@@ -109,11 +109,11 @@ export function equipmentShadowExtent(w: number, h: number, foot: number) {
     width: w + h * 0.24 + pad * 2, height: h * 0.15 + originY + pad, originY };
 }
 
-const canBaseProfiles = new WeakMap<CanvasImageSource, { base: Float32Array; image: HTMLCanvasElement }>();
+const equipmentBaseProfiles = new WeakMap<CanvasImageSource, { base: Float32Array; image: HTMLCanvasElement }>();
 
 /** Read the painted lower rim once per source texture, including its curved sides. */
-function canBaseProfile(image: CanvasImageSource, id: PaintedEquipmentId) {
-  const cached = canBaseProfiles.get(image);
+function equipmentBaseProfile(image: CanvasImageSource, id: PaintedEquipmentId) {
+  const cached = equipmentBaseProfiles.get(image);
   if (cached) return cached;
   const frame = equipmentFrame(id);
   const canvas = document.createElement('canvas');
@@ -131,7 +131,7 @@ function canBaseProfile(image: CanvasImageSource, id: PaintedEquipmentId) {
     }
   }
   const profile = { base, image: canvas };
-  canBaseProfiles.set(image, profile);
+  equipmentBaseProfiles.set(image, profile);
   return profile;
 }
 
@@ -141,7 +141,7 @@ export function drawEquipmentShadow(c: CanvasRenderingContext2D, image: CanvasIm
   const frame = equipmentFrame(id);
   const bodyWidth = w * frame.target.width / frame.width;
   const cx = -box.left + w / 2, cy = box.originY;
-  const profile = id === 'cheese' || id === 'brulee' ? canBaseProfile(image, id) : null;
+  const profile = equipmentBaseProfile(image, id);
   const base = profile?.base;
   // source-in must stay inside this atlas frame; otherwise it erases earlier equipment frames.
   c.save();

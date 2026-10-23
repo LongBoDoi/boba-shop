@@ -1,4 +1,4 @@
-import paintedEquipment from '../assets/kitchen/milk-cream-front-v3.png';
+import paintedEquipment from '../assets/kitchen/dairy-boards-overhead.png';
 import { el, svgDoc } from './svg';
 
 export const PAINTED_EQUIPMENT = paintedEquipment;
@@ -8,27 +8,27 @@ interface Crop { x: number; y: number; width: number; height: number }
 
 /** Alpha bounds and printed ingredient details, measured on the refined transparent atlas. */
 export const EQUIPMENT_ATLAS = {
-  width: 1536, height: 1024,
+  width: 1254, height: 1254,
   cells: {
-    cheese: { x: 411, y: 528, width: 181, height: 463 },
-    brulee: { x: 947, y: 528, width: 182, height: 462 },
+    cheese: { x: 305, y: 531, width: 195, height: 430 },
+    brulee: { x: 775, y: 531, width: 198, height: 430 },
   } satisfies Record<'cheese' | 'brulee', Crop>,
   details: {
-    cheese: { x: 435, y: 740, width: 140, height: 144 },
-    brulee: { x: 958, y: 750, width: 160, height: 144 },
+    cheese: { x: 331, y: 749, width: 136, height: 117 },
+    brulee: { x: 793, y: 761, width: 157, height: 112 },
   } satisfies Record<'cheese' | 'brulee', Crop>,
 };
 
-/** Front-facing cartons retain gently elevated folded tops and horizontal bases. */
+/** Folded roofs, side planes and sloped bases share the boards' elevated camera. */
 export const MILK_ATLAS = {
-  width: 1536, height: 1024,
+  width: 1254, height: 1254,
   cells: {
-    whole: { x: 385, y: 14, width: 222, height: 500 },
-    oat: { x: 926, y: 14, width: 221, height: 500 },
+    whole: { x: 278, y: 28, width: 242, height: 465 },
+    oat: { x: 745, y: 31, width: 243, height: 469 },
   } satisfies Record<'whole' | 'oat', Crop>,
   details: {
-    whole: { x: 391, y: 225, width: 207, height: 240 },
-    oat: { x: 949, y: 202, width: 184, height: 290 },
+    whole: { x: 288, y: 226, width: 166, height: 164 },
+    oat: { x: 752, y: 228, width: 174, height: 235 },
   } satisfies Record<'whole' | 'oat', Crop>,
 };
 

@@ -6,7 +6,7 @@
  * a piece of confetti falling) is sampled into keyframes and run by the Web Animations API, so the
  * whole flight is handed to the compositor at once instead of being stepped from JavaScript.
  */
-export const DURATION = { fast: 150, base: 250, slow: 450 } as const;
+export const DURATION = { fast: 200, base: 340, slow: 600 } as const;
 
 /** `Easing.out(Easing.cubic)` and `Easing.inOut(Easing.cubic)`, as CSS. */
 export const CSS_EASE = 'cubic-bezier(0.33, 1, 0.68, 1)';

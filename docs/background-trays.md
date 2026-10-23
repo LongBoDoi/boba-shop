@@ -1,5 +1,8 @@
 # Integrated ice and sugar trays
 
+The [raised-tray layout](raised-ice-sugar.md) now reuses this artwork higher on the counter,
+at the topping station's level. The following records the original artwork and lower placement.
+
 The active room is `src/assets/kitchen/kitchen-room-aligned-trays.png` (1452×1083), edited with
 the built-in imagegen tool. Ice and golden liquid sugar are part of this single opaque background.
 Their straight outer edges form one column with a narrow marble gap, and the foreground mats

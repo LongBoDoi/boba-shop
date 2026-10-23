@@ -794,28 +794,35 @@ boxes measured in the plate's own pixels — `ROOM_BG_TEA_SHELF`, `ROOM_BG_TOPPI
 is placed in the same space, and `findStation` tests a touch in that space too. The cup does not
 pan: it is the one thing that belongs to the player's hand.
 
-- **Everything that can be dragged can be tapped, and a tap is immediate.** It does what the drag
-  would have done and draws nothing travelling: the cup stands on the mat, the ingredient is in the
-  cup, the cup is under the tapped tank. The tap *used* to carry each of those across the room —
-  the cup walking itself off the rack, a tool flying over the cup and tipping in — and that was
-  asked for and then asked to be taken out again; don't put it back without being asked. One thing
-  a tap still will not do for the player is **hold the tap open**: how long it is held *is* the
-  pour, so a tapped tank docks the cup and stops there.
-- **`TAP_DISTANCE` (8px) is the only thing between the quick way and a drag**, and it now decides
-  three things rather than one. A touch on a tool builds the carried sprite but leaves it hidden
-  (`show: 0`); only the first move past that threshold shows it, which is also when the carton or
-  tub leaves the counter (see `holdStation`). So a tap never puts a tool on screen, and
-  `tipToolIn` and `putToolBack` return early when there is nothing shown — a tap has nothing to
-  tip or to carry home. **Drags keep their motion**: the tool follows the finger and tips into the
-  cup, and a cup let go of over the mat settles onto it.
+- **Everything that can be dragged can be tapped, and a tap does the carrying.** The quick way is
+  never a shortcut past the room: whatever the drag would have moved, moves — the cup walks itself
+  from the rack to the mat, a tool takes itself over the cup and tips in there, and a tap on a tank
+  fetches the cup under its spout. One thing a tap will not do for the player is **hold the tap
+  open**: how long it is held *is* the pour, so a tapped tank docks the cup and stops there.
+- **The shop changes first and the flight is only the picture of it**, which is the rule that makes
+  the quick way quick: `tipToolIn` dispatches and *then* hands the tool off, `cupToMat` dispatches
+  `PICK_CUP` and then walks the shop's own cup in from the rack, and `dockCup` sets the dock before
+  the cup has moved an inch. So nothing in the room is ever waiting on an animation — a second
+  station can be tapped while the first scoop is still in the air, a cup can be grabbed, docked or
+  scooped into while it is still walking to its mat, and a tank's tap can be held for the pour
+  before the cup has arrived under it. It did used to wait, and worse: one shared tool meant the
+  second tap destroyed the first one mid-flight, and with it the dispatch hanging off its
+  `onComplete` — two quick taps put one ingredient in the cup. `sendToolToCup` is the fix and the
+  reason it is written the way it is: the sprite is cut loose with its own tweens and forgotten,
+  so the next grab builds a fresh one rather than stealing it out of the sky.
+- **`TAP_DISTANCE` (8px) is the only thing between the quick way and a drag.** The tool is in hand
+  from the press either way — a press that shows nothing reads as a station that cannot be picked
+  up, which is exactly how it was reported — and what the release does is the only difference:
+  under the threshold it flies to the cup, over it the drop has to land on the cup. **Drags keep
+  their motion**: the tool follows the finger and tips in where it is let go.
 - **Pour by docking.** Tap a tank, or drag the cup under it and release to snap beneath its spout;
   the cup scales to the shelf gap and stands on the lowest shelf surface with a small contact
   shadow. Hold the tap to raise the live level; releasing commits the amount and leaves the cup
-  docked, ready for another pour. Drag it away to undock. **Coming off the spout is immediate**
-  (`standCupDown(true)`) every way it happens without a finger on the cup — touching the room,
-  panning the wall, a refusal from the lid machine, the game being put down; only a cup the player
-  is actually holding glides the last stretch to its mat, because there it is their own drag
-  finishing. A tank cannot pour until the cup is docked
+  docked, ready for another pour. The cup counts as docked from the moment the tank is tapped,
+  whatever the slide is still doing. Drag it away to undock, or touch the room, and it glides back
+  down to its mat — **having given the dock up before it sets off**, so the glide holds nothing
+  up either: a tool can be lifted or another tank tapped while the cup is still coming down.
+  A tank cannot pour until the cup is docked
   beneath it, and a cup holding a different tea locks every other tank
   (`Ly đã có trà khác — đổ bỏ để pha lại`). Panning returns a docked cup to its holder. The stream
   draws behind and in front of the cup, split at its lip, and spills over the brim. A tank tapped
@@ -945,15 +952,16 @@ What the painting is allowed to decide, and what the geometry is:
   background artwork and lettering without an added tag or graphic. Milk cartons show a cow
   or oats; cream dispensers show cheese or a caramel spiral, without printed words.
 - **Equipment and orders share hand-painted artwork.** `art/equipmentArt.ts` defines package
-  crops, printed ingredient close-ups and proportional placement from `milk-cream-front-v3.png`.
-  Folded paper cartons and brushed-metal cream dispensers share the room's elevated viewpoint;
+  crops, printed ingredient close-ups and proportional placement from `dairy-boards-overhead.png`.
+  Its six transparent sprites include both boards. Folded cartons and brushed-metal cream dispensers share the room's elevated viewpoint;
   cream cans have rigid plastic valves and short outlet spouts.
   Canvas prepares counter/hand textures once; SVG wrappers use the same sprites on orders.
-  `PRELOAD` includes the atlas. See `docs/dairy-front-group.md` for the imagegen prompts.
+  `PRELOAD` includes the atlas. See `docs/dairy-overhead.md` for the current imagegen prompt.
   Milk's painted foot remains at 150/154 of its 72×154 frame. Front-facing carton frames are
-  104×222 room units at x452/556, followed closely by 76×178 cream frames at x648/724.
-  All four share foot y932 on one tray below the tea shelf, beside the ice station.
-  Carton and cream silhouettes project down-left. Cream projections use each source column's
+  104×222 room units at x565/710 on the left compact board, with 76×178 cream frames at
+  x996/1116 on the right board. Each pair's feet stagger slightly at y884/890, leaving space
+  on the wooden top for the cast shadows before its front edge.
+  Carton and cream silhouettes project down-left. Both use each source column's
   measured opaque lower rim instead of a flat baseline; the contact stroke follows that same
   curve. The profile is cached once per source texture. Source-in shading clips to its own
   atlas frame. Overlapping dairy touch targets select the nearest container center.
@@ -1017,10 +1025,17 @@ is clipped to the real liquid. The texture has 40 units of headroom rather than 
 
 
 ### The kitchen's artwork
-The active room keeps `kitchen-room-counter-cups.png` as its sharp base, with local ice/sugar and
-milk/cream tray crops. `kitchen-room-dairy-left.png` replaces the two thick boards with one
-compact steel tray and a flat ivory insert. Only the board area is drawn from that edit; its
-outer boundary blends over bare marble. See `docs/dairy-left-placement.md`.
+The active room keeps `kitchen-room-counter-cups.png` for the upper room. The lower counter,
+renders directly from the untouched first `kitchen-overhead.png`, starting at native source y343.
+Both wooden boards use independent transparent sprites from `dairy-boards-overhead.png`, at
+native proportions, 420×144.5 and 366×144.1 logical units at x440/882, y800. They share the
+packages' elevated camera and show thin front edges. A masked marble removal source fills only their old footprints
+and shadow margins. Raised ice/sugar use separate rounded rim crops and their existing small
+old-ice clearing patch. See `docs/central-boards.md` and `docs/restored-original-boards.md`.
+**Preserve background sharpness:** the user requires unrelated artwork to remain untouched.
+Keep original PNGs immutable. Future edits must use isolated object sprites or tightly scoped
+crops/masks; never replace broad counter strips or the full background with regenerated output.
+Restore original pixels when available rather than sharpening or regenerating them repeatedly.
 `tea-dispensers-overhead.png`, `counter-props-overhead.png` and
 `topping-pans-overhead.png` supply matching equipment, shared with order illustrations.
 The original plate uses 1920×1080 coordinates; its counter anchors are offset by a 350-unit upper extension,
@@ -1036,10 +1051,12 @@ prompt, and [tall tea shelf](docs/tall-tea-shelf.md) for the room and tank ancho
 See [overhead kitchen artwork](docs/overhead-kitchen.md) for the original asset provenance.
 The counter pans by swiping; there are no bottom station shortcuts or reserved shortcut bar.
 One compact foreground mat serves preparation and finishing; lidded cups return to that same mat.
-The ice and liquid-sugar trays are painted into that background, sharing straight aligned edges.
-Only touch highlights and carried scoops/ladles are separate layers; do not draw or preload a
-separate sugar-tray sprite. Their station bounds share x/width/height, separated by eight logical
-pixels. See [integrated trays](docs/background-trays.md) for artwork provenance and validation.
+The ice and liquid-sugar trays share straight aligned edges. Their existing source crop is raised
+160 source pixels, placing ice level with the topping station; `KITCHEN_ROOM_TRAY_RAISE` moves
+both the artwork and touch bounds. A local marble patch clears the old ice footprint. Their station
+bounds share x/width/height, separated by eight logical pixels. Only touch highlights and carried
+scoops/ladles are dynamic; do not preload a separate sugar-tray sprite. See
+[raised trays](docs/raised-ice-sugar.md) for placement, source artwork and validation.
 
 Nearly everything in the prep room is a **painted sprite**. `tools/cut-sheets.py` cuts
 `tools/sheets/*.png` into `src/assets/kitchen/`; `tools/cut-topping-boxes.py` cuts the new

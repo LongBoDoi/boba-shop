@@ -60,7 +60,10 @@ import iconCup from '../assets/kitchen/icon-cup.png';
 
 import { TOPPING_PANS, TOPPING_PIECES, TOPPING_SCOOPS } from './toppingArt';
 import { EXTENDED_ROOM_SIZE, EXTENDED_TEA_WIDTH, ROOM_EXTRA_HEIGHT } from './roomGeometry';
-import { KITCHEN_ROOM_RENDER, KITCHEN_ROOM_TRAYS, KITCHEN_ROOM_DAIRY } from './kitchenRoomArt';
+import {
+  KITCHEN_ROOM_RENDER, KITCHEN_ROOM_TRAYS, KITCHEN_ORIGINAL_COUNTER, KITCHEN_ROOM_ART,
+  KITCHEN_ROOM_TRAY_RAISE, KITCHEN_ROOM_CLEAR_ICE, KITCHEN_CLEAR_BOARDS,
+} from './kitchenRoomArt';
 import { TOPPING_TRAY_EDGES } from './toppingGeometry';
 import { PAINTED_EQUIPMENT, PAINTED_MILK } from './equipmentArt';
 
@@ -236,7 +239,10 @@ export const ROOM_BG_CUP_STATION = {
   // Measured centers beneath the painted stacks, independent of minimum-size touch targets.
   labels: { centers: [985, 1120, 1263], y: 660, width: 60, height: 30 },
 };
-export const ROOM_BG_ICE_MACHINE = { x: 40, y: 629 + ROOM_EXTRA_HEIGHT, width: 260, height: 182 };
+export const ROOM_BG_ICE_MACHINE = {
+  x: 40, y: 629 + ROOM_EXTRA_HEIGHT - KITCHEN_ROOM_TRAY_RAISE * ROOM_BG_SIZE.height / KITCHEN_ROOM_ART.height,
+  width: 260, height: 182,
+};
 export const ROOM_BG_LIDDING = {
   lid: { x: 1440, y: 90 + ROOM_EXTRA_HEIGHT, width: 320, height: 300 },
   straw: { x: 1770, y: 170 + ROOM_EXTRA_HEIGHT, width: 135, height: 220 },
@@ -244,9 +250,9 @@ export const ROOM_BG_LIDDING = {
   head: { x: 1510, y: 166 + ROOM_EXTRA_HEIGHT, width: 197, height: 34 },
 };
 export const ROOM_BG_EXTRAS = {
-  // All four packages share one compact tray and one front-facing row.
-  milkCenters: [452, 556], milkBases: [932, 932], milkWidth: 104, milkHeight: 104 * 154 / 72,
-  foamCenters: [648, 724], foamBases: [932, 932], foamWidth: 76, foamHeight: 76 * 150 / 64,
+  // Each pair rests inside its compact central board, leaving room for its cast shadow.
+  milkCenters: [565, 710], milkBases: [884, 890], milkWidth: 104, milkHeight: 104 * 154 / 72,
+  foamCenters: [996, 1116], foamBases: [884, 890], foamWidth: 76, foamHeight: 76 * 150 / 64,
   // Both trays are painted into the room, with matching straight edges and a narrow gap.
   sugar: {
     x: ROOM_BG_ICE_MACHINE.x,
@@ -399,7 +405,9 @@ export const PRELOAD: Sprite[] = [
   // the room itself, and what stands in it
   KITCHEN_ROOM_RENDER,
   KITCHEN_ROOM_TRAYS,
-  KITCHEN_ROOM_DAIRY,
+  KITCHEN_ROOM_CLEAR_ICE,
+  KITCHEN_ORIGINAL_COUNTER,
+  KITCHEN_CLEAR_BOARDS,
   SUGAR_SCOOP,
   PAINTED_EQUIPMENT,
   PAINTED_MILK,
