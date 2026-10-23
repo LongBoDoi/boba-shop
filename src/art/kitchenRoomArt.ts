@@ -3,7 +3,7 @@ import originalRoom from '../assets/kitchen/kitchen-room-counter-cups.png';
 import originalCounter from '../assets/kitchen/kitchen-overhead.png';
 import clearIceCounter from '../assets/kitchen/kitchen-room-clear-ice.png';
 import clearBoardsCounter from '../assets/kitchen/kitchen-counter-clear-boards.png';
-import overheadDairy from '../assets/kitchen/dairy-boards-overhead.png';
+import overheadDairy from '../assets/kitchen/dairy-boards-overhead-v2.png';
 
 /** Preserve the room before the repeated whole-image edits softened its details. */
 export const KITCHEN_ROOM_RENDER = originalRoom;
@@ -17,8 +17,10 @@ export const KITCHEN_CLEAR_BOARDS_PATCH = { x: 0, y: 340, width: 1228, height: 2
 export const KITCHEN_BOARD_ART = overheadDairy;
 export const KITCHEN_BOARD_ATLAS = { width: 1254, height: 1254 };
 export const KITCHEN_BOARDS = [
-  { source: { x: 25, y: 1006, width: 619, height: 213 }, x: 440, y: 800, width: 420, height: 420 * 213 / 619 },
-  { source: { x: 682, y: 1006, width: 541, height: 213 }, x: 882, y: 800, width: 366, height: 366 * 213 / 541 },
+  { source: { x: 45, y: 961, width: 602, height: 231, topHeight: 200 },
+    x: 440, y: 760, width: 420, height: 206, surfaceHeight: 192 },
+  { source: { x: 681, y: 965, width: 535, height: 227, topHeight: 198 },
+    x: 882, y: 760, width: 366, height: 206, surfaceHeight: 192 },
 ];
 /** Only this small edited region supplies the aligned ice/sugar trays. Everything else is original. */
 export const KITCHEN_ROOM_TRAYS = alignedTraysRoom;

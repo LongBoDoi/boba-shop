@@ -1,6 +1,6 @@
 /** Painted milk/cream packages and vector serving tools. */
 import { svgDoc, uid } from './svg';
-import { paintedEquipmentDetailSvg, paintedEquipmentSvg } from './equipmentArt';
+import { EQUIPMENT_FRAMES, paintedEquipmentDetailSvg, paintedEquipmentSvg } from './equipmentArt';
 
 /** A syrup bottle in a 60×150 box, its body tinted `color`. */
 export function kitchenBottleSvg(width: number, height: number, color: string): string {
@@ -21,7 +21,7 @@ export function kitchenBottleSvg(width: number, height: number, color: string): 
     '0 0 60 150');
 }
 
-export const MILK_CARTON_ART = { width: 72, height: 154, foot: 150 };
+export const MILK_CARTON_ART = EQUIPMENT_FRAMES.milk;
 
 /** Ingredient insets crop the same hand-painted packaging shown on the counter. */
 export function milkIngredientSvg(kind: 'whole' | 'oat', size = 40): string {

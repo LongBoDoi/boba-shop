@@ -7,7 +7,7 @@ import { GameState } from '../game/reducer';
 import { CUP_HOLDER, CUP_HOLDER_ART, ROOM_BG_CUP_STATION, ROOM_BG_LIDDING, ROOM_BG_SIZE, TEA_DISPENSER_ART, TEA_DISPENSERS } from '../art/kitchenArt';
 import { ORIGINAL_ROOM_SIZE, ROOM_EXTRA_HEIGHT } from '../art/roomGeometry';
 import { TOPPING_PANS } from '../art/toppingArt';
-import { PaintedEquipmentId } from '../art/equipmentArt';
+import { equipmentFrame, PaintedEquipmentId } from '../art/equipmentArt';
 import {
   KITCHEN_ROOM_ART, KITCHEN_ROOM_RENDER, KITCHEN_ROOM_TRAYS,
   KITCHEN_ORIGINAL_COUNTER, KITCHEN_ORIGINAL_COUNTER_ART, KITCHEN_ROOM_TRAY_CELLS,
@@ -233,19 +233,32 @@ export class KitchenScene extends Phaser.Scene {
     this.room.add(this.add.image(cleared.x * originalScale * room.scale,
       room.top + (ROOM_EXTRA_HEIGHT + cleared.y * originalScale) * room.scale, clearBoardsKey)
       .setOrigin(0).setDisplaySize(cleared.width * originalScale * room.scale, cleared.height * originalScale * room.scale));
-    // Boards and packages share an elevated camera; each board keeps its native proportions.
+    // Ease the projection into the rounded front: every source row survives, without a cut line.
     for (const [index, board] of KITCHEN_BOARDS.entries()) {
       const crop = board.source;
       const padding = 20;
-      const key = bakeCanvas(this, `overhead-board:${index}`, crop.width + padding * 2, crop.height + padding * 2, c => {
-        c.shadowColor = '#57391c40'; c.shadowBlur = 9; c.shadowOffsetX = -7; c.shadowOffsetY = 7;
-        c.drawImage(sourceImage(this, KITCHEN_BOARD_ART), crop.x, crop.y, crop.width, crop.height,
-          padding, padding, crop.width, crop.height);
+      const face = bakeCanvas(this, `rounded-board-face:${index}`, board.width, board.height, c => {
+        const image = sourceImage(this, KITCHEN_BOARD_ART);
+        const scale = board.surfaceHeight / crop.topHeight;
+        const start = crop.topHeight - 30;
+        const rest = crop.height - start;
+        const curve = (board.height - start * scale - rest * scale) / (rest * rest);
+        const project = (y: number) => y <= start ? y * scale
+          : start * scale + (y - start) * scale + curve * (y - start) ** 2;
+        c.imageSmoothingQuality = 'high';
+        for (let row = 0; row < crop.height; row++) {
+          const y = project(row), next = project(row + 1);
+          c.drawImage(image, crop.x, crop.y + row, crop.width, 1,
+            0, y, board.width, next - y + 0.2);
+        }
       });
-      const sx = board.width / crop.width, sy = board.height / crop.height;
-      this.room.add(this.add.image((board.x - padding * sx) * room.scale,
-        room.top + (board.y - padding * sy) * room.scale, key).setOrigin(0)
-        .setDisplaySize((board.width + padding * 2 * sx) * room.scale, (board.height + padding * 2 * sy) * room.scale));
+      const key = bakeCanvas(this, `rounded-overhead-board:${index}`, board.width + padding * 2, board.height + padding * 2, c => {
+        c.shadowColor = '#57391c40'; c.shadowBlur = 9; c.shadowOffsetX = -7; c.shadowOffsetY = 7;
+        c.drawImage(sourceImage(this, face), padding, padding, board.width, board.height);
+      });
+      this.room.add(this.add.image((board.x - padding) * room.scale,
+        room.top + (board.y - padding) * room.scale, key).setOrigin(0)
+        .setDisplaySize((board.width + padding * 2) * room.scale, (board.height + padding * 2) * room.scale));
     }
     // Preserve the original room; local counter edits blend only at their marble boundaries.
     for (const [image, patch, key, targetY] of [
@@ -386,7 +399,8 @@ export class KitchenScene extends Phaser.Scene {
         const equipmentKey = station.kind === 'foam' ? `cream-can-${station.id}` : `milk-carton-${station.id}`;
         const art = this.textures.exists(equipmentKey) ? sourceImage(this, equipmentKey) : null;
         if (art) {
-          const foot = station.kind === 'milk' ? h * 150 / 154 : h;
+          const equipment = equipmentFrame(station.id as PaintedEquipmentId);
+          const foot = h * equipment.foot / equipment.height;
           const box = equipmentShadowExtent(w, h, foot);
           const shadow = atlas.add(`shadow:${station.key}:${sized(w, h)}`, box.width, box.height,
             c => drawEquipmentShadow(c, art, station.id as PaintedEquipmentId, w, h, foot));

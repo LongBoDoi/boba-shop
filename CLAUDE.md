@@ -952,13 +952,14 @@ What the painting is allowed to decide, and what the geometry is:
   background artwork and lettering without an added tag or graphic. Milk cartons show a cow
   or oats; cream dispensers show cheese or a caramel spiral, without printed words.
 - **Equipment and orders share hand-painted artwork.** `art/equipmentArt.ts` defines package
-  crops, printed ingredient close-ups and proportional placement from `dairy-boards-overhead.png`.
-  Its six transparent sprites include both boards. Folded cartons and brushed-metal cream dispensers share the room's elevated viewpoint;
+  crops, printed ingredient close-ups and proportional placement from `dairy-boards-overhead-v2.png`
+  for cream and boards, and `milk-overhead-forward.png` for the cartons. Milk faces straight toward
+  the player with horizontal front edges while retaining the steep roof view. Folded cartons and brushed-metal cream dispensers share the room's elevated viewpoint;
   cream cans have rigid plastic valves and short outlet spouts.
   Canvas prepares counter/hand textures once; SVG wrappers use the same sprites on orders.
-  `PRELOAD` includes the atlas. See `docs/dairy-overhead.md` for the current imagegen prompt.
-  Milk's painted foot remains at 150/154 of its 72×154 frame. Front-facing carton frames are
-  104×222 room units at x565/710 on the left compact board, with 76×178 cream frames at
+  `PRELOAD` includes both atlases. See `docs/milk-forward-board-edges.md` and `docs/dairy-steep-overhead.md` for imagegen prompts.
+  `EQUIPMENT_FRAMES` owns the tighter overhead frames: milk 72×110, foot106; cream 64×100, foot100.
+  Carton frames are 104×159 room units at x565/710 on the left compact board, with 76×119 cream frames at
   x996/1116 on the right board. Each pair's feet stagger slightly at y884/890, leaving space
   on the wooden top for the cast shadows before its front edge.
   Carton and cream silhouettes project down-left. Both use each source column's
@@ -1025,11 +1026,13 @@ is clipped to the real liquid. The texture has 40 units of headroom rather than 
 
 
 ### The kitchen's artwork
-The active room keeps `kitchen-room-counter-cups.png` for the upper room. The lower counter,
+The active room keeps `kitchen-room-counter-cups.png` for the upper room. The lower counter
 renders directly from the untouched first `kitchen-overhead.png`, starting at native source y343.
-Both wooden boards use independent transparent sprites from `dairy-boards-overhead.png`, at
-native proportions, 420×144.5 and 366×144.1 logical units at x440/882, y800. They share the
-packages' elevated camera and show thin front edges. A masked marble removal source fills only their old footprints
+Both wooden boards use independent transparent sprites from `dairy-boards-overhead-v2.png`,
+420×206 and 366×206 logical units at x440/882, y760. The top-to-front projection eases smoothly
+through the rounded lower edge, using every source row. The old six-unit compressed edge looked
+clipped; reserve 14 units for its complete front profile and cast the outer shadow once after
+assembling the board. A masked marble removal source fills only their old footprints
 and shadow margins. Raised ice/sugar use separate rounded rim crops and their existing small
 old-ice clearing patch. See `docs/central-boards.md` and `docs/restored-original-boards.md`.
 **Preserve background sharpness:** the user requires unrelated artwork to remain untouched.

@@ -1,6 +1,6 @@
 # Compact central milk and cream boards
 
-Both boards now use the [matching elevated-view artwork](dairy-overhead.md) shared with the four packages. The independent transparent sprites render at logical x440/y800, 420×144.5, and x882/y800, 366×144.1, preserving their native proportions. A 22-unit gap separates them; both clear the raised ice/sugar station on the left and toppings on the right.
+Both boards use the [steep overhead artwork](dairy-steep-overhead.md). The independent sprites render at logical x440/y760, 420×206, and x882/y760, 366×206. Their projection eases continuously through the rounded front edges, preserving every painted source row and allowing a full 14-unit lower profile. The outer shadow is drawn once from each finished silhouette. A 22-unit gap separates the boards; both clear the raised ice/sugar station on the left and toppings on the right.
 
 Milk stands on the left board at x565/710; cream stands on the right at x996/1116. Each pair's feet use y884/890, a small depth stagger. Both package types now use elevated-view artwork and directional shadows anchored to their painted lower silhouettes, with enough wooden surface ahead of each foot for the shadow. Selection targets follow the packages.
 

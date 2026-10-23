@@ -65,7 +65,7 @@ import {
   KITCHEN_ROOM_TRAY_RAISE, KITCHEN_ROOM_CLEAR_ICE, KITCHEN_CLEAR_BOARDS,
 } from './kitchenRoomArt';
 import { TOPPING_TRAY_EDGES } from './toppingGeometry';
-import { PAINTED_EQUIPMENT, PAINTED_MILK } from './equipmentArt';
+import { EQUIPMENT_FRAMES, PAINTED_EQUIPMENT, PAINTED_MILK } from './equipmentArt';
 
 /**
  * A sprite is the **URL** of its own file. `import cup from '../assets/kitchen/cup.png'` hands one
@@ -251,8 +251,10 @@ export const ROOM_BG_LIDDING = {
 };
 export const ROOM_BG_EXTRAS = {
   // Each pair rests inside its compact central board, leaving room for its cast shadow.
-  milkCenters: [565, 710], milkBases: [884, 890], milkWidth: 104, milkHeight: 104 * 154 / 72,
-  foamCenters: [996, 1116], foamBases: [884, 890], foamWidth: 76, foamHeight: 76 * 150 / 64,
+  milkCenters: [565, 710], milkBases: [884, 890], milkWidth: 104,
+  milkHeight: 104 * EQUIPMENT_FRAMES.milk.height / EQUIPMENT_FRAMES.milk.width,
+  foamCenters: [996, 1116], foamBases: [884, 890], foamWidth: 76,
+  foamHeight: 76 * EQUIPMENT_FRAMES.cream.height / EQUIPMENT_FRAMES.cream.width,
   // Both trays are painted into the room, with matching straight edges and a narrow gap.
   sugar: {
     x: ROOM_BG_ICE_MACHINE.x,

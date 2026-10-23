@@ -1,5 +1,7 @@
 # Matching elevated kitchen viewpoint
 
+Superseded by the [steep overhead correction](dairy-steep-overhead.md). The atlas and proportions below record the previous, insufficiently elevated view.
+
 The six-sprite transparent atlas [dairy-boards-overhead.png](../src/assets/kitchen/dairy-boards-overhead.png) replaces the previous frontal milk/cream artwork and the clipped board sprites. The built-in imagegen tool generated it using the kitchen layout and original art as perspective references, plus the previous packages for identity. The selected 1254×1254 RGBA output was copied unchanged from `/Users/dev/.codex/generated_images/01a13e8f-a6f5-7171-9278-add319e78a23/exec-95fba0eb-1cb5-4b2d-ba37-130d3d89ebcd.png`.
 
 Cartons show deeper folded roofs, visible side planes and sloped bases. Cream cans show more of the shoulder and valve tops. Both boards show broad wooden top surfaces with thinner front edges. Source crops preserve native proportions in Canvas, carried objects and order illustrations; pictorial cow, oats, cheese and caramel identifiers remain. Ingredient close-ups use the new printed details. Original background PNGs and background rendering are unchanged by this update.

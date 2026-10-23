@@ -1,0 +1,16 @@
+# Forward-facing milk and complete board edges
+
+The cartons now face squarely toward the player while keeping their large steeply viewed roofs and nearly circular caps. The new transparent 1536×1024 atlas [milk-overhead-forward.png](../src/assets/kitchen/milk-overhead-forward.png) was generated with the built-in imagegen tool and copied unchanged from `/Users/dev/.codex/generated_images/01a13e8f-a6f5-7171-9278-add319e78a23/exec-044c5e09-42f6-4228-bb4e-bfdbc1b6b826.png`. Only milk uses this atlas; cream, boards and all room textures retain their existing sources. Order illustrations, carried cartons and printed ingredient details share the new milk crops.
+
+The boards' six-unit compressed front strips made their bottom corners look cut off. Both boards now use every source row in a continuous projection that eases through the lower rounded profile. The surface transitions smoothly to a full 14-unit front allocation, total height206 at the existing y760. The finished board silhouette casts its shadow once, preserving the complete rounded corners and lower highlights without a hard horizontal split.
+
+[Desktop preview](central-boards-1284.png) · [Portrait](central-boards-390.png) · [Landscape](central-boards-932.png).
+
+Validation: production build and full regression suite; 24 taps/drags on actual painted packages across desktop and both phone orientations. Production assets copied into Android and iOS projects. Native binaries were not built.
+
+## Built-in imagegen prompt
+
+```text
+Use case: precise-object-edit. Reference: the provided six-sprite atlas supplies EXACT MILK CARTON identities, steep overhead camera, materials and upper-right lighting. Output ONLY TWO isolated milk-carton sprites on TRUE transparent RGBA background, side by side, 1536x1024. LEFT peach/ivory cow whole-milk carton. RIGHT sage/ivory oat milk carton. Preserve the strong TOP-DOWN view: camera remains 65 degrees above horizontal, about25 degrees from straight overhead. Large exposed folded roofs occupying40-45% of each silhouette height, screw caps viewed nearly as circular disks, front body vertically foreshortened. CHANGE ONLY their YAW: rotate both upright cartons about their vertical axes so their FRONT PANELS FACE STRAIGHT TOWARD THE PLAYER at the bottom edge of the image. The front panels' top and bottom edges must be HORIZONTAL, both front side edges vertical in the image, roofs left/right symmetric, centerline vertical. Show NO broad right-side panel and NO diagonally slanted front bottom edge. The entire cow picture and oat picture centered squarely toward viewer. Do NOT lower the camera into an eye-level frontal product photo: we still look steeply DOWN at the roof. This is a yaw correction, not a change of elevation. Both complete carton silhouettes, no clipping, consistent size, one per half of atlas with generous transparent margins. Centers x384 and1152, roughly350px wide and530px tall; each fully within y200..800. Warm refined painted paperboard, peach/ivory and sage/ivory, functional folded top, realistic cream caps, clear cow/oat pictorial labels, precise fine warm edges. No names, text, floor shadows, glow, backdrop, boards, cream cans, extra objects, scenery or cast floor shadow. Preserve true transparency and sharp edges.
+```
+

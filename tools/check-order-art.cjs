@@ -84,8 +84,8 @@ for (const board of KITCHEN_BOARDS) {
   const s = board.source;
   assert(s.x >= 0 && s.y >= 0 && s.x + s.width <= KITCHEN_BOARD_ATLAS.width
     && s.y + s.height <= KITCHEN_BOARD_ATLAS.height, 'Board crops stay in the transparent atlas');
-  assert(Math.abs(board.width / board.height - s.width / s.height) < 1e-8,
-    'Preserve the painted board perspective without stretching its top plane');
+  assert(board.surfaceHeight > board.height * 0.9 && board.height - board.surfaceHeight <= 16,
+    'The overhead board keeps its top plane and a complete rounded front edge');
 }
 for (const pan of KITCHEN_ROOM_TRAY_CELLS) {
   assert(pan.x >= 0 && pan.y >= 0 && pan.x + pan.width <= KITCHEN_ROOM_ART.width
@@ -134,10 +134,10 @@ for (const [width, height] of [[390, 541], [375, 364], [450, 315], [715, 532]]) 
   const footprints = [];
   for (const station of layout.stations.filter(s => s.kind === 'milk' || s.kind === 'foam')) {
     const milk = station.kind === 'milk';
-    const foot = station.y + station.h * (milk ? 150 / 154 : 1);
+    const frame = equipmentFrame(station.id);
+    const foot = station.y + station.h * frame.foot / frame.height;
     const x = station.cx / scale;
     const y = (foot - top) / scale;
-    const frame = equipmentFrame(station.id);
     const halfWidth = station.w * frame.target.width / frame.width / scale / 2;
     const board = KITCHEN_BOARDS[milk ? 0 : 1];
     assert(y > board.y + board.height * 0.25 && y < board.y + board.height * 0.68,
