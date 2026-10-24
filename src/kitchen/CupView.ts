@@ -1,44 +1,22 @@
 import Phaser from 'phaser';
 
 import { Drink } from '../game/ingredients';
-import { paintLid, paintStraw } from '../art/finishingArt';
-import {
-  CUP_BASE, CUP_CREAM, CUP_DECAL, CUP_EDGE, CUP_ICE, CUP_SPRITE, DRINK, DRINK_MILKY, DRINK_MILKY_TOP, DRINK_TOP,
-} from '../art/kitchenArt';
-import { TOPPING_PIECES } from '../art/toppingArt';
+import { paintOverheadLid, paintOverheadStraw } from '../art/finishingArt';
+import { CUP_ART } from '../art/cupGeometry';
 import { createIceLayout, IcePlacement } from '../art/iceLayout';
 import { ICE_LEVELS } from '../game/ingredients';
-import { bakeCanvas, canvasFont, DPR, tex } from '../game/view';
+import { bakeCanvas, canvasFont, DPR } from '../game/view';
 import { card, measure } from './equipment';
-import { CupImages, CupPainter, glintsCanvas } from './cupPainter';
-import { CUP_OVERFLOW } from './creamPainter';
+import { CupPainter } from './cupPainter';
 import { KITCHEN_TEXT_MIN } from './typography';
 import { easeOut } from './motion';
 
-/** The glass backing: cool grey plastic, see-through enough to show the room behind it. */
-const GLASS = 0xDFE6EE;
-const GLASS_TINT = 0.45;
 const SETTLE_MS = 340;
 
 let viewCount = 0;
 
-function images(scene: Phaser.Scene): CupImages {
-  const img = (asset: string) => scene.textures.get(tex(asset)).getSourceImage() as CanvasImageSource;
-  return {
-    sprite: img(CUP_SPRITE),
-    cream: img(CUP_CREAM),
-    ice: img(CUP_ICE),
-    pieces: img(TOPPING_PIECES),
-    drink: (teaId, milky) => ({
-      body: (milky ? DRINK_MILKY : DRINK)[teaId] ? img((milky ? DRINK_MILKY : DRINK)[teaId]) : undefined,
-      top: (milky ? DRINK_MILKY_TOP : DRINK_TOP)[teaId] ? img((milky ? DRINK_MILKY_TOP : DRINK_TOP)[teaId]) : undefined,
-    }),
-  };
-}
-
 /**
- * The cup as it stands in the room: the glass backing, the painted drink (see `cupPainter.ts`),
- * the reflections, the linework and the cat on the front — and the size tag beside it.
+ * The overhead preparation cup, its shared ingredient plane, and its size tag.
  *
  * Its origin is its top-left corner and it scales from there, so `x`/`y` are always where the cup
  * visibly starts, whatever size it is drawn at under a tap.
@@ -65,41 +43,26 @@ export class CupView {
   constructor(private readonly scene: Phaser.Scene, readonly width: number, readonly height: number, drink: Drink) {
     this.key = `cup-canvas-${++viewCount}`;
     this.drink = drink;
-    this.painter = new CupPainter(images(scene), width * DPR, height * DPR);
+    this.painter = new CupPainter(width * DPR, height * DPR);
     this.texture = scene.textures.addCanvas(this.key, this.painter.canvas)!;
 
-    const base = scene.add.image(0, 0, tex(CUP_BASE)).setOrigin(0).setDisplaySize(width, height)
-      .setTint(GLASS).setAlpha(GLASS_TINT);
-    // The texture extends above the rim for cream; front glass still covers its lower portion.
-    const overflow = height * CUP_OVERFLOW;
-    const drawn = scene.add.image(0, -overflow, this.key).setOrigin(0)
-      .setDisplaySize(width, height + overflow);
-    const glintKey = `cup-glints-${Math.round(width * DPR)}`;
-    if (!scene.textures.exists(glintKey)) {
-      scene.textures.addCanvas(glintKey, glintsCanvas(scene.textures.get(tex(CUP_SPRITE)).getSourceImage() as CanvasImageSource,
-        Math.round(width * DPR), Math.round(height * DPR)));
-    }
-    const glints = scene.add.image(0, 0, glintKey).setOrigin(0).setDisplaySize(width, height);
-    const edge = scene.add.image(0, 0, tex(CUP_EDGE)).setOrigin(0).setDisplaySize(width, height);
-    const decal = scene.add.image(0, 0, tex(CUP_DECAL)).setOrigin(0).setDisplaySize(width, height);
+    const drawn = scene.add.image(0, 0, this.key).setOrigin(0).setDisplaySize(width, height);
 
     this.sizeTag = scene.add.image(width + 6, 0, '__DEFAULT').setOrigin(1, 0).setVisible(false);
-    this.finish = scene.add.image(0, -overflow, '__DEFAULT').setOrigin(0).setVisible(false);
-    this.container = scene.add.container(0, 0, [base, drawn, glints, edge, decal, this.finish, this.sizeTag]);
+    this.finish = scene.add.image(0, 0, '__DEFAULT').setOrigin(0).setVisible(false);
+    this.container = scene.add.container(0, 0, [drawn, this.finish, this.sizeTag]);
     this.setDrink(drink, 0, true);
   }
 
   setFinish(lidded: boolean, straw: boolean) {
     this.finish.setVisible(lidded);
     if (!lidded) return;
-    const overflow = this.height * CUP_OVERFLOW;
-    const key = bakeCanvas(this.scene, `cup-finish:${this.width}:${straw}`, this.width, this.height + overflow, (c) => {
-      c.scale(this.width / 113, this.height / 174);
-      c.translate(0, 40);
-      paintLid(c);
-      if (straw) paintStraw(c);
+    const key = bakeCanvas(this.scene, `cup-finish:overhead:${this.width}:${straw}`, this.width, this.height, (c) => {
+      c.scale(this.width / CUP_ART.w, this.height / CUP_ART.h);
+      paintOverheadLid(c);
+      if (straw) paintOverheadStraw(c);
     });
-    this.finish.setTexture(key).setDisplaySize(this.width, this.height + overflow);
+    this.finish.setTexture(key).setDisplaySize(this.width, this.height);
   }
 
   /** The drink changed. New portions and new cubes drop into place; a new cup starts as it is. */

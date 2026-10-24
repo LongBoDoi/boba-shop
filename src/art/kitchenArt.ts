@@ -1,32 +1,4 @@
-import drinkBlack from '../assets/kitchen/drink-black.png';
-import drinkGreen from '../assets/kitchen/drink-green.png';
-import drinkThai from '../assets/kitchen/drink-thai.png';
-import drinkOolong from '../assets/kitchen/drink-oolong.png';
-import drinkTaro from '../assets/kitchen/drink-taro.png';
-import drinkMatcha from '../assets/kitchen/drink-matcha.png';
-import drinkBlackMilky from '../assets/kitchen/drink-black-milky.png';
-import drinkGreenMilky from '../assets/kitchen/drink-green-milky.png';
-import drinkThaiMilky from '../assets/kitchen/drink-thai-milky.png';
-import drinkOolongMilky from '../assets/kitchen/drink-oolong-milky.png';
-import drinkTaroMilky from '../assets/kitchen/drink-taro-milky.png';
-import drinkMatchaMilky from '../assets/kitchen/drink-matcha-milky.png';
-import drinkBlackTop from '../assets/kitchen/drink-black-top.png';
-import drinkGreenTop from '../assets/kitchen/drink-green-top.png';
-import drinkThaiTop from '../assets/kitchen/drink-thai-top.png';
-import drinkOolongTop from '../assets/kitchen/drink-oolong-top.png';
-import drinkTaroTop from '../assets/kitchen/drink-taro-top.png';
-import drinkMatchaTop from '../assets/kitchen/drink-matcha-top.png';
-import drinkBlackMilkyTop from '../assets/kitchen/drink-black-milky-top.png';
-import drinkGreenMilkyTop from '../assets/kitchen/drink-green-milky-top.png';
-import drinkThaiMilkyTop from '../assets/kitchen/drink-thai-milky-top.png';
-import drinkOolongMilkyTop from '../assets/kitchen/drink-oolong-milky-top.png';
-import drinkTaroMilkyTop from '../assets/kitchen/drink-taro-milky-top.png';
-import drinkMatchaMilkyTop from '../assets/kitchen/drink-matcha-milky-top.png';
 import teaDispensers from '../assets/kitchen/tea-dispensers-overhead.png';
-import cup from '../assets/kitchen/cup.png';
-import cupCreamPainted from '../assets/kitchen/cup-cream-contrast.png';
-import cupBase from '../assets/kitchen/cup-base.png';
-import cupEdge from '../assets/kitchen/cup-edge.png';
 import cupDecal from '../assets/kitchen/cup-decal.png';
 import scoop from '../assets/kitchen/scoop.png';
 import foamCheese from '../assets/kitchen/foam-cheese.png';
@@ -51,7 +23,6 @@ import piecePandan from '../assets/kitchen/piece-pandan.png';
 import pieceLychee from '../assets/kitchen/piece-lychee.png';
 import pieceGrass from '../assets/kitchen/piece-grass.png';
 import pieceIceV2 from '../assets/kitchen/piece-ice-v2.png';
-import pieceIceClear from '../assets/kitchen/piece-ice-clear.png';
 import kitchenOverhead from '../assets/kitchen/kitchen-overhead.png';
 import sugarScoop from '../assets/kitchen/liquid-sugar-ladle.png';
 import cupHolder from '../assets/kitchen/counter-props-overhead.png';
@@ -66,9 +37,10 @@ import {
 } from './kitchenRoomArt';
 import { TOPPING_TRAY_EDGES } from './toppingGeometry';
 import { EQUIPMENT_FRAMES, PAINTED_EQUIPMENT, PAINTED_MILK } from './equipmentArt';
+import { CUP_ART } from './cupGeometry';
 
 /**
- * A sprite is the **URL** of its own file. `import cup from '../assets/kitchen/cup.png'` hands one
+ * A sprite is the **URL** of its own file. An imported PNG hands one
  * back, and that string is both the key a texture is loaded under and the source it is loaded
  * from — see `tex()` in `game/view.ts`.
  */
@@ -77,50 +49,11 @@ export type Sprite = string;
 /**
  * The painted kitchen, sprite by sprite, plus the geometry the code needs to line up with it.
  * Most sprites are cut from `tools/sheets/` by `tools/cut-sheets.py` — read that script before
- * adding to this one. Sprites that something is drawn *through* (a dispenser's glass, the cup) have
+ * adding to this one. Sprites that something is drawn *through* (a dispenser's glass) have
  * a window cleared out of them; the fractions for those are at the bottom of this file.
  */
 
 // ------------------------------------------------------------------ what you work with
-/**
- * Painted drink bodies and oval surfaces cut from the cup design. TeaLiquid reuses these as
- * textures inside the cup and tank, adding live fill geometry, shading and pour ripples.
- * The original glass, edge highlights and cat decal remain separate layers above the liquid.
- */
-export const DRINK: Record<string, Sprite> = {
-  black: drinkBlack,
-  green: drinkGreen,
-  thai: drinkThai,
-  oolong: drinkOolong,
-  taro: drinkTaro,
-  matcha: drinkMatcha,
-};
-export const DRINK_MILKY: Record<string, Sprite> = {
-  black: drinkBlackMilky,
-  green: drinkGreenMilky,
-  thai: drinkThaiMilky,
-  oolong: drinkOolongMilky,
-  taro: drinkTaroMilky,
-  matcha: drinkMatchaMilky,
-};
-
-export const DRINK_TOP: Record<string, Sprite> = {
-  black: drinkBlackTop,
-  green: drinkGreenTop,
-  thai: drinkThaiTop,
-  oolong: drinkOolongTop,
-  taro: drinkTaroTop,
-  matcha: drinkMatchaTop,
-};
-export const DRINK_MILKY_TOP: Record<string, Sprite> = {
-  black: drinkBlackMilkyTop,
-  green: drinkGreenMilkyTop,
-  thai: drinkThaiMilkyTop,
-  oolong: drinkOolongMilkyTop,
-  taro: drinkTaroMilkyTop,
-  matcha: drinkMatchaMilkyTop,
-};
-
 /** Painted squat glass reservoirs matching the warm kitchen reference, in one transparent atlas. */
 export const TEA_DISPENSERS = teaDispensers;
 export const TEA_DISPENSER_ART = {
@@ -132,19 +65,7 @@ export const TEA_DISPENSER_ART = {
     oolong: { x: 62, y: 503 }, taro: { x: 557, y: 503 }, matcha: { x: 1054, y: 503 },
   } as Record<string, { x: number; y: number }>,
 };
-export const CUP_SPRITE = cup;
-export const CUP_CREAM = cupCreamPainted;
-export const CUP_BASE = cupBase;
-/**
- * The cat printed on the *front* of the cup, cut out of the glass so it can be laid over the
- * drink. Left in the glass it sits behind, and the drink pours straight over it.
- */
-/**
- * The cup's dark linework, cut out so it can be laid over the drink. The drink runs down to the
- * foot of the glass and crosses the outline round the base; with the outline only underneath, the
- * drink covers some of it and not the rest, which reads as stray marks down there.
- */
-export const CUP_EDGE = cupEdge;
+/** Front-view decal used by the customer's size illustration. Preparation uses overhead art. */
 export const CUP_DECAL = cupDecal;
 export const SCOOP = scoop;
 
@@ -193,8 +114,6 @@ export const PIECE: Record<string, Sprite> = {
   ice: pieceIceV2,
 };
 
-/** Clear, softly melted ice used only inside the drink, separate from the scoop and icons. */
-export const CUP_ICE = pieceIceClear;
 
 /** And each scoopful's, since what is heaped over the bowl differs from topping to topping. */
 export const SCOOP_ART: Record<string, number> = {
@@ -364,7 +283,7 @@ export const ICON_CUP = iconCup;
 /** Width ÷ height of every sprite, so nothing gets squashed by accident. */
 export const ART = {
   jar: 116 / 205,
-  cup: 113 / 174,
+  cup: CUP_ART.w / CUP_ART.h,
   pan: 235 / 239,
   bin: 256 / 226,
   scoop: 102 / 64,
@@ -423,17 +342,8 @@ export const PRELOAD: Sprite[] = [
   // what you carry, and what lands in the cup
   SCOOPFUL.ice,
   PIECE.ice,
-  CUP_ICE,
-  // the cup, and the painted tea inside it
-  CUP_SPRITE,
-  CUP_CREAM,
-  CUP_BASE,
-  CUP_EDGE,
+  // The customer size illustration uses the front-view decal. The prep cup is drawn at density.
   CUP_DECAL,
-  ...Object.values(DRINK),
-  ...Object.values(DRINK_MILKY),
-  ...Object.values(DRINK_TOP),
-  ...Object.values(DRINK_MILKY_TOP),
   // the buttons under the room
   ICON_CUP,
   ICON_TRASH,

@@ -1,683 +1,193 @@
 import { Drink, getIngredient, ICE_LEVELS, Tea, Topping } from '../game/ingredients';
-import {
-  CUP_ART,
-  CUP_CONTENTS,
-  CUP_FLOOR_EDGE,
-  CUP_FLOOR_FRONT,
-  CUP_FRONT_GLINTS,
-  CUP_NEAR_GLASS,
-  CUP_NEAR_LIP_BAND,
-  CUP_REAR_FLOOR_GLASS,
-  CUP_SURFACE_TOP,
-  CUP_WELL,
-  cupFillPath,
-  cupIceFillPath,
-  cupIceOutlinePath,
-  cupIcePosition,
-  cupIceRestPosition,
-  cupIceSpreadPosition,
-  cupLiquidPath,
-  cupSurface,
-  cupToppingPosition,
-} from '../art/cupGeometry';
+import { CUP_ART, CUP_MOUTH, CUP_SURFACE_RATIO, cupPlanePosition, cupSurface, pourLevel } from '../art/cupGeometry';
 import { IcePlacement } from '../art/iceLayout';
-import { TOPPING_PIECE_ART } from '../art/toppingArt';
 import { blend, shade } from './color';
-import { CUP_OVERFLOW, paintCupCream } from './creamPainter';
-
-/**
- * The drink in the cup, painted with the browser's 2D canvas into one texture.
- *
- * The glass, the tea, the ice and the pile of toppings, all in the 113×174 sprite space the
- * design draws them in and all placed by the shared geometry (`cupGeometry.ts`, `iceLayout.ts`).
- * The cup used to be a tree of a few hundred vector nodes a renderer had to keep and
- * re-composite; here it is one picture, repainted only while something in it is actually moving (a
- * pour, a portion landing, ice settling) and blitted as it stands the rest of the time.
- *
- * The moving boundaries that had to be masks there (the tea's edge splitting the glass and the
- * ice) are canvas clips here, which are cheap and move freely.
- */
-export interface CupImages {
-  /** Painted cream with transparent edges. */
-  cream: CanvasImageSource;
-  /** The painted cup, whose glass is drawn over and under the drink. */
-  sprite: CanvasImageSource;
-  /** Clear ice texture, faint on each cube. */
-  ice: CanvasImageSource;
-  /** The toppings' piece atlas. */
-  pieces: CanvasImageSource;
-  /** The tea's painted body and surface, by tea id; plain and milky. */
-  drink: (teaId: string, milky: boolean) => { body?: CanvasImageSource; top?: CanvasImageSource };
-}
+import { paintCupCream } from './creamPainter';
 
 export interface CupFrame {
   drink: Drink;
-  /** Live fill, 0 and up. */
   level: number;
   iceLayout: IcePlacement[];
-  /** How far each cube has dropped into place, 0–1, by its index in the layout. */
   iceSettle: number[];
-  /** How far each portion of topping has dropped into place, 0–1, by its index in `toppings`. */
   portionSettle: number[];
-  /** The pour's ripple clock, 0–1, and how stirred up the surface is, 0–1. */
   phase: number;
   agitation: number;
 }
 
-const W = CUP_ART.w;
-const H = CUP_ART.h;
-const BOX = `M0 0H${W}V${H}H0Z`;
-/** The texture includes space above the rim for the cream peak. */
-const PAINT_H = H * (1 + CUP_OVERFLOW);
-/** The painted body begins at the original design's fill line, below the current full level. */
-const BODY_ART_TOP = 48;
-/**
- * How much of the painted glass reads through the tea. `KitchenCup` asks for 22%, but the web build
- * players know drew none — its filled-glass mask never painted in a browser — and the tea there is
- * the clear, saturated colour the shop is played with. That is the picture kept.
- */
-const GLASS_FILLED_ALPHA = 0;
+const { w: W, h: H } = CUP_ART;
+const TAU = Math.PI * 2;
+const BODY = 'M5 42 C6 22 28 6 56.5 6 C85 6 107 22 108 42 L94 93 C92 107 78 117 56.5 117 C35 117 21 107 19 93Z';
+const WELL = new Path2D('M10 42 A46.5 32 0 0 1 103 42 L91 89 A34.5 23 0 0 1 22 89Z');
 
-// ------------------------------------------------------------------ paths, parsed once
-const pathCache = new Map<string, Path2D>();
-function path(d: string): Path2D {
-  let p = pathCache.get(d);
-  if (!p) {
-    p = new Path2D(d);
-    // Live paths change every frame; keep the cache from growing without bound.
-    if (pathCache.size > 400) pathCache.clear();
-    pathCache.set(d, p);
-  }
-  return p;
-}
-const WELL = new Path2D(CUP_WELL);
-const CONTENTS = new Path2D(CUP_CONTENTS);
-// Let the peak rise above the mouth while keeping the wet edge behind the inner walls.
-const CREAM_CONTENTS = new Path2D(CUP_CONTENTS);
-CREAM_CONTENTS.rect(0, -H * CUP_OVERFLOW, W, 28 + H * CUP_OVERFLOW);
-/** Near half of the mouth and the front wall. The far half stays behind the contents. */
-const FRONT_GLASS = CUP_NEAR_GLASS;
-const FRONT = new Path2D(FRONT_GLASS);
-const REAR = new Path2D(`${BOX} ${FRONT_GLASS}`);
-const FLOOR_EDGE = new Path2D(CUP_FLOOR_EDGE);
-
-// ------------------------------------------------------------------ the toppings' bed
-const BED = [
-  { row: 0, x: 34, depth: 0.18, lift: 11, size: 0.81 },
-  { row: 0, x: 45, depth: 0.12, lift: 10, size: 0.85 },
-  { row: 0, x: 56, depth: 0.22, lift: 12, size: 0.8 },
-  { row: 0, x: 67, depth: 0.17, lift: 10, size: 0.86 },
-  { row: 0, x: 78, depth: 0.24, lift: 11, size: 0.83 },
-  { row: 1, x: 29, depth: 0.52, lift: 5, size: 0.91 },
-  { row: 1, x: 40, depth: 0.58, lift: 5.5, size: 0.94 },
-  { row: 1, x: 51, depth: 0.48, lift: 6, size: 0.9 },
-  { row: 1, x: 62, depth: 0.62, lift: 5, size: 0.97 },
-  { row: 1, x: 73, depth: 0.53, lift: 5.5, size: 0.91 },
-  { row: 1, x: 83, depth: 0.6, lift: 5, size: 0.95 },
-  { row: 2, x: 30, depth: 0.91, lift: 0, size: 0.97 },
-  { row: 2, x: 41, depth: 0.95, lift: 0.5, size: 1.03 },
-  { row: 2, x: 52, depth: 1, lift: 0, size: 1 },
-  { row: 2, x: 63, depth: 0.94, lift: 0.3, size: 1.05 },
-  { row: 2, x: 74, depth: 0.98, lift: 0, size: 0.96 },
-  { row: 2, x: 84, depth: 0.9, lift: 0.2, size: 0.93 },
-];
-const BANDS = [...new Set(BED.map((spot) => spot.row))];
-
-interface Piece { cx: number; cy: number; rx: number; ry: number; angle: number; opacity: number; shadow: number }
-interface Band { pieces: Piece[]; wash: number; outline: Path2D }
-interface Portion { id: string; bands: Band[] }
-
-const portionCache = new Map<string, Portion>();
-/** Where a portion's seventeen pieces sit — `CupToppings`' arithmetic, unchanged. */
-function portionFor(id: string, portion: number): Portion {
-  const key = `${id}:${portion}`;
-  const known = portionCache.get(key);
-  if (known) return known;
-  const option = getIngredient('toppings', id) as Topping | undefined;
-  const cube = option?.shape === 'cube';
-  const art = TOPPING_PIECE_ART.cells[id];
-  const aspect = art ? art.width / art.height : 1;
-  const seed = [...id].reduce((value, letter) => value + letter.charCodeAt(0), 0);
-  const pieces = BED.map((spot, i) => {
-    const jitter = ((seed + i * 7) % 5 - 2) * 0.55;
-    const rx = (cube ? 5.3 : 5.8) * spot.size;
-    const ry = rx / aspect;
-    const angle = cube ? ((seed + i * 11) % 37) - 18 : 0;
-    const { cx, cy } = cupToppingPosition(spot.x + jitter, rx, ry, angle,
-      spot.lift + portion * 12.5 + ((seed + i * 3) % 4) * 0.4);
-    const radians = angle * Math.PI / 180;
-    const cos = Math.cos(radians);
-    const sin = Math.sin(radians);
-    const at = (px: number, py: number) =>
-      `${(cx + px * cos - py * sin).toFixed(2)} ${(cy + px * sin + py * cos).toFixed(2)}`;
-    return {
-      row: spot.row,
-      piece: { cx, cy, rx, ry, angle, opacity: 0.8 + spot.depth * 0.2, shadow: 0.08 + spot.depth * 0.1 },
-      wash: 1.25 - spot.depth * 0.55,
-      silhouette: cube
-        ? `M${at(-rx, -ry * 0.5)} L${at(0, -ry)} L${at(rx, -ry * 0.5)} L${at(rx, ry * 0.55)} L${at(0, ry)} L${at(-rx, ry * 0.55)}Z`
-        : `M${cx - rx} ${cy} A${rx} ${ry} 0 1 0 ${cx + rx} ${cy} A${rx} ${ry} 0 1 0 ${cx - rx} ${cy}Z`,
-    };
-  });
-  const result: Portion = {
-    id,
-    bands: BANDS.map((row) => {
-      const band = pieces.filter((p) => p.row === row);
-      return {
-        pieces: band.map((p) => p.piece),
-        wash: band.reduce((sum, p) => sum + p.wash, 0) / band.length,
-        outline: new Path2D(band.map((p) => p.silhouette).join(' ')),
-      };
-    }),
-  };
-  portionCache.set(key, result);
-  return result;
+function oval(c: CanvasRenderingContext2D, x: number, y: number, rx: number, ry: number) {
+  c.beginPath(); c.ellipse(x, y, rx, ry, 0, 0, TAU);
 }
 
-// ------------------------------------------------------------------ one cube of ice, drawn once
-const CUBE_SHAPE = 'M-20-11L-7-20Q-5-21-3-20L19-14Q22-13 21-10L18 14Q18 16 16 17L9 22Q8 23 6 22L-19 15Q-22 14-22 11L-22-8Q-22-10-20-11Z';
-const TOP_FACE = 'M-20-11L-7-20Q-5-21-3-20L19-14Q22-13 21-10L8-2Z';
-const SIDE_FACE = 'M8-2L21-10L18 14Q18 16 16 17L9 22Q8 23 6 22Z';
-/** Pixels per cube unit in the pre-drawn cube; a cube is at most ~40 units across on screen. */
-const CUBE_RES = 5;
-const TINT = 0.28;
-
-let cubeArt: HTMLCanvasElement | null = null;
-const tintedCubes = new Map<string, HTMLCanvasElement>();
-
-/** The frosted cube of `CupIce`, in its 48-unit box, drawn once and stamped wherever a cube goes. */
-function cubeSprite(iceTexture: CanvasImageSource): HTMLCanvasElement {
-  if (cubeArt) return cubeArt;
-  const canvas = document.createElement('canvas');
-  canvas.width = canvas.height = 48 * CUBE_RES;
-  const c = canvas.getContext('2d')!;
-  c.scale(CUBE_RES, CUBE_RES);
-  c.translate(24, 24);
-  const body = new Path2D(CUBE_SHAPE);
-  const grad = (x0: number, y0: number, x1: number, y1: number, stops: [number, string][]) => {
-    const g = c.createLinearGradient(x0, y0, x1, y1);
-    for (const [at, color] of stops) g.addColorStop(at, color);
-    return g;
-  };
-  // Gradients run across each face's own bounding box, as `objectBoundingBox` does in SVG.
-  c.fillStyle = grad(-22, -21, -22 + 44 * 0.8, 23, [[0, '#EFFAFF'], [0.4, '#C9E6F1'], [1, '#8DBACC']]);
-  c.fill(body);
-  c.fillStyle = grad(-20, -21, 22, -2, [[0, '#FFFFFF'], [1, '#C5E8F4']]);
-  c.fill(new Path2D(TOP_FACE));
-  c.fillStyle = grad(6, -10, 21, 23, [[0, '#A9D3E3'], [1, '#6696AE']]);
-  c.fill(new Path2D(SIDE_FACE));
-  c.save();
-  c.clip(body);
-  c.globalAlpha = 0.2;
-  c.drawImage(iceTexture, -24, -24, 48, 48);
-  c.restore();
-  c.lineJoin = 'round';
-  c.strokeStyle = '#477E99';
-  c.lineWidth = 1.6;
-  c.stroke(body);
-  c.lineCap = 'round';
-  c.strokeStyle = '#F8FEFF';
-  c.lineWidth = 2.3;
-  c.stroke(new Path2D('M-19-9L8-1L6 20 M8-1L19-10'));
-  c.strokeStyle = 'rgba(255,255,255,0.85)';
-  c.lineWidth = 3;
-  c.stroke(new Path2D('M-18-5L-17 9 M-6-16L4-13'));
-  cubeArt = canvas;
-  return canvas;
-}
-
-/** The same cube under the tea: a wash of the drink's colour over its body. */
-function tintedCube(iceTexture: CanvasImageSource, tint: string, wash: number): HTMLCanvasElement {
-  const key = `${tint}:${wash.toFixed(3)}`;
-  const known = tintedCubes.get(key);
-  if (known) return known;
-  const base = cubeSprite(iceTexture);
-  const canvas = document.createElement('canvas');
-  canvas.width = base.width;
-  canvas.height = base.height;
-  const c = canvas.getContext('2d')!;
-  c.drawImage(base, 0, 0);
-  c.scale(CUBE_RES, CUBE_RES);
-  c.translate(24, 24);
-  c.globalAlpha = Math.min(1, wash);
-  c.fillStyle = tint;
-  c.fill(new Path2D(CUBE_SHAPE));
-  tintedCubes.set(key, canvas);
-  return canvas;
-}
-
-// ------------------------------------------------------------------ the glints, drawn once
-let glintsArt: HTMLCanvasElement | null = null;
-/** The painted reflections down the front of the glass, fading out at either end. Never moves. */
-export function glintsCanvas(sprite: CanvasImageSource, width: number, height: number): HTMLCanvasElement {
-  if (glintsArt && glintsArt.width === width && glintsArt.height === height) return glintsArt;
-  const canvas = document.createElement('canvas');
-  canvas.width = width;
-  canvas.height = height;
-  const c = canvas.getContext('2d')!;
-  c.scale(width / W, height / H);
-  c.drawImage(sprite, 0, 0, W, H);
-  c.globalCompositeOperation = 'destination-in';
-  const fade = c.createLinearGradient(0, 132, 0, CUP_FLOOR_FRONT);
-  fade.addColorStop(0, 'rgba(255,255,255,0)');
-  fade.addColorStop(0.25, 'rgba(255,255,255,0.32)');
-  fade.addColorStop(0.72, 'rgba(255,255,255,0.32)');
-  fade.addColorStop(1, 'rgba(255,255,255,0)');
-  c.fillStyle = fade;
-  c.fill(new Path2D(CUP_FRONT_GLINTS));
-  glintsArt = canvas;
-  return canvas;
-}
-
-// ------------------------------------------------------------------ the painter
+/** Crisp Canvas art at device density. Every ingredient uses the same overhead projection. */
 export class CupPainter {
-  readonly canvas: HTMLCanvasElement;
+  readonly canvas = document.createElement('canvas');
   private readonly c: CanvasRenderingContext2D;
 
-  constructor(private readonly images: CupImages, width: number, height: number) {
-    this.canvas = document.createElement('canvas');
+  constructor(width: number, height: number) {
     this.canvas.width = Math.max(1, Math.round(width));
-    this.canvas.height = Math.max(1, Math.round(height * (1 + CUP_OVERFLOW)));
+    this.canvas.height = Math.max(1, Math.round(height));
     this.c = this.canvas.getContext('2d')!;
   }
 
   paint(frame: CupFrame) {
-    const { c, canvas } = this;
-    c.setTransform(1, 0, 0, 1, 0, 0);
-    c.clearRect(0, 0, canvas.width, canvas.height);
-    // Shared cup coordinates keep every ingredient behind the same glass boundary.
-    c.setTransform(canvas.width / W, 0, 0, canvas.height / PAINT_H, 0, 0);
-    c.translate(0, H * CUP_OVERFLOW);
-
-    const { drink, level } = frame;
-    const tea = drink.tea ? (getIngredient('tea', drink.tea) as Tea) : undefined;
-    const milk = drink.milk && drink.milk !== 'none' ? getIngredient('milk', drink.milk) : undefined;
-    const foam = drink.foam && drink.foam !== 'none' ? getIngredient('foam', drink.foam) : undefined;
-    const ice = ICE_LEVELS.find((option) => option.id === drink.ice);
-    const raw = tea || milk ? level : 0;
-    const filled = cupFillPath(raw);
-    const tint = tea ? (milk ? blend(tea.color, milk.color, 0.6) : tea.color) : milk?.color;
-
-    // Shared interior bounds contain every ingredient, including settling frames and composites.
-    c.save();
-    c.clip(CONTENTS);
-    if (tint) this.liquid(tea, milk?.color, raw, frame.phase, frame.agitation);
-    this.glass(filled, path(CUP_REAR_FLOOR_GLASS), false);
-
-    const poses = ice ? this.icePoses(frame, raw) : null;
-    if (ice && poses) this.ice('submerged', frame, poses, ice.cubes, raw, tint, Boolean(milk));
-
-    // The pile, inside the well.
-    if (drink.toppings.length) {
-      c.save();
-      c.clip(WELL);
-      this.toppings(drink.toppings, frame.portionSettle, filled, tint, Boolean(milk));
-      c.restore();
-    }
-
-    if (ice && poses) this.ice('exposed', frame, poses, ice.cubes, raw, tint, Boolean(milk));
-    c.restore();
-    const glass = ice && ice.cubes > 0 && poses
-      ? this.glassAroundIce(frame, poses, ice.cubes, raw) : this.images.sprite;
-
-    // Split the cup into a rear and a near wall. Cream belongs between them, just
-    // like the tea: painting it after both walls makes it look pasted on the glass.
-    const walls = path(`${BOX} ${CUP_REAR_FLOOR_GLASS}`);
-    c.save();
-    c.clip(REAR, 'evenodd');
-    this.glass(filled, walls, true, glass);
-    c.restore();
-    if (foam) {
-      c.save();
-      c.clip(CREAM_CONTENTS);
-      paintCupCream(c, raw, foam.id, foam.color, this.images.cream, tint);
-      c.restore();
-    }
-    c.save();
-    c.clip(FRONT);
-    this.glass(filled, walls, true, glass);
-    if (foam) {
-      // The near lip is solid glass even where the liquid mask reaches the brim.
-      // It must cross in front of the cream, rather than disappear under its base.
-      c.save();
-      c.clip(path(CUP_NEAR_LIP_BAND));
-      c.drawImage(this.images.sprite, 0, 0, W, H);
-      c.restore();
-    }
-    c.restore();
-  }
-
-  // ---------------------------------------------------------------- the painted glass
-  /** Full where the glass has air behind it, faint where the drink stands behind it. */
-  private glass(filled: string, side: Path2D, evenOdd: boolean, sprite = this.images.sprite) {
-    const { c } = this;
-    c.save();
-    c.clip(side, evenOdd ? 'evenodd' : 'nonzero');
-    if (filled) {
-      c.save();
-      c.clip(path(`${BOX} ${filled}`), 'evenodd');
-      c.drawImage(sprite, 0, 0, W, H);
-      c.restore();
-      if (GLASS_FILLED_ALPHA > 0) {
-        c.save();
-        c.clip(path(filled));
-        c.globalAlpha = GLASS_FILLED_ALPHA;
-        c.drawImage(sprite, 0, 0, W, H);
-        c.restore();
-      }
-    } else {
-      c.drawImage(sprite, 0, 0, W, H);
-    }
-    c.restore();
-  }
-
-  // ---------------------------------------------------------------- the tea
-  private liquid(tea: Tea | undefined, milkColor: string | undefined, level: number, phase: number, agitation: number) {
-    if (level <= 0) return;
-    const { c } = this;
-    const tint = tea ? (milkColor ? blend(tea.color, milkColor, 0.6) : tea.color) : milkColor!;
-    const art = tea ? this.images.drink(tea.id, Boolean(milkColor)) : {};
-    const s = cupSurface(level);
-    const body = path(cupLiquidPath(s.y, s.rx, s.ry));
-    const cx = W / 2;
-    const left = cx - s.rx;
-    const right = cx + s.rx;
-
-    c.save();
-    c.clip(WELL);
-
-    // The body, shaded across its own width.
-    const across = c.createLinearGradient(left, 0, right, 0);
-    across.addColorStop(0, shade(tint, -40));
-    across.addColorStop(0.18, shade(tint, 24));
-    across.addColorStop(0.4, shade(tint, 6));
-    across.addColorStop(0.7, tint);
-    across.addColorStop(0.9, shade(tint, -22));
-    across.addColorStop(1, shade(tint, -42));
-    c.fillStyle = across;
-    c.fill(body);
-
-    c.save();
-    c.clip(body);
-    if (art.body) {
-      c.globalAlpha = 0.5;
-      // Map only the painted body into the current well; its transparent upper padding would
-      // otherwise leave a second horizontal edge below a raised liquid surface.
-      c.drawImage(art.body, 0, BODY_ART_TOP, W, CUP_FLOOR_FRONT - BODY_ART_TOP,
-        0, CUP_SURFACE_TOP, W, CUP_FLOOR_FRONT - CUP_SURFACE_TOP);
-      c.globalAlpha = 1;
-    }
-    const light = c.createRadialGradient(0, 0, 0, 0, 0, 1);
-    light.addColorStop(0, 'rgba(255,241,190,0.28)');
-    light.addColorStop(1, 'rgba(255,241,190,0)');
-    c.save();
-    c.translate(W * 0.38, 150);
-    c.scale(22, 12);
-    c.fillStyle = light;
-    c.beginPath();
-    c.arc(0, 0, 1, 0, Math.PI * 2);
-    c.fill();
-    c.restore();
-    const depth = c.createLinearGradient(0, s.y, 0, CUP_FLOOR_FRONT);
-    depth.addColorStop(0, 'rgba(255,234,192,0.12)');
-    depth.addColorStop(0.45, withAlpha(tint, 0));
-    depth.addColorStop(1, `rgba(53,26,17,${milkColor ? 0.12 : 0.3})`);
-    c.fillStyle = depth;
-    c.fillRect(0, s.y, W, CUP_FLOOR_FRONT - s.y);
-    // The reflection running down the near side.
-    const x = cx - s.rx * 0.78;
-    const bottom = CUP_FLOOR_FRONT - 2;
-    const start = Math.min(bottom, s.y + s.ry);
-    if (start < bottom) {
-      const middle = (start + bottom) / 2;
-      const w = 3.5;
-      const bend = Math.sin(phase * Math.PI * 2) * agitation * w * 0.5;
-      c.globalAlpha = 0.32;
-      c.fillStyle = '#FFF8DF';
-      c.fill(path(`M${x} ${start} Q${x + w + bend} ${middle} ${x + w} ${bottom} L${x + w * 1.8} ${bottom} Q${x + w * 2 + bend} ${middle} ${x + w} ${start} Z`));
-      c.globalAlpha = 1;
-    }
-    c.globalAlpha = 0.35;
-    c.lineWidth = 0.7;
-    c.strokeStyle = shade(tint, -28);
-    c.stroke(FLOOR_EDGE);
-    c.restore();
-    c.globalAlpha = 1;
-
-    // The surface: a lit oval in the rim's own perspective.
-    const top = c.createLinearGradient(0, s.y - s.ry, 0, s.y + s.ry);
-    top.addColorStop(0, shade(tint, -20));
-    top.addColorStop(0.45, shade(tint, 30));
-    top.addColorStop(1, shade(tint, 8));
-    c.beginPath();
-    c.ellipse(cx, s.y, s.rx, s.ry, 0, 0, Math.PI * 2);
-    c.fillStyle = top;
-    c.fill();
-    c.lineWidth = 0.55;
-    c.strokeStyle = shade(tint, -24);
-    c.stroke();
-    if (art.top) {
-      c.globalAlpha = 0.7;
-      c.drawImage(art.top, cx - s.rx, s.y - s.ry, s.rx * 2, s.ry * 2);
-      c.globalAlpha = 1;
-    }
-    c.globalAlpha = 0.7;
-    c.lineWidth = 0.7;
-    c.strokeStyle = '#FFEAC2';
-    c.stroke(path(`M${cx - s.rx * 0.91} ${s.y + s.ry * 0.2} A${s.rx * 0.93} ${s.ry * 0.9} 0 0 0 ${cx + s.rx * 0.88} ${s.y + s.ry * 0.34}`));
-    c.globalAlpha = 0.3 + agitation * 0.12;
-    c.beginPath();
-    c.ellipse(cx - s.rx * 0.34, s.y - s.ry * 0.33, s.rx * 0.32, Math.max(0.01, s.ry * 0.19), 0, 0, Math.PI * 2);
-    c.fillStyle = '#FFF3DA';
-    c.fill();
-
-    // While the tap runs: two rings spreading on the surface, and a few bubbles rising.
-    if (agitation > 0.001) {
-      for (const delay of [0, 0.5]) {
-        const p = (phase + delay) % 1;
-        c.globalAlpha = Math.sin(p * Math.PI) * (1 - p) * agitation * 0.75;
-        c.lineWidth = 0.65;
-        c.strokeStyle = '#FFF1CD';
-        c.beginPath();
-        c.ellipse(cx, s.y, s.rx * (0.08 + p * 0.84), Math.max(0.01, s.ry * (0.08 + p * 0.84)), 0, 0, Math.PI * 2);
-        c.stroke();
-      }
-      for (const delay of [0, 0.33, 0.66]) {
-        const p = (phase + delay) % 1;
-        const alpha = agitation * Math.sin(p * Math.PI) * 0.5;
-        if (alpha <= 0) continue;
-        c.globalAlpha = alpha;
-        c.beginPath();
-        c.arc(cx + Math.sin(delay * 16) * 9, s.y + s.ry + (1 - p) * 16, 0.6 + p * 0.8, 0, Math.PI * 2);
-        c.fillStyle = 'rgba(255,242,205,0.25)';
-        c.fill();
-        c.lineWidth = 0.25;
-        c.strokeStyle = '#FFF5DC';
-        c.stroke();
-      }
-    }
-    c.restore();
-  }
-
-  // ---------------------------------------------------------------- the toppings
-  private toppings(ids: string[], settle: number[], filled: string, tint: string | undefined, milky: boolean) {
-    const { c } = this;
-    const liquid = filled ? path(filled) : null;
-    // Later portions build up behind the first; existing pieces keep their positions.
-    for (let portion = ids.length - 1; portion >= 0; portion--) {
-      const id = ids[portion];
-      const cell = TOPPING_PIECE_ART.cells[id];
-      if (!cell) continue;
-      const fall = -14 * (1 - (settle[portion] ?? 1));
-      const { bands } = portionFor(id, portion);
-      for (const band of bands) {
-        c.save();
-        c.translate(0, fall);
-        for (const piece of band.pieces) {
-          c.globalAlpha = piece.shadow;
-          c.fillStyle = '#271710';
-          c.beginPath();
-          c.ellipse(piece.cx + 0.3, piece.cy + piece.ry * 0.78, piece.rx * 0.88, Math.max(0.01, piece.ry * 0.2), 0, 0, Math.PI * 2);
-          c.fill();
-          c.globalAlpha = piece.opacity;
-          c.save();
-          c.translate(piece.cx, piece.cy);
-          if (piece.angle) c.rotate(piece.angle * Math.PI / 180);
-          c.drawImage(this.images.pieces, cell.x, cell.y, cell.width, cell.height,
-            -piece.rx, -piece.ry, piece.rx * 2, piece.ry * 2);
-          c.restore();
-        }
-        c.globalAlpha = 1;
-        // The tea's colour over what of this band is under it: the liquid, clipped to the band's
-        // own silhouettes (which fall with it), while the liquid's line stays where the tea is.
-        if (tint && liquid) {
-          c.clip(band.outline);
-          c.translate(0, -fall);
-          c.globalAlpha = (milky ? 0.3 : 0.16) * band.wash;
-          c.fillStyle = tint;
-          c.fill(liquid);
-          c.globalAlpha = 1;
-        }
-        c.restore();
-      }
-    }
-  }
-
-  // ---------------------------------------------------------------- the ice
-  private iceGlassCanvas: HTMLCanvasElement | null = null;
-  /** Clear the plastic wash over exposed ice, including overlapping silhouettes in a dry pile. */
-  private glassAroundIce(frame: CupFrame, poses: ReturnType<CupPainter['icePoses']>, cubes: number, raw: number) {
-    if (!this.iceGlassCanvas) {
-      this.iceGlassCanvas = document.createElement('canvas');
-      this.iceGlassCanvas.width = this.canvas.width;
-      this.iceGlassCanvas.height = Math.round(this.canvas.width * H / W);
-    }
-    const canvas = this.iceGlassCanvas, c = canvas.getContext('2d')!;
-    c.save();
-    c.setTransform(canvas.width / W, 0, 0, canvas.height / H, 0, 0);
+    const c = this.c;
+    c.setTransform(this.canvas.width / W, 0, 0, this.canvas.height / H, 0, 0);
     c.clearRect(0, 0, W, H);
-    c.drawImage(this.images.sprite, 0, 0, W, H);
-    c.clip(CONTENTS);
-    const water = cupIceFillPath(raw);
-    if (water) c.clip(path(`${BOX} ${water}`), 'evenodd');
-    const outlines = frame.iceLayout.slice(0, cubes).map((cube, at) => {
-      const { pose } = poses[at];
-      const fall = 1 - (frame.iceSettle[at] ?? 1);
-      return cupIceOutlinePath(pose.cx, pose.cy - 10 * fall, pose.angle - 7 * fall, cube.r);
-    }).join(' ');
-    // Nonzero winding makes a union; overlapping pieces must not restore the plastic between them.
-    c.globalCompositeOperation = 'destination-out';
-    c.fill(path(outlines));
+    c.lineJoin = 'round'; c.lineCap = 'round';
+    this.glassBody();
+
+    const { drink } = frame;
+    const tea = drink.tea ? getIngredient('tea', drink.tea) as Tea : undefined;
+    const milk = drink.milk && drink.milk !== 'none' ? getIngredient('milk', drink.milk) : undefined;
+    const tint = tea ? (milk ? blend(tea.milkyColor, milk.color, 0.12) : tea.color) : milk?.color;
+    const level = tint ? pourLevel(frame.level) : 0;
+    c.save(); c.clip(WELL);
+    if (tint && level > 0) this.liquid(tint, level, frame);
+    this.toppings(frame, level, tint, Boolean(milk));
+    this.ice(frame, level, tint);
+    if (drink.foam && drink.foam !== 'none') paintCupCream(c, level, drink.foam);
     c.restore();
-    return canvas;
+    this.frontGlass();
   }
 
-  private icePoses(frame: CupFrame, raw: number) {
-    const toppingLayers = frame.drink.toppings.length;
-    return frame.iceLayout.map((cube) => {
-      const dry = cupIceRestPosition(cube.restX, cube.r, cube.restAngle, cube.restLift + toppingLayers * 10);
-      const pose = cube.liquidDepth !== undefined
-        ? cupIceSpreadPosition(raw, cube.x, cube.r, cube.angle, cube.liquidDepth, dry.cx, dry.cy, cube.restAngle)
-        : cupIcePosition(raw, cube.x, cube.r, cube.angle, cube.depth, dry.cx, dry.cy, cube.restAngle,
-          cube.immersion ?? 0.42);
-      return { dry, pose };
+  private glassBody() {
+    const c = this.c;
+    const glass = c.createLinearGradient(5, 35, 106, 100);
+    glass.addColorStop(0, '#FFFCF17A'); glass.addColorStop(0.35, '#F2ECE126');
+    glass.addColorStop(0.8, '#DBD3C252'); glass.addColorStop(1, '#99867259');
+    c.fillStyle = glass; c.fill(new Path2D(BODY));
+    c.strokeStyle = '#988575'; c.lineWidth = 1.3; c.stroke(new Path2D(BODY));
+    // Through the open mouth, the inset floor is visibly smaller than the rim.
+    const floor = c.createRadialGradient(46, 79, 2, 56.5, 86, 36);
+    floor.addColorStop(0, '#FFFBEE22'); floor.addColorStop(0.82, '#C8B9A72B'); floor.addColorStop(1, '#8C79644D');
+    oval(c, 56.5, 86, 34, 34 * CUP_SURFACE_RATIO);
+    c.fillStyle = floor; c.fill(); c.strokeStyle = '#A99B8666'; c.lineWidth = 1; c.stroke();
+    // Back rim first; the near rim is redrawn over the contents.
+    oval(c, CUP_MOUTH.x, CUP_MOUTH.y, 51, 35);
+    c.strokeStyle = '#A6927D'; c.lineWidth = 1.9; c.stroke();
+    oval(c, CUP_MOUTH.x, CUP_MOUTH.y - 0.8, 49.5, 34);
+    c.strokeStyle = '#FFFDF4'; c.lineWidth = 2.8; c.stroke();
+    oval(c, CUP_MOUTH.x, CUP_MOUTH.y, 47.7, 32.8);
+    c.strokeStyle = '#B5A795A6'; c.lineWidth = 0.85; c.stroke();
+  }
+
+  private liquid(tint: string, level: number, frame: CupFrame) {
+    const c = this.c, s = cupSurface(level);
+    // The short visible front wall retains the drink's color under the open surface.
+    const body = new Path2D(`M${s.x - s.rx} ${s.y} A${s.rx} ${s.ry} 0 0 1 ${s.x + s.rx} ${s.y} L91 89 A34.5 23 0 0 1 22 89Z`);
+    const depth = c.createLinearGradient(0, s.y, 0, 113);
+    depth.addColorStop(0, shade(tint, -6)); depth.addColorStop(1, shade(tint, -34));
+    c.fillStyle = depth; c.globalAlpha = 0.85; c.fill(body); c.globalAlpha = 1;
+    const surface = c.createRadialGradient(s.x - s.rx * 0.35, s.y - s.ry * 0.4, 1, s.x, s.y, s.rx);
+    surface.addColorStop(0, shade(tint, 32)); surface.addColorStop(0.64, tint); surface.addColorStop(1, shade(tint, -28));
+    oval(c, s.x, s.y, s.rx, s.ry);
+    c.fillStyle = surface; c.fill(); c.strokeStyle = shade(tint, -26); c.lineWidth = 0.75; c.stroke();
+    c.save(); c.clip();
+    c.strokeStyle = '#FFF3D6'; c.lineWidth = 1; c.globalAlpha = 0.38;
+    c.beginPath(); c.ellipse(s.x - 5, s.y - 2, s.rx * 0.82, s.ry * 0.82, 0, 3.4, 4.6); c.stroke();
+    if (frame.agitation > 0.001) {
+      for (const offset of [0, 0.5]) {
+        const p = (frame.phase + offset) % 1;
+        c.globalAlpha = Math.sin(p * Math.PI) * (1 - p) * frame.agitation * 0.6;
+        oval(c, s.x, s.y, s.rx * (0.1 + p * 0.8), s.ry * (0.1 + p * 0.8)); c.stroke();
+      }
+    }
+    // A few tiny meniscus bubbles follow the back edge of the ellipse.
+    for (let i = 0; i < 7; i++) {
+      const a = 3.7 + i * 0.22;
+      oval(c, s.x + Math.cos(a) * s.rx * 0.91, s.y + Math.sin(a) * s.ry * 0.9, 0.5 + i % 2 * 0.25, 0.45);
+      c.globalAlpha = 0.35; c.stroke();
+    }
+    c.restore();
+  }
+
+  private toppings(frame: CupFrame, level: number, tint: string | undefined, milky: boolean) {
+    const c = this.c;
+    frame.drink.toppings.forEach((id, portion) => {
+      const option = getIngredient('toppings', id) as Topping | undefined;
+      if (!option) return;
+      const progress = frame.portionSettle[portion] ?? 1;
+      // A scattered disk on the floor, rather than rows on an upright front wall.
+      for (let i = 0; i < 17; i++) {
+        const a = i * 2.399963 + portion * 1.7;
+        const pearl = option.shape === 'pearl';
+        const r = Math.sqrt((i + 0.5) / 17) * (pearl ? 0.72 : 0.78);
+        const p = cupPlanePosition(0, Math.cos(a) * r, Math.sin(a) * r, pearl ? 0.24 : 0.21);
+        const radius = 4.4 + i % 3 * 0.45;
+        c.save(); c.translate(p.x, p.y - (1 - progress) * 12);
+        // Pearl centers follow the floor; their spherical bodies retain their roundness.
+        c.scale(1 + (1 - progress) * 0.15, pearl ? 0.93 : CUP_SURFACE_RATIO);
+        c.rotate(((i * 37 + portion * 53) % 85 - 40) * Math.PI / 180);
+        const opacity = tint && level > 0 ? (milky ? 0.38 : 0.76) : 1;
+        c.globalAlpha = opacity;
+        const color = tint && level > 0 ? blend(option.color, tint, milky ? 0.3 : 0.14) : option.color;
+        const paint = c.createRadialGradient(-radius * 0.3, -radius * 0.4, 0.2, 0, 0, radius * 1.2);
+        paint.addColorStop(0, shade(color, 38)); paint.addColorStop(0.46, color); paint.addColorStop(1, shade(color, -27));
+        c.fillStyle = '#3E2B1C29'; oval(c, 0.8, 1.2, radius + 0.5, radius); c.fill();
+        c.fillStyle = paint; c.strokeStyle = shade(color, -24); c.lineWidth = 0.65;
+        c.beginPath();
+        if (option.shape === 'cube') c.roundRect(-radius, -radius * 0.86, radius * 2, radius * 1.72, id === 'pudding' ? 1.8 : 0.9);
+        else c.ellipse(0, 0, radius, radius * (id === 'redbean' ? 0.66 : 1), 0, 0, TAU);
+        c.fill(); c.stroke();
+        c.strokeStyle = '#FFF8DA99'; c.lineWidth = 1;
+        c.beginPath(); c.moveTo(-radius * 0.55, -radius * 0.15); c.quadraticCurveTo(-radius * 0.55, -radius * 0.6, 0, -radius * 0.6); c.stroke();
+        if (id === 'redbean') {
+          c.strokeStyle = '#521B1899'; c.lineWidth = 0.7;
+          c.beginPath(); c.moveTo(-2, 1); c.quadraticCurveTo(0, -1.5, 2, -1); c.stroke();
+        }
+        c.restore();
+      }
     });
   }
 
-  private ice(layer: 'submerged' | 'exposed', frame: CupFrame, poses: ReturnType<CupPainter['icePoses']>,
-    cubes: number, raw: number, liquidTint?: string, milky = false) {
-    const { c } = this;
-    const submerged = layer === 'submerged';
-    const water = cupIceFillPath(raw);
-    const standing = frame.iceLayout.slice(0, cubes).map((cube, at) => ({ cube, at }))
-      .sort((a, b) => poses[a.at].pose.cy - poses[b.at].pose.cy);
-    const tint = submerged ? liquidTint : undefined;
-    const soften = submerged ? (milky ? 0.65 : 0.62) : 1;
-    const fade = tint ? 1 - (1 - TINT) * (1 - soften) : soften;
-    const sprite = tint ? tintedCube(this.images.ice, tint, TINT / fade) : cubeSprite(this.images.ice);
-
-    // Contact shadows belong to the cup's floor, so they are never clipped to the tea.
-    if (submerged) {
-      for (const { cube, at } of standing) {
-        const { dry, pose } = poses[at];
-        const settled = frame.iceSettle[at] ?? 1;
-        const alpha = (1 - pose.rise) * settled * 0.18;
-        if (alpha <= 0) continue;
-        c.globalAlpha = alpha;
-        c.fillStyle = '#506576';
-        c.beginPath();
-        c.ellipse(dry.contactX, dry.contactY, cube.r * 0.7, 1.6, 0, 0, Math.PI * 2);
-        c.fill();
-      }
-      c.globalAlpha = 1;
-      if (!water) return; // nothing is under the tea when there is no tea
-    }
-
-    c.save();
-    if (submerged) c.clip(path(water));
-    else if (water) c.clip(path(`${BOX} ${water}`), 'evenodd');
-    // One fade for the whole tray, so overlapping cubes stack and are softened once.
-    const target = fade < 1 ? this.scratch() : null;
-    const draw = target?.getContext('2d') ?? c;
-    if (target) {
-      draw.setTransform(c.getTransform());
-      draw.clearRect(-1e4, -1e4, 2e4, 2e4);
-    }
-    for (const { cube, at } of standing) {
-      const { pose } = poses[at];
-      const fall = 1 - (frame.iceSettle[at] ?? 1);
-      // The cube's 48-unit box, scaled by r / 24: 2r across.
-      draw.save();
-      draw.translate(pose.cx, pose.cy - 10 * fall);
-      draw.rotate((pose.angle - 7 * fall) * Math.PI / 180);
-      draw.drawImage(sprite, -cube.r, -cube.r, cube.r * 2, cube.r * 2);
-      draw.restore();
-    }
-    if (target) {
-      c.setTransform(1, 0, 0, 1, 0, 0);
-      c.globalAlpha = fade;
-      c.drawImage(target, 0, 0);
-      c.globalAlpha = 1;
-    }
-    // restore() returns to the cup transform, including the cream headroom translation.
-    // Rebuilding it from canvas.height / H shifts the crowns away from their submerged bodies.
-    c.restore();
-
-    // Every cube breaking the surface is anchored to it by the tea's own near arc.
-    if (!submerged && raw > 0) {
-      const surfacing = standing.filter(({ cube }) => cube.liquidDepth === undefined);
-      if (!surfacing.length) return;
-      const surface = cupSurface(raw);
-      c.save();
-      const outlines = surfacing.map(({ cube, at }) => {
-        const { pose } = poses[at];
-        const fall = 1 - (frame.iceSettle[at] ?? 1);
-        return cupIceOutlinePath(pose.cx, pose.cy - 10 * fall, pose.angle - 7 * fall, cube.r);
-      }).join(' ');
-      c.clip(path(outlines));
-      c.globalAlpha = surface.opacity * 0.55;
-      c.lineWidth = 0.8;
-      c.strokeStyle = liquidTint ?? '#769FAC';
-      c.stroke(path(`M${56.5 - surface.rx} ${surface.y} A${surface.rx} ${surface.ry} 0 0 0 ${56.5 + surface.rx} ${surface.y}`));
+  private ice(frame: CupFrame, level: number, tint?: string) {
+    const count = ICE_LEVELS.find(option => option.id === frame.drink.ice)?.cubes ?? 0;
+    const c = this.c, s = cupSurface(level);
+    frame.iceLayout.slice(0, count).forEach((cube, i) => {
+      const p = cupPlanePosition(level, cube.u, cube.v, cube.r);
+      const fall = 1 - (frame.iceSettle[i] ?? 1);
+      const r = cube.r * s.rx;
+      c.save(); c.translate(p.x, p.y - fall * 10);
+      c.scale(1, CUP_SURFACE_RATIO); c.rotate((cube.angle - fall * 12) * Math.PI / 180);
+      // Almost all of the visible ice is its top face, with just a thin melted lower edge.
+      const shape = new Path2D(); shape.roundRect(-r * 0.72, -r * 0.72, r * 1.44, r * 1.44, r * 0.27);
+      c.save(); c.translate(1, 2); c.fillStyle = '#3F55522E'; c.fill(shape); c.restore();
+      const ice = c.createLinearGradient(-r, -r, r, r);
+      ice.addColorStop(0, '#FCFFFFED'); ice.addColorStop(0.35, '#D5E9E4C9');
+      ice.addColorStop(0.7, tint && level > 0 ? blend('#E6F4EF', tint, 0.22) + 'C9' : '#D0E4E6BF');
+      ice.addColorStop(1, '#9BBDB7C9');
+      c.fillStyle = ice; c.fill(shape); c.strokeStyle = '#728F888F'; c.lineWidth = 0.8; c.stroke(shape);
+      c.strokeStyle = '#FFFFFFE6'; c.lineWidth = 1.4;
+      c.beginPath(); c.moveTo(-r * 0.5, r * 0.18); c.lineTo(-r * 0.5, -r * 0.32); c.quadraticCurveTo(-r * 0.5, -r * 0.5, -r * 0.25, -r * 0.5); c.lineTo(r * 0.22, -r * 0.5); c.stroke();
+      c.strokeStyle = '#F6FFFA88'; c.lineWidth = 0.7;
+      c.beginPath(); c.moveTo(r * 0.25, r * 0.05); c.lineTo(0, r * 0.2); c.lineTo(-r * 0.1, r * 0.4); c.stroke();
       c.restore();
-    }
+    });
   }
 
-  private scratchCanvas: HTMLCanvasElement | null = null;
-  /** An offscreen sheet the size of the cup, for drawing a group that is faded as one. */
-  private scratch(): HTMLCanvasElement {
-    if (!this.scratchCanvas || this.scratchCanvas.width !== this.canvas.width || this.scratchCanvas.height !== this.canvas.height) {
-      this.scratchCanvas = document.createElement('canvas');
-      this.scratchCanvas.width = this.canvas.width;
-      this.scratchCanvas.height = this.canvas.height;
-    }
-    return this.scratchCanvas;
+  private frontGlass() {
+    const c = this.c;
+    // Reflections continue down the short front wall; the mouth stays open and readable.
+    c.strokeStyle = '#FFFFF1B3'; c.lineWidth = 2.7;
+    c.beginPath(); c.moveTo(15, 61); c.quadraticCurveTo(19, 87, 29, 103); c.stroke();
+    c.strokeStyle = '#FFFAE780'; c.lineWidth = 1.4;
+    c.beginPath(); c.moveTo(100, 60); c.lineTo(89, 97); c.stroke();
+    c.beginPath(); c.ellipse(56.5, 42, 51, 35, 0, 0, Math.PI);
+    c.strokeStyle = '#A99682'; c.lineWidth = 2.2; c.stroke();
+    c.beginPath(); c.ellipse(56.5, 41.3, 49.5, 34, 0, 0, Math.PI);
+    c.strokeStyle = '#FFFEF5'; c.lineWidth = 2.1; c.stroke();
+    // A small cat print follows the foreshortened front face instead of filling the opening.
+    c.save(); c.translate(56.5, 99); c.scale(0.64, 0.42);
+    c.fillStyle = '#FFF4DEDD'; c.strokeStyle = '#725141'; c.lineWidth = 1.9;
+    const cat = new Path2D('M-13 2 L-12-12 Q-9-16-5-9 Q0-11 5-9 Q10-16 12-12 L13 2 Q13 12 0 12 Q-13 12-13 2Z');
+    c.fill(cat); c.stroke(cat);
+    c.fillStyle = '#725141'; oval(c, -5, 1, 1.2, 1.5); c.fill(); oval(c, 5, 1, 1.2, 1.5); c.fill();
+    c.beginPath(); c.moveTo(-2, 5); c.quadraticCurveTo(0, 7, 2, 5); c.lineWidth = 1.2; c.stroke();
+    c.restore();
   }
-}
-
-function withAlpha(hex: string, alpha: number) {
-  const r = parseInt(hex.slice(1, 3), 16);
-  const g = parseInt(hex.slice(3, 5), 16);
-  const b = parseInt(hex.slice(5, 7), 16);
-  return `rgba(${r},${g},${b},${alpha})`;
 }

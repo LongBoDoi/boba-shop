@@ -1,15 +1,21 @@
-# Painted cup cream
+# Historical front-view cream artwork
+
+The preparation cup now uses an overhead foam cap drawn by `src/kitchen/creamPainter.ts`.
+See [overhead-cup.md](overhead-cup.md) for the active artwork. The following records the
+previous upright cream asset and its generation provenance.
+
+## Previous painted cup cream
 
 Generated with the built-in image generation tool using the `imagegen` skill. The original
 transparent PNG is preserved at `src/assets/kitchen/cup-cream-painted.png` (1402 × 1122).
 No background was added and its alpha channel is preserved.
 
-The active sprite is `src/assets/kitchen/cup-cream-contrast.png`, edited with the built-in image
+The previous sprite was `src/assets/kitchen/cup-cream-contrast.png`, edited with the built-in image
 generation tool to improve visibility against the ivory cup and pale yellow kitchen. It preserves
 the shape and transparent framing, with warm caramel fold shadows and a fine brown silhouette
 contour. The original lighter sprite stays available as the source.
 
-`src/kitchen/creamPainter.ts` crops the transparent padding while drawing, preserves the upright
+The previous `src/kitchen/creamPainter.ts` cropped the transparent padding while drawing, preserved the upright
 folds, and projects the lower contact area onto the tea's oval. The two flavour finishes are:
 
 - **Cheese cream:** ivory folds, pale cream layer and softly white mixing plumes.
