@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 
 import { CUP_LIP, WELL_BOTTOM, WELL_RUN } from './cupMarks';
-import { CUP_ART, CUP_MOUTH, pourLevel } from '../art/cupGeometry';
+import { pourLevel } from '../art/cupGeometry';
 import { bakeCanvas, DPR } from '../game/view';
 import { hexNumber, shade } from './color';
 
@@ -15,8 +15,10 @@ export interface CupPlacement {
 }
 
 /**
- * Tea falls visibly through the broad open mouth to the shared projected surface. Its endpoint
- * rises as the cup fills; the stream stays in front of the rear glass and the liquid painting.
+ * The tea running out of a tap (`Stream` in pour.tsx). It is drawn in two halves split at the cup's
+ * lip: above it the tea is in open air and goes over the cup; below it, it is inside the glass and
+ * goes under it, so the glass tints it and the cat covers it. It ends at the drink's surface, so the
+ * stream shortens as the cup fills.
  */
 export class Stream {
   private readonly front: Phaser.GameObjects.Image;
@@ -129,8 +131,7 @@ export class Spill {
       c.ellipse(2, 3.5, 2, 3.5, 0, 0, Math.PI * 2);
       c.fill();
     });
-    this.drops = [0.25, 0.5, 0.75].map((at) => scene.add.image(cupW * at - 2,
-      cupH * (CUP_MOUTH.y + CUP_MOUTH.ry) / CUP_ART.h, key).setOrigin(0).setDisplaySize(4, 7));
+    this.drops = [0.18, 0.5, 0.82].map((at) => scene.add.image(cupW * at - 2, cupH * 0.1, key).setOrigin(0).setDisplaySize(4, 7));
     this.container = scene.add.container(0, 0, this.drops);
   }
 
@@ -139,12 +140,12 @@ export class Spill {
     this.drops.forEach((drop, i) => {
       const over = Math.max(0, level - 1 - i * 0.12);
       drop.setAlpha(over > 0 ? 1 : 0);
-      drop.setY(this.cupH * ((CUP_MOUTH.y + CUP_MOUTH.ry) / CUP_ART.h + Math.min(1, over / 0.55) * 0.3));
+      drop.setY(this.cupH * 0.1 + Math.min(1, over / 0.55) * this.cupH * 0.82);
     });
   }
 }
 
-/** The soft contact shadow beneath a docked cup, sized to its projected base. */
+/** The soft shadow a docked cup casts on the shelf under the tap. */
 export function cupShadowTexture(scene: Phaser.Scene): string {
   const key = 'cup-contact-shadow';
   if (scene.textures.exists(key)) return key;

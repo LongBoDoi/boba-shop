@@ -1,8 +1,10 @@
-# Historical front-view cream artwork
+# Cream artwork
 
-The preparation cup now uses an overhead foam cap drawn by `src/kitchen/creamPainter.ts`.
-See [overhead-cup.md](overhead-cup.md) for the active artwork. The following records the
-previous upright cream asset and its generation provenance.
+The active frontal cup uses `src/assets/kitchen/cup-cream-natural-front.png`, a new, more natural
+edit of the previous cream. See [frontal-cup.md](frontal-cup.md) for its prompt and crop geometry.
+The active renderer draws the painted swirl with a soft contact edge only. The extra settled
+cap and mixing plumes described below are historical and have been removed.
+The following records the previous asset and its generation provenance.
 
 ## Previous painted cup cream
 

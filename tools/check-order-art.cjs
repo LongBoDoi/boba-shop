@@ -28,6 +28,40 @@ const {
 const { ORIGINAL_TEA_WIDTH, ORIGINAL_ROOM_SIZE } = require('../src/art/roomGeometry.ts');
 const { layoutKitchen, findDairyStation } = require('../src/kitchen/layout.ts');
 const { getDayConfig } = require('../src/game/levels.ts');
+const { CUP_GLASS, CUP_GLASS_ART } = require('../src/art/frontalCupArt.ts');
+const { CUP_CREAM } = require('../src/art/kitchenArt.ts');
+const { CUP_CREAM_ART } = require('../src/kitchen/creamPainter.ts');
+const { CUP_ART, CUP_BASE, CUP_FOOT, CUP_FLOOR_FRONT } = require('../src/art/cupGeometry.ts');
+
+// Refined materials must remain high-resolution transparent sources with correctly registered bands.
+assert(CUP_ART.h / CUP_ART.w > 1.5, 'The playable cup keeps its tall frontal silhouette');
+for (const [asset, art] of [[CUP_GLASS, CUP_GLASS_ART], [CUP_CREAM, CUP_CREAM_ART]]) {
+  const png = fs.readFileSync(asset);
+  assert.equal(png.readUInt32BE(16), art.width);
+  assert.equal(png.readUInt32BE(20), art.height);
+  assert.equal(png[25], 6, 'Glass and cream retain their original RGBA transparency');
+  assert(art.width >= CUP_ART.w * 4, 'Material detail comes from high-resolution art');
+  assert(PRELOAD.includes(asset), 'The cup material is loaded before play');
+}
+assert(CUP_GLASS_ART.x + CUP_GLASS_ART.widthInSource <= CUP_GLASS_ART.width);
+const glassBody = CUP_GLASS_ART.bands.at(-1);
+assert.equal(glassBody.targetY + glassBody.targetHeight, CUP_BASE.y + CUP_BASE.ry,
+  'The wall and rounded base are registered together, without a separately compressed foot');
+assert.equal(CUP_FOOT, CUP_BASE.y, 'The cup stands at the center of its base footprint');
+const baseGap = CUP_BASE.y + CUP_BASE.ry - CUP_FLOOR_FRONT;
+assert(baseGap >= 2.5 && baseGap <= 3.5,
+  'A small clear plastic base remains below the tea');
+CUP_GLASS_ART.bands.forEach((band, i, bands) => {
+  assert(band.y >= 0 && band.y + band.height <= CUP_GLASS_ART.height);
+  assert(band.targetY >= 0 && band.targetY + band.targetHeight <= CUP_ART.h);
+  if (i) {
+    assert.equal(bands[i-1].y + bands[i-1].height, band.y, 'Glass source bands meet without gaps');
+    assert.equal(bands[i-1].targetY + bands[i-1].targetHeight, band.targetY, 'Registered lip, wall, and foot meet');
+  }
+});
+assert(CUP_CREAM_ART.left >= 0 && CUP_CREAM_ART.right <= CUP_CREAM_ART.width);
+assert(CUP_CREAM_ART.top < CUP_CREAM_ART.contact && CUP_CREAM_ART.contact < CUP_CREAM_ART.bottom
+  && CUP_CREAM_ART.bottom <= CUP_CREAM_ART.height, 'The complete cream silhouette and wet contact fit the source');
 
 // Shelf additions must preserve the original overhead painting byte for byte.
 assert.equal(crypto.createHash('sha256').update(fs.readFileSync(ROOM_BG)).digest('hex'),

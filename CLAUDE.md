@@ -317,10 +317,10 @@ They meet in three places and nowhere else: `store.ts` (the shared reducer), `ui
 state: which page, the sign, the meter, the hint, the kitchen's rectangle, where the cup is) and
 `game/host.ts` (the UI tells the canvas where the pager and the kitchen are).
 
-**The cup** (`kitchen/cupPainter.ts`) is painted at device density into one texture, using
-`art/cupGeometry.ts` for its elevated overhead projection. Glass, tea, ice, toppings, and cream
-share the same broad opening and short visible front wall. It only repaints while a pour or a
-portion is moving. See `docs/overhead-cup.md` for geometry and visual checks.
+**The cup** (`kitchen/cupPainter.ts`) uses the original frontal 113 x 174 geometry and new
+high-resolution transparent PET and whipped-cream artwork. It paints the animated drink into
+one device-density texture and only repaints during a pour, settling, or ingredient change.
+See `docs/frontal-cup.md` for source assets, prompts, material treatment, and visual checks.
 
 **Rules learned building it — each one cost a measured frame budget or a bug:**
 
@@ -882,33 +882,34 @@ The bands are their own list, and "Đầy" covers the last eighth, where the cup
 
 ### Ice in the cup
 
-Ice is available from day one: one scoop is three cubes, two is twelve. `createIceLayout(cupId)`
-(`art/iceLayout.ts`) chooses stable normalized positions in the overhead plane. The second
-scoop fills gaps without rearranging the first. A reload preserves the arrangement.
+One scoop is three cubes, two is twelve. `createIceLayout(cupId)` retains stable placements
+through pours and reloads, and adding a scoop leaves the existing cubes in place. The first
+cubes float at the surface; the second scoop fills a shallow varied band below it.
 
-`cupPlanePosition` projects every footprint into the actual liquid ellipse. Ice is viewed mostly
-from its top face, with rounded melted edges, a faint tea tint, and short contact shadows.
-It rises continuously as the tea fills, and the plane widens with the glass taper.
-`check-cup-contents.cjs` checks complete footprints, spacing, continuous rise, and the stream
-endpoint across cup seeds and fills. The active cup draws its ice directly at device density.
+Whole rotated outlines fit the mouth, tapered walls, and curved floor before clipping. Dry
+cubes settle on the floor or topping bed, then rise continuously as liquid reaches them.
+`check-cup-contents.cjs` checks 11,520 outlines, spacing, dry-to-wet continuity, floor clearance,
+and cream contact. The active ice uses `ice-natural-front.png`, the untouched full-resolution
+clear-ice painting, with neutral translucent shading instead of opaque blue faces.
 
 ### Liquid and glass layers
 
-The preparation cup uses a 113 x 125 coordinate box, with its mouth centered at (56.5, 42),
-radii 48 x 33, and its base contact at y92. `CupView` draws a single device-density canvas,
-a transparent overhead lid/straw when finished, and the size badge.
+The frontal cup uses a 113 x 174 coordinate box, a shallow mouth, and base contact y157.5.
+`frontalCupArt.ts` registers the new 987 x 1593 PET painting at six pixels per cup unit.
+The rolled lip has its own source band; the wall and rounded bottom use one continuous band.
+`CupView` draws one live drink canvas, a smaller cat print, the lid/straw, and a size badge.
 
-`cupPainter.ts` paints rear glass and an inset floor, the live tea surface and short front body,
-scattered toppings on the floor, ice on the liquid plane, the foam cap, then near glass, rim,
-highlights, and a small foreshortened cat print. Contents stay behind the front rim. The old
-front-view cup layers and tea crops are no longer loaded for preparation.
+`cupPainter.ts` paints live liquid, rear floor glass, submerged ice, painted toppings, exposed
+ice, rear glass, cream, then the near glass and actual rolled lip. Everything stays behind the
+shared curved contents boundary. No old low-resolution cup backing, edge, or extra glint layer
+is loaded. See `docs/frontal-cup.md`.
 
-- **Tea, ice, and cream share `cupSurface(level)`.** Empty is y86/rx34; full is y42/rx48.
-  Every surface keeps the mouth perspective of 33/48. The stream uses the same endpoints.
-- **Milk changes liquid color and softens submerged toppings.** No liquid is invented for an
-  empty cup. Toppings cover a scattered disk; later portions retain earlier positions.
-- **The glass is transparent, with warm contours and narrow reflections.** The broad mouth and
-  short body match the elevated room. The cat print stays on the front wall.
+- **Liquid and ice share `cupSurface(level)`.** Empty is y157.5/rx33.5/ry9.5; full is y28/rx42.9/ry10.08.
+  The lower surface meets the same rounded floor as the contents; a small three-unit clear plastic band remains below it. The stream and fill meter use the same endpoints.
+- **Milk uses each tea's milky palette.** Body and surface gradients preserve volume, with
+  restrained painted detail, gentle meniscus reflections, pour ripples, and bubbles.
+- **Glass has warm, natural material detail.** Clear PET reflections cross filled regions at
+  18%; fine molded rings, a rolled rim, and condensation stay crisp at device density.
 - **Ingredients are identified by pictures, without name tags.** Tea tanks have distinct
   leaf, jasmine, anise, rolled-leaf, taro and matcha emblems (`art/ingredientMarks.ts`). Topping
   pans show their contents unobscured. Sugar uses a cube motif; the ice box keeps its original
@@ -938,20 +939,23 @@ front-view cup layers and tea crops are no longer loaded for preparation.
   independently of touch-target minimums. The cup-size badge compensates for
   docking scale. Ingredient names remain available to screen readers; there are no visible
   ingredient name captions or plaques.
-- **Cream is an overhead cap** (`kitchen/creamPainter.ts`), sharing the liquid ellipse with a
-  shallow piped spiral, contact shading, and small bubbles. Cheese stays ivory; brulee has
-  golden custard shading, caramel patches, and toasted flecks. The near rim crosses in front.
-  Adding cream leaves tea level and ice positions unchanged. The older upright cream PNG
-  and its prompts in `docs/cream-art.md` are retained as design history.
+- **Cream is a natural painted swirl** (`kitchen/creamPainter.ts`), using the new transparent
+  `cup-cream-natural-front.png` with finer moist grooves, soft ivory folds, and a curled peak.
+  Brulee gets golden custard shading, caramel patches, and flecks. Only the painted swirl and a soft contact
+  edge meet the tea; the separate cap and mixing-plume overlay are removed so the drink
+  contents stay visible. The actual near rim crosses in front. Cream leaves tea level and ice
+  positions unchanged; 40 units of texture headroom preserve the peak. The new source crop is
+  x130..1324, y82..1046, with contact y753. See `docs/frontal-cup.md` for prompts.
 - **The dispenser's tea** is drawn into the tank's transparent chamber with the same shading, more
   strongly: it is a big volume behind glass, and the raster texture that works in a cup softens it.
   The tank's own glass and hardware are the painted sprite, untouched.
 
-**A full cup is drawn full.** Liquid reaches the mouth center at `CUP_SURFACE_TOP` when fill
-is 1. `cupMarks.ts` and the visible stream derive endpoints from the same geometry. No artificial
-starting fill or upper plateau is applied. S/M/L share this projection, with the original relative
-width scales, and stand by `CUP_FOOT` on the single mat. Lid, straw, lidding press contact,
-ingredient landing point, and contact shadow use these coordinates. See `docs/overhead-cup.md`.
+**A full cup is drawn full.** Liquid reaches y28 at fill 1. `cupMarks.ts` and the visible
+stream derive endpoints from the same geometry. No artificial starting fill or upper plateau
+is applied. S/M/L share the frontal projection and original relative widths, and stand by
+`CUP_FOOT` on the shared mat. Lid, straw, lidding press, ingredient landing, and shadow use
+the frontal dimensions. The dome has thin reflective edges; the inserted straw fades below
+the lid instead of painting opaquely across the front of the cup.
 
 ### The kitchen's artwork
 The active room keeps `kitchen-room-counter-cups.png` for the upper room. The lower counter
@@ -1038,7 +1042,7 @@ keeps the painted ticks, highlights and the cat decal on top of it:
   over its tea, which is shaded, has an oval surface and ripples while it pours. The single
   `TEA_TANK` frame and the teas' older complete jars are gone, with the sprites behind them;
 - the **cup** is painted by [cupPainter.ts](src/kitchen/cupPainter.ts) into one texture in its
-  113 x 125 overhead space — see "Liquid and glass layers" — and drawn by `kitchen/CupView.ts`, which
+  113 x 174 frontal space — see "Liquid and glass layers" — and drawn by `kitchen/CupView.ts`, which
   repaints it only while something in it is moving;
 - a **scoop of topping** is one whole painted sprite, `SCOOPFUL[id]`, heap and all. It used to be
   the bare `SCOOP` with pieces laid into its bowl by hand, which was the same mistake the teas

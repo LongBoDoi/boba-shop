@@ -14,7 +14,7 @@ import {
   KITCHEN_BOARDS, KITCHEN_BOARD_ART, KITCHEN_CLEAR_BOARDS, KITCHEN_CLEAR_BOARDS_PATCH,
   KITCHEN_ROOM_TRAY_RAISE, KITCHEN_ROOM_CLEAR_ICE, KITCHEN_ROOM_CLEAR_ICE_PATCH,
 } from '../art/kitchenRoomArt';
-import { CUP_ART, CUP_FOOT, CUP_MOUTH } from '../art/cupGeometry';
+import { CUP_ART, CUP_FOOT } from '../art/cupGeometry';
 import { gameArea } from '../game/host';
 import { bakeCanvas, canvasFont, placeCamera, tex } from '../game/view';
 import { playSound, setPourFill, setPouring as setPourSound } from '../sound';
@@ -47,7 +47,7 @@ import { cupShadowTexture, Spill, Stream } from '../kitchen/pourEffects';
  * Plus the painted room itself, swiped to pan along the wall. Every rule of what may go in is the
  * reducer's; this scene checks the same things first only so it can put a tool back and say why.
  *
- * Depth, back to front: the room (panned), the mat, the docked cup's shadow, the stream's lower
+ * Depth, back to front: the room (panned), the mat, the resting cup's shadow, the stream's lower
  * half, the cup, the tool in hand, the cup off the rack, the stream's upper half.
  */
 const DEPTH = { room: 0, holder: 10, shadow: 15, streamBack: 18, cup: 20, tool: 30, rackCup: 32, streamFront: 35 };
@@ -1215,8 +1215,7 @@ export class KitchenScene extends Phaser.Scene {
     this.toolTweens = [];
     const finishing = this.finishingTool;
     const s = this.toolState.size;
-    const to = { x: this.cupPos.x + layout.cupW / 2,
-      y: this.cupPos.y + layout.cupH * CUP_MOUTH.y / CUP_ART.h + s * 0.1 };
+    const to = { x: this.cupPos.x + layout.cupW / 2, y: this.cupPos.y + layout.cupH * 0.12 + s * 0.1 };
     const duration = this.flightTime(to.x - flier.x, to.y - flier.y);
     const landed = () => {
       // Milk and cream are carried whole: the counter has its own back once this one is gone.
@@ -1367,7 +1366,7 @@ export class KitchenScene extends Phaser.Scene {
       const progress = Math.min(1, this.lidderElapsed / 1100);
       const press = Math.sin(progress * Math.PI);
       const head = ROOM_BG_LIDDING.head;
-      const rimY = this.cupPos.y + layout.cupH * this.cupPos.scale * (CUP_MOUTH.y - CUP_MOUTH.ry) / CUP_ART.h;
+      const rimY = this.cupPos.y + layout.cupH * this.cupPos.scale * 16 / CUP_ART.h;
       const stroke = Math.max(0, rimY - layout.room.top - (head.y + head.height) * layout.room.scale);
       this.lidderHead?.setVisible(true).setPosition(head.x * layout.room.scale - this.pan,
         layout.room.top + head.y * layout.room.scale + press * stroke);
@@ -1395,12 +1394,14 @@ export class KitchenScene extends Phaser.Scene {
       this.cup.update(time, delta);
       this.spill?.update(this.level);
       const docked = Boolean(this.dock);
-      this.cupShadow.setVisible(docked);
-      if (docked) {
+      const onMat = Math.abs(x - layout.homeX) < 0.5 && Math.abs(y - layout.homeY) < 0.5
+        && Math.abs(scale - 1) < 0.01 && this.gesture?.kind !== 'cup';
+      this.cupShadow.setVisible(docked || onMat).setAlpha(this.appear);
+      if (docked || onMat) {
         const w = layout.cupW * scale;
-        const h = w * 0.46;
-        this.cupShadow.setPosition(x + w * 0.09, y + layout.cupH * scale * CUP_FOOT / CUP_ART.h - h / 2 + 3)
-          .setDisplaySize(w * 0.82, h);
+        const h = w * 0.18;
+        this.cupShadow.setPosition(x + w * 0.12, y + layout.cupH * scale * CUP_FOOT / CUP_ART.h - h / 2)
+          .setDisplaySize(w * 0.76, h);
       }
     } else this.cupShadow.setVisible(false);
     this.reportCup();

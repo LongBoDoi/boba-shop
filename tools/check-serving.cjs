@@ -20,6 +20,7 @@ try {
   const { createRng } = require(path.join(__dirname, '../src/game/random.ts'));
   const { getDayConfig, describeUnlocks } = require(path.join(__dirname, '../src/game/levels.ts'));
   const { parseGame, serializeGame } = require(path.join(__dirname, '../src/game/save.ts'));
+  const { cupIceFillPath, cupFillPath, cupIcePosition, cupIceRestPosition, cupSurface, CUP_SURFACE_BOTTOM, CUP_FLOOR_FRONT } = require(path.join(__dirname, '../src/art/cupGeometry.ts'));
   const { createIceLayout, ICE_LAYOUT } = require(path.join(__dirname, '../src/art/iceLayout.ts'));
   const { asksFor, BUILD_ORDER, CATEGORIES, DEFAULT_ID, ICE_LEVELS, SUGAR_STEPS, TEAS, TOPPINGS } =
     require(path.join(__dirname, '../src/game/ingredients.ts'));
@@ -29,11 +30,37 @@ try {
     'The full ice level has a placement for every requested cube');
   const scattered = createIceLayout(12);
   assert.deepEqual(scattered, createIceLayout(12), 'A cup keeps the same layout across renders and reloads');
-  assert.deepEqual(scattered.slice(0, 3).map(({ u, v, r }) => ({ u, v, r })),
-    ICE_LAYOUT.slice(0, 3).map(({ u, v, r }) => ({ u, v, r })),
-    'Scattering preserves the first scoop\'s positions and chunky sizes');
+  assert.deepEqual(scattered.slice(0, 3).map(({ restX, restAngle, restLift, r }) => ({ restX, restAngle, restLift, r })),
+    ICE_LAYOUT.slice(0, 3).map(({ restX, restAngle, restLift, r }) => ({ restX, restAngle, restLift, r })),
+    'Scattering preserves the first scoop\'s fitted dry-floor placements and chunky sizes');
   assert.notDeepEqual(scattered.slice(3), createIceLayout(13).slice(3), 'New cups have different second-scoop arrangements');
   assert.equal(scattered.length, ICE_LAYOUT.length, 'Scattering retains every cube from both scoops');
+  // A later top-up must keep lifting floating ice, including the last part of a nearly full cup.
+  const fills = [0.35, 0.55, 0.75, 0.9, 1];
+  const floating = fills.map((fill) => cupIcePosition(fill, 34, 12, -13, -0.35, 39, 132));
+  for (let i = 0; i < floating.length; i++) {
+    const ice = floating[i];
+    assert.ok(ice.floating, 'Ice floats once tea is deep enough');
+    assert.ok(ice.cy > ice.waterY && ice.cy < ice.waterY + 12, 'A floating cube has body below the surface and a visible crown');
+    const surface = cupSurface(fills[i]);
+    const ellipse = ((34 - 56.5) / surface.rx) ** 2 + ((ice.waterY - surface.y) / surface.ry) ** 2;
+    assert.ok(Math.abs(ellipse - 1) < 1e-8 && ice.waterY >= surface.y,
+      'Every cube seats at the front of the shared oval rather than behind its rear curve');
+    assert.equal(cupIceFillPath(fills[i]).replace(' 0 0 0 ', ' 0 0 1 '), cupFillPath(fills[i]),
+      'Ice uses the near arc of the same oval and floor as the tea, at every fill');
+    if (i) assert.ok(ice.cy < floating[i - 1].cy - 5, 'Every subsequent top-up raises the ice, with no upper height plateau');
+  }
+  assert.equal(cupIcePosition(0, 34, 12, -13, -0.35, 39, 132).cy, 132, 'Dry ice rests on the cup floor');
+  assert.equal(cupIceFillPath(0), '', 'The front-water mask stays empty until tea is added');
+  for (const cube of ICE_LAYOUT.slice(0, 3)) {
+    const dry = cupIceRestPosition(cube.restX, cube.r, cube.restAngle, cube.restLift);
+    const floorDepth = (CUP_FLOOR_FRONT - CUP_SURFACE_BOTTOM) * Math.sqrt(1 - ((dry.contactX - 56.5) / 33.5) ** 2);
+    assert.ok(dry.contactY >= CUP_SURFACE_BOTTOM - floorDepth && dry.contactY <= CUP_SURFACE_BOTTOM + floorDepth,
+      'Each first-scoop cube rests within the elliptical floor instead of hovering above it');
+    const rest = cupIcePosition(0, cube.x, cube.r, cube.angle, cube.depth, dry.cx, dry.cy, cube.restAngle);
+    assert.equal(rest.angle, cube.restAngle, 'Dry cubes retain their resting tilt');
+    assert.equal(rest.cx, dry.cx, 'Dry ice keeps its fitted floor position');
+  }
   // ------------------------------------------------------------------ the whole menu, from day one
   // Nothing about what can go in a cup depends on the day any more: no category, no tea and no
   // topping waits for a later shift, so day 1 is the same shelf as day 30.

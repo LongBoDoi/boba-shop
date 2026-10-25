@@ -1,3 +1,8 @@
+# Historical overhead cup
+
+The active game has returned to a refined frontal cup. See [frontal-cup.md](frontal-cup.md).
+The following records the previous overhead implementation and previews.
+
 # Overhead preparation cup
 
 The playable cup now shares the elevated viewpoint of the kitchen. Its open mouth is broad,

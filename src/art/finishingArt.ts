@@ -1,49 +1,49 @@
-import { CUP_MOUTH } from './cupGeometry';
-
-/** Clear dome viewed from the same elevated angle as the cup's opening. */
-export function paintOverheadLid(c: CanvasRenderingContext2D) {
+/** Clear dome lid and wide boba straw, in the painted cup's 113×174 coordinates. */
+export function paintLid(c: CanvasRenderingContext2D) {
   c.save();
-  const { x, y, rx, ry } = CUP_MOUTH;
-  const glass = c.createLinearGradient(12, 10, 104, 78);
-  glass.addColorStop(0, '#FFFFFF80'); glass.addColorStop(0.45, '#FFF9EA16'); glass.addColorStop(1, '#BEA98E55');
+  const glass = c.createLinearGradient(8, -24, 104, 22);
+  glass.addColorStop(0, '#FFFFFF8C');
+  glass.addColorStop(0.24, '#FFF9EA33');
+  glass.addColorStop(0.5, '#FFFFFF0D');
+  glass.addColorStop(0.8, '#AB9B8833');
+  glass.addColorStop(1, '#FFF8E84D');
   c.fillStyle = glass;
-  c.strokeStyle = '#A5957E'; c.lineWidth = 1.2;
-  c.beginPath(); c.ellipse(x, y - 1, rx + 3, ry + 2, 0, 0, Math.PI * 2); c.fill(); c.stroke();
-  c.beginPath(); c.ellipse(x, y - 5, rx - 4, ry - 4, 0, 0, Math.PI * 2);
-  c.strokeStyle = '#E4D9C688'; c.lineWidth = 1; c.stroke();
-  c.beginPath(); c.ellipse(x, y - 1, rx + 1, ry + 1, 0, 0, Math.PI);
-  c.strokeStyle = '#FFFDF1'; c.lineWidth = 2.5; c.stroke();
-  c.beginPath(); c.ellipse(x, y - 5, rx - 7, ry - 7, 0, 3.5, 4.6);
-  c.strokeStyle = '#FFFFFFCC'; c.lineWidth = 3; c.lineCap = 'round'; c.stroke();
-  c.beginPath(); c.ellipse(68, 39, 6, 4.2, 0, 0, Math.PI * 2);
-  c.fillStyle = '#A18F7344'; c.fill(); c.strokeStyle = '#FFF6E3AA'; c.lineWidth = 1; c.stroke();
+  c.strokeStyle = '#968A7E99';
+  c.lineWidth = 0.75;
+  c.beginPath();
+  c.moveTo(7, 15);
+  c.bezierCurveTo(11, -30, 102, -30, 106, 15);
+  c.ellipse(56.5, 15, 49.5, 14, 0, 0, Math.PI);
+  c.closePath();
+  c.fill(); c.stroke();
+  c.beginPath(); c.ellipse(56.5, 16, 52, 15, 0, 0, Math.PI * 2);
+  c.fillStyle = '#FFF5E51A'; c.fill(); c.stroke();
+  c.beginPath(); c.ellipse(56.5, 14.5, 50, 14, 0, 0, Math.PI);
+  c.strokeStyle = '#FFFDF1D9'; c.lineWidth = 1.2; c.stroke();
+  c.beginPath(); c.ellipse(56.5, 16.5, 51, 14, 0, 0, Math.PI);
+  c.strokeStyle = '#8F83766B'; c.lineWidth = 0.65; c.stroke();
+  c.beginPath(); c.moveTo(23, 5); c.quadraticCurveTo(27, -9, 41, -13);
+  c.strokeStyle = '#FFFFFFB3'; c.lineWidth = 2.4; c.lineCap = 'round'; c.stroke();
   c.restore();
 }
 
-/** A short projected straw, with its submerged end visible through the lid. */
-export function paintOverheadStraw(c: CanvasRenderingContext2D) {
-  c.save(); c.translate(68, 39); c.rotate(0.35);
-  c.globalAlpha = 0.3; c.fillStyle = '#B87965'; c.fillRect(-3.4, 0, 6.8, 24); c.globalAlpha = 1;
-  const straw = c.createLinearGradient(-4, 0, 4, 0);
-  straw.addColorStop(0, '#F9DAC8'); straw.addColorStop(0.35, '#FFD9CA'); straw.addColorStop(1, '#CF8B78');
-  c.fillStyle = straw; c.strokeStyle = '#AC7865'; c.lineWidth = 0.9;
-  c.beginPath(); c.roundRect(-4, -34, 8, 35, 1.6); c.fill(); c.stroke();
-  c.beginPath(); c.ellipse(0, -34, 4, 2.8, 0, 0, Math.PI * 2);
-  c.fillStyle = '#9B6150'; c.fill(); c.strokeStyle = '#FCE6CD'; c.stroke();
-  c.beginPath(); c.moveTo(-2, -29); c.lineTo(-2, -3); c.strokeStyle = '#FFF2DC'; c.lineWidth = 1; c.stroke();
-  c.restore();
-}
-
-export function paintStraw(c: CanvasRenderingContext2D) {
+export function paintStraw(c: CanvasRenderingContext2D, inDrink = false) {
   c.save();
   c.translate(69, -34); c.rotate(0.1);
   const pink = c.createLinearGradient(0, 0, 9, 0);
-  pink.addColorStop(0, '#FFE4DB'); pink.addColorStop(0.4, '#F1B1A6'); pink.addColorStop(1, '#C88679');
-  c.fillStyle = pink; c.strokeStyle = '#A56D59'; c.lineWidth = 1.2;
-  c.beginPath(); c.roundRect(0, 0, 9, 123, 2); c.fill(); c.stroke();
+  pink.addColorStop(0, '#B77C69'); pink.addColorStop(0.16, '#FAD7C7');
+  pink.addColorStop(0.4, '#F1C2B2'); pink.addColorStop(0.75, '#D49A88'); pink.addColorStop(1, '#B47C6B');
+  const body = () => {
+    c.fillStyle = pink; c.strokeStyle = '#9C746380'; c.lineWidth = 0.55;
+    c.beginPath(); c.roundRect(0, 0, 9, 123, 2); c.fill(); c.stroke();
+    c.beginPath(); c.moveTo(2, 6); c.lineTo(2, 115);
+    c.strokeStyle = '#FFF0DFB3'; c.lineWidth = 0.8; c.stroke();
+  };
+  if (inDrink) {
+    c.save(); c.beginPath(); c.rect(-1, 53, 11, 72); c.clip(); c.globalAlpha = 0.25; body(); c.restore();
+    c.save(); c.beginPath(); c.rect(-1, -4, 11, 57); c.clip(); body(); c.restore();
+  } else body();
   c.beginPath(); c.ellipse(4.5, 1, 4.5, 2, 0, 0, Math.PI * 2);
-  c.fillStyle = '#A76555'; c.fill(); c.stroke();
-  c.beginPath(); c.moveTo(2, 6); c.lineTo(2, 115);
-  c.strokeStyle = '#FFF0DF'; c.stroke();
+  c.fillStyle = '#8D5D4D'; c.fill(); c.strokeStyle = '#FFE7D1'; c.lineWidth = 0.65; c.stroke();
   c.restore();
 }
