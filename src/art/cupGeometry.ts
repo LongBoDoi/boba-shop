@@ -3,7 +3,7 @@
  */
 export const CUP_ART = { w: 113, h: 174 };
 /** The measured outer base ellipse of the continuous cup painting. */
-export const CUP_BASE = { x: 56.5, y: 157.5, rx: 35, ry: 12.5 };
+export const CUP_BASE = { x: 56.5, y: 157.5, rx: 31, ry: 12.5 };
 /**
  * The middle of the cup's painted base ring, in those units — where the glass actually meets what
  * it is standing on. The bottom of the sprite's box is the *front* of that ring, so a cup stood on
@@ -29,14 +29,14 @@ export const CUP_SURFACE_RUN = CUP_SURFACE_BOTTOM - CUP_SURFACE_TOP;
  * straight between them, so everything in the cup — the surface oval, the ice that has to stay off
  * the walls — takes its width off the same line.
  */
-const CUP_RX_BOTTOM = 33.5;
+const CUP_RX_BOTTOM = 29.5;
 const CUP_RX_TOP = 42.9;
 /** How deep the surface oval is for its width: the perspective the painted rim is drawn in. */
 export const CUP_SURFACE_RATIO = 0.235;
 const FLOOR_RY = 9.5;
 export const CUP_FLOOR_FRONT = CUP_SURFACE_BOTTOM + FLOOR_RY;
-const CUP_FLOOR = `L90 ${CUP_SURFACE_BOTTOM} A${CUP_RX_BOTTOM} ${FLOOR_RY} 0 0 1 23 ${CUP_SURFACE_BOTTOM} Z`;
-export const CUP_FLOOR_EDGE = `M23 ${CUP_SURFACE_BOTTOM} A${CUP_RX_BOTTOM} ${FLOOR_RY} 0 0 0 90 ${CUP_SURFACE_BOTTOM}`;
+const CUP_FLOOR = `L86 ${CUP_SURFACE_BOTTOM} A${CUP_RX_BOTTOM} ${FLOOR_RY} 0 0 1 27 ${CUP_SURFACE_BOTTOM} Z`;
+export const CUP_FLOOR_EDGE = `M27 ${CUP_SURFACE_BOTTOM} A${CUP_RX_BOTTOM} ${FLOOR_RY} 0 0 0 86 ${CUP_SURFACE_BOTTOM}`;
 /** Inner glass traced from cup-design.png, carried up its own taper to that brim. */
 export const CUP_WELL = `M${56.5 - CUP_RX_TOP} ${CUP_SURFACE_TOP} A${CUP_RX_TOP} ${(CUP_RX_TOP * CUP_SURFACE_RATIO).toFixed(2)} 0 0 1 ${56.5 + CUP_RX_TOP} ${CUP_SURFACE_TOP} ${CUP_FLOOR}`;
 const MOUTH_Y = 28;
@@ -62,7 +62,7 @@ export function cupToppingPosition(x: number, rx: number, ry: number, angle: num
   const halfWidth = rx * cos + ry * sin;
   const halfHeight = rx * sin + ry * cos;
   const padding = 0.8;
-  const cx = Math.max(23 + padding + halfWidth, Math.min(90 - padding - halfWidth, x));
+  const cx = Math.max(27 + padding + halfWidth, Math.min(86 - padding - halfWidth, x));
   const farEdge = Math.abs(cx - 56.5) + halfWidth;
   const floor = CUP_SURFACE_BOTTOM + FLOOR_RY * Math.sqrt(Math.max(0, 1 - (farEdge / CUP_RX_BOTTOM) ** 2));
   return { cx, cy: floor - halfHeight - padding - lift };
@@ -129,7 +129,7 @@ export function cupIceRestPosition(x: number, r: number, angle: number, lift: nu
   const margin = 0.8 * r / 24 + 0.4;
   const left = Math.min(...points.map((point) => point.x));
   const right = Math.max(...points.map((point) => point.x));
-  const cx = Math.max(23 + margin - left, Math.min(90 - margin - right, x));
+  const cx = Math.max(27 + margin - left, Math.min(86 - margin - right, x));
   let cy = Infinity;
   let contact = points[0];
   for (const point of points) {

@@ -442,7 +442,7 @@ export class KitchenScene extends Phaser.Scene {
     if (this.held) this.showStationObject(this.held, false);
 
     const box = layout.holder;
-    const matKey = bakeCanvas(this, `work-mat:shared:${sized(box.width, box.height)}`, box.width * 2, box.height * 2, c => {
+    const matKey = bakeCanvas(this, `curled-holder:shared:${sized(box.width, box.height)}`, box.width * 2, box.height * 2, c => {
       c.scale(2, 2);
       const crop = CUP_HOLDER_ART;
       c.drawImage(sourceImage(this, CUP_HOLDER), crop.x, crop.y, crop.width, crop.height, 0, 0, box.width, box.height);

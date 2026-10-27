@@ -1,9 +1,9 @@
 import Phaser from 'phaser';
 
 import { Drink } from '../game/ingredients';
-import { paintLid, paintStraw } from '../art/finishingArt';
+import { CUP_FINISH_RISE, paintLid, paintStraw } from '../art/finishingArt';
 import {
-  CUP_CREAM, CUP_DECAL, CUP_ICE, DRINK, DRINK_MILKY, DRINK_MILKY_TOP, DRINK_TOP,
+  CUP_CREAM, CUP_ICE, DRINK, DRINK_MILKY, DRINK_MILKY_TOP, DRINK_TOP,
 } from '../art/kitchenArt';
 import { TOPPING_PIECES } from '../art/toppingArt';
 import { createIceLayout, IcePlacement } from '../art/iceLayout';
@@ -36,7 +36,7 @@ function images(scene: Phaser.Scene): CupImages {
 
 /**
  * The cup as it stands in the room: the glass backing, the painted drink (see `cupPainter.ts`),
- * the reflections, the linework and the cat on the front — and the size tag beside it.
+ * the reflections, the rolled lip and the clear rounded base — and the size tag beside it.
  *
  * Its origin is its top-left corner and it scales from there, so `x`/`y` are always where the cup
  * visibly starts, whatever size it is drawn at under a tap.
@@ -70,26 +70,24 @@ export class CupView {
     const overflow = height * CUP_OVERFLOW;
     const drawn = scene.add.image(0, -overflow, this.key).setOrigin(0)
       .setDisplaySize(width, height + overflow);
-    const decal = scene.add.image(width * 0.13, height * 0.13, tex(CUP_DECAL)).setOrigin(0)
-      .setDisplaySize(width * 0.74, height * 0.74).setAlpha(0.92);
 
     this.sizeTag = scene.add.image(width + 6, 0, '__DEFAULT').setOrigin(1, 0).setVisible(false);
     this.finish = scene.add.image(0, -overflow, '__DEFAULT').setOrigin(0).setVisible(false);
-    this.container = scene.add.container(0, 0, [drawn, decal, this.finish, this.sizeTag]);
+    this.container = scene.add.container(0, 0, [drawn, this.finish, this.sizeTag]);
     this.setDrink(drink, 0, true);
   }
 
   setFinish(lidded: boolean, straw: boolean) {
     this.finish.setVisible(lidded);
     if (!lidded) return;
-    const overflow = this.height * CUP_OVERFLOW;
+    const overflow = this.height * CUP_FINISH_RISE / 174;
     const key = bakeCanvas(this.scene, `cup-finish:${this.width}:${straw}`, this.width, this.height + overflow, (c) => {
       c.scale(this.width / 113, this.height / 174);
-      c.translate(0, 40);
-      paintLid(c);
-      if (straw) paintStraw(c, true);
+      c.translate(0, CUP_FINISH_RISE);
+      paintLid(c, this.scene.textures.get(tex(CUP_GLASS)).getSourceImage() as CanvasImageSource);
+      if (straw) paintStraw(c, this.scene.textures.get(tex(CUP_GLASS)).getSourceImage() as CanvasImageSource, true);
     });
-    this.finish.setTexture(key).setDisplaySize(this.width, this.height + overflow);
+    this.finish.setY(-overflow).setTexture(key).setDisplaySize(this.width, this.height + overflow);
   }
 
   /** The drink changed. New portions and new cubes drop into place; a new cup starts as it is. */

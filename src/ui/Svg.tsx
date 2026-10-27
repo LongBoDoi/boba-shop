@@ -13,12 +13,7 @@ export function Svg({ markup, class: cls = '', style }: { markup: string; class?
   return <span class={`svg ${cls}`} style={style} dangerouslySetInnerHTML={{ __html: markup }} />;
 }
 
-/**
- * The simple vector cup (`art/cup.ts`), in a box `width` wide and `1.3 × width` (plus the straw)
- * tall. The drawing overhangs that box (the rim
- * by 2px a side, a seal above it), so it is pulled back by negative margins rather than pushing
- * its neighbours away.
- */
+/** The shared clear cup; negative top margin leaves room for the raised lid and straw. */
 export function CupArt({ drink, ...options }: { drink: Drink } & CupOptions) {
   const { width, backgroundColor, straw, sealed, tapered, fill } = options;
   const markup = useMemo(

@@ -1,3 +1,4 @@
+import { HOLDER_SEAT } from '../art/referenceCupArt';
 import { CupSize, CUP_SIZE_SCALE, Drink, getIngredient } from '../game/ingredients';
 import { DayConfig } from '../game/levels';
 import { CupBuild } from '../game/reducer';
@@ -85,7 +86,7 @@ export function kitchenTableFor(width: number, height: number) {
   return { top: top + ROOM_BG_TABLE.top * scale, base: top + ROOM_BG_TABLE.base * scale };
 }
 
-/** One shared mat sits on the clear worktop, with room around the largest cup's base. */
+/** One curled holder sits on the clear worktop, with room around the largest cup's base. */
 export function kitchenHolderFor(width: number, height: number) {
   const { scale, top } = fitBackground(width, height, ROOM_BG_SIZE.width, ROOM_BG_SIZE.height);
   // Leave the left-hand syrup tray clear even when the room is panned fully left.
@@ -209,8 +210,8 @@ export function layoutKitchen(config: DayConfig, W: number, H: number, size: Cup
   const holder = kitchenHolderFor(W, H);
   return {
     stations, emptyBins, cupW, cupH,
-    homeX: holder.left + (holder.width - cupW) / 2,
-    homeY: holder.top + holder.height / 2 - cupH * CUP_FOOT / CUP_ART.h,
+    homeX: holder.left + holder.width * HOLDER_SEAT.x - cupW / 2,
+    homeY: holder.top + holder.height * HOLDER_SEAT.y - cupH * CUP_FOOT / CUP_ART.h,
     room: { scale, top, width: drawnWidth, height: drawnHeight, maxPan: Math.max(0, drawnWidth - W) },
     holder,
     rack,

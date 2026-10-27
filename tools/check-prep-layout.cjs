@@ -24,6 +24,7 @@ require.extensions['.ts'] = (module, filename) => {
 };
 
 const { ROOM_BG_KEEP, ROOM_BG_REACH, ROOM_BG_SIZE, ROOM_BG_FOCUS_Y, ROOM_BG_TABLE, ROOM_BG_EXTRAS } = require(path.join(__dirname, '../src/art/kitchenArt.ts'));
+const { HOLDER_SEAT } = require('../src/art/referenceCupArt.ts');
 const { layoutKitchen } = require('../src/kitchen/layout.ts');
 const { getDayConfig } = require('../src/game/levels.ts');
 const { CUP_ART, CUP_FOOT } = require('../src/art/cupGeometry.ts');
@@ -111,8 +112,8 @@ for (const [width, height] of [[390, 540], [375, 330], [450, 315], [500, 355], [
     assert(holder.top + holder.height < Math.min(height, room.top + ROOM_BG_TABLE.base * room.scale),
       'The mat leaves space before the counter front');
     assert(holder.width > layout.cupW, `${size}: the mat has space around the cup`);
-    assert(Math.abs(layout.homeX + layout.cupW / 2 - holder.left - holder.width / 2) < 1e-7);
-    assert(Math.abs(layout.homeY + layout.cupH * CUP_FOOT / CUP_ART.h - holder.top - holder.height / 2) < 1e-7,
+    assert(Math.abs(layout.homeX + layout.cupW / 2 - holder.left - holder.width * HOLDER_SEAT.x) < 1e-7);
+    assert(Math.abs(layout.homeY + layout.cupH * CUP_FOOT / CUP_ART.h - holder.top - holder.height * HOLDER_SEAT.y) < 1e-7,
       'The cup stands by its painted base, in the center of the shared mat');
   }
 }

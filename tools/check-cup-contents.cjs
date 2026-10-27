@@ -19,7 +19,7 @@ try {
   assert.equal(cupInteriorAt(CUP_ART.w / 2).bottom, CUP_FLOOR_FRONT);
   const baseGap = CUP_BASE.y + CUP_BASE.ry - CUP_FLOOR_FRONT;
   assert(baseGap >= 2.5 && baseGap <= 3.5, 'Tea leaves a small clear base below its rounded floor');
-  for (let x = 23; x <= 90; x += 0.5) {
+  for (let x = CUP_ART.w / 2 - empty.rx; x <= CUP_ART.w / 2 + empty.rx; x += 0.5) {
     const outer = CUP_BASE.y + CUP_BASE.ry * Math.sqrt(1 - ((x - CUP_BASE.x) / CUP_BASE.rx) ** 2);
     const inner = cupInteriorAt(x).bottom;
     assert(outer > inner && outer - inner < 4, 'The rounded liquid floor follows the painted base across its width');

@@ -895,9 +895,17 @@ clear-ice painting, with neutral translucent shading instead of opaque blue face
 ### Liquid and glass layers
 
 The frontal cup uses a 113 x 174 coordinate box, a shallow mouth, and base contact y157.5.
-`frontalCupArt.ts` registers the new 987 x 1593 PET painting at six pixels per cup unit.
-The rolled lip has its own source band; the wall and rounded bottom use one continuous band.
-`CupView` draws one live drink canvas, a smaller cat print, the lid/straw, and a size badge.
+`cupDesign.ts` defines the reference clear shell, separate gray curled silicone holder, cat-ear dome and
+hollow transparent straw as shared paths and gradients for both Canvas and SVG.
+`frontalCupArt.ts` rasterises the shell at six pixels per unit (678×1044); the opening is a
+transparent hole in the rolled rim, not a filled oval. `CupView` draws one live drink canvas,
+the lid/straw, and a size badge. The old cat-face decal is no longer loaded.
+The finishing texture reserves 70 units above the rim, independently of the cream's 40-unit
+headroom. The straw passes through the dome's central hole at x56.5/y−21, with reduced opacity
+below it. Order-size icons, customer cups and the carried straw share the same drawing.
+The gray holder replaces the yellow mat as a counter object, with a centered recessed seat;
+it stays behind during cup carries. The cup shell has a simple clear bottom with no attached curl.
+See `docs/cat-cup-design.md`.
 
 `cupPainter.ts` paints live liquid, rear floor glass, submerged ice, painted toppings, exposed
 ice, rear glass, cream, then the near glass and actual rolled lip. Everything stays behind the
@@ -909,7 +917,7 @@ is loaded. See `docs/frontal-cup.md`.
 - **Milk uses each tea's milky palette.** Body and surface gradients preserve volume, with
   restrained painted detail, gentle meniscus reflections, pour ripples, and bubbles.
 - **Glass has warm, natural material detail.** Clear PET reflections cross filled regions at
-  18%; fine molded rings, a rolled rim, and condensation stay crisp at device density.
+  18%; a rolled rim, curved base ring and broad white glints stay crisp at device density.
 - **Ingredients are identified by pictures, without name tags.** Tea tanks have distinct
   leaf, jasmine, anise, rolled-leaf, taro and matcha emblems (`art/ingredientMarks.ts`). Topping
   pans show their contents unobscured. Sugar uses a cube motif; the ice box keeps its original

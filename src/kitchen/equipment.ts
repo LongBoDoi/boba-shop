@@ -6,6 +6,7 @@ import { toppingPanBands, ToppingPanShape } from '../art/toppingGeometry';
 import { equipmentFrame, paintEquipment, PaintedEquipmentId } from '../art/equipmentArt';
 import { bakeCanvas, svgTexture, tex } from '../game/view';
 import { Station } from './layout';
+import { REFERENCE_CUP } from '../art/referenceCupArt';
 import { paintStraw } from '../art/finishingArt';
 import { ingredientMarkSvg } from '../art/ingredientMarks';
 import { TEAS } from '../game/ingredients';
@@ -226,9 +227,9 @@ export function addTool(scene: Phaser.Scene, station: Station, size: number): Ph
   const S = size;
   if (station.kind === 'straw') {
     const key = bakeCanvas(scene, `finish-tool:${station.kind}:${S}`, S, S, (c) => {
-      c.scale(S / 150, S / 150);
-      c.translate(18, 40);
-      paintStraw(c);
+      c.scale(S / 210, S / 210);
+      c.translate(48, 100);
+      paintStraw(c, sourceImage(scene, REFERENCE_CUP));
     });
     return [scene.add.image(0, 0, key).setOrigin(0).setDisplaySize(S, S)];
   }

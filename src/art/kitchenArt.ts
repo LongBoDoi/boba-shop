@@ -24,7 +24,6 @@ import drinkTaroMilkyTop from '../assets/kitchen/drink-taro-milky-top.png';
 import drinkMatchaMilkyTop from '../assets/kitchen/drink-matcha-milky-top.png';
 import teaDispensers from '../assets/kitchen/tea-dispensers-overhead.png';
 import cupCreamPainted from '../assets/kitchen/cup-cream-natural-front.png';
-import cupDecal from '../assets/kitchen/cup-decal.png';
 import scoop from '../assets/kitchen/scoop.png';
 import foamCheese from '../assets/kitchen/foam-cheese.png';
 import foamBrulee from '../assets/kitchen/foam-brulee.png';
@@ -51,7 +50,7 @@ import pieceIceV2 from '../assets/kitchen/piece-ice-v2.png';
 import pieceIceClear from '../assets/kitchen/ice-natural-front.png';
 import kitchenOverhead from '../assets/kitchen/kitchen-overhead.png';
 import sugarScoop from '../assets/kitchen/liquid-sugar-ladle.png';
-import cupHolder from '../assets/kitchen/counter-props-overhead.png';
+import { REFERENCE_CUP, REFERENCE_CUP_PARTS, CUP_DISPLAY_HEIGHT } from './referenceCupArt';
 import iconTrash from '../assets/kitchen/icon-trash.png';
 import iconCup from '../assets/kitchen/icon-cup.png';
 
@@ -131,11 +130,6 @@ export const TEA_DISPENSER_ART = {
   } as Record<string, { x: number; y: number }>,
 };
 export const CUP_CREAM = cupCreamPainted;
-/**
- * The cat printed on the *front* of the cup, cut out of the glass so it can be laid over the
- * drink. Left in the glass it sits behind, and the drink pours straight over it.
- */
-export const CUP_DECAL = cupDecal;
 export const SCOOP = scoop;
 
 export const CREAM_CAN_ART = { width: 64, height: 150 };
@@ -209,9 +203,9 @@ export const BIN_HEAD = 0.1713;
 export const ROOM_BG = kitchenOverhead;
 export const SUGAR_SCOOP = sugarScoop;
 export const SUGAR_SCOOP_ART = { width: 400, height: 260 };
-/** The overhead cloth mat shares the transparent counter-props atlas. */
-export const CUP_HOLDER = cupHolder;
-export const CUP_HOLDER_ART = { x: 1029, y: 655, width: 455, height: 283 };
+/** The gray curled holder is independent of the clear cup and stays on the counter. */
+export const CUP_HOLDER = REFERENCE_CUP;
+export const CUP_HOLDER_ART = REFERENCE_CUP_PARTS.holder.source;
 export const ROOM_BG_SIZE = EXTENDED_ROOM_SIZE;
 export const ROOM_BG_TABLE = { top: 740 + ROOM_EXTRA_HEIGHT, base: 1025 + ROOM_EXTRA_HEIGHT };
 export const ROOM_BG_TEA_SHELF = {
@@ -257,7 +251,7 @@ export const ROOM_BG_EXTRAS = {
  * Where the lifted cup holder fits on the extended work top. It does not pan with the room:
  * one shared mat occupies the foreground, clear of the counter's front edge.
  */
-export const ROOM_BG_CUP_HOLDER = { x: 835, y: 805 + ROOM_EXTRA_HEIGHT, width: 250, height: 250 * 283 / 455 };
+export const ROOM_BG_CUP_HOLDER = { x: 835, y: 805 + ROOM_EXTRA_HEIGHT, width: 250, height: 250 * 211 / 598 };
 /**
  * The rows of the plate that have to stay on screen whatever shape the room is given: the crown
  * of a tank standing on the upper shelf, down to the front edge of the cup's holder. Between them
@@ -354,7 +348,7 @@ export const ICON_CUP = iconCup;
 /** Width ÷ height of every sprite, so nothing gets squashed by accident. */
 export const ART = {
   jar: 116 / 205,
-  cup: 113 / 174,
+  cup: 113 / CUP_DISPLAY_HEIGHT,
   pan: 235 / 239,
   bin: 256 / 226,
   scoop: 102 / 64,
@@ -417,7 +411,6 @@ export const PRELOAD: Sprite[] = [
   CUP_ICE,
   // the cup, and the painted tea inside it
   CUP_CREAM,
-  CUP_DECAL,
   ...Object.values(DRINK),
   ...Object.values(DRINK_MILKY),
   ...Object.values(DRINK_TOP),
