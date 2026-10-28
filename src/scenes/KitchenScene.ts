@@ -14,7 +14,8 @@ import {
   KITCHEN_BOARDS, KITCHEN_BOARD_ART, KITCHEN_CLEAR_BOARDS, KITCHEN_CLEAR_BOARDS_PATCH,
   KITCHEN_ROOM_TRAY_RAISE, KITCHEN_ROOM_CLEAR_ICE, KITCHEN_ROOM_CLEAR_ICE_PATCH,
 } from '../art/kitchenRoomArt';
-import { CUP_ART, CUP_FOOT } from '../art/cupGeometry';
+import { holderSurfaceY, HOLDER_HEIGHT, HOLDER_RECESS } from '../art/referenceCupArt';
+import { CUP_ART, CUP_BASE, CUP_FOOT } from '../art/cupGeometry';
 import { gameArea } from '../game/host';
 import { bakeCanvas, canvasFont, placeCamera, tex } from '../game/view';
 import { playSound, setPourFill, setPouring as setPourSound } from '../sound';
@@ -29,7 +30,7 @@ import { Atlas } from '../kitchen/atlas';
 import { cupSizeFor, findDairyStation, findStation, hintFor, KitchenLayout, layoutKitchen, Station } from '../kitchen/layout';
 import { KITCHEN_TEXT_MIN } from '../kitchen/typography';
 import { DURATION, EASE } from '../kitchen/motion';
-import { cupShadowTexture, Spill, Stream } from '../kitchen/pourEffects';
+import { cupSeatShadowTexture, cupShadowTexture, Spill, Stream } from '../kitchen/pourEffects';
 
 /**
  * The kitchen you work in — `KitchenStation.tsx`, as a Phaser scene. Page 1 of the pager.
@@ -77,6 +78,7 @@ export class KitchenScene extends Phaser.Scene {
 
   private room!: Phaser.GameObjects.Container;
   private holder!: Phaser.GameObjects.Image;
+  private holderFront!: Phaser.GameObjects.Image;
   private matLabel: Phaser.GameObjects.Image | null = null;
   private stationViews = new Map<string, { container: Phaser.GameObjects.Container; art: Phaser.GameObjects.Container; locked?: boolean }>();
   private teaLabels = new Map<string, Phaser.GameObjects.Image>();
@@ -126,6 +128,7 @@ export class KitchenScene extends Phaser.Scene {
   create() {
     this.room = this.add.container(0, 0).setDepth(DEPTH.room);
     this.holder = this.add.image(0, 0, tex(CUP_HOLDER)).setOrigin(0).setDepth(DEPTH.holder);
+    this.holderFront = this.add.image(0, 0, '__DEFAULT').setOrigin(0).setDepth(DEPTH.cup + 1).setVisible(false);
     this.cupShadow = this.add.image(0, 0, cupShadowTexture(this)).setOrigin(0).setDepth(DEPTH.shadow).setVisible(false);
     this.level = store.state.build.fill;
 
@@ -442,12 +445,46 @@ export class KitchenScene extends Phaser.Scene {
     if (this.held) this.showStationObject(this.held, false);
 
     const box = layout.holder;
-    const matKey = bakeCanvas(this, `curled-holder:shared:${sized(box.width, box.height)}`, box.width * 2, box.height * 2, c => {
+    const faceKey = bakeCanvas(this, `holder-plane:${sized(box.width, box.height)}`, box.width * 2, box.height * 2, c => {
       c.scale(2, 2);
+      c.imageSmoothingQuality = 'high';
       const crop = CUP_HOLDER_ART;
-      c.drawImage(sourceImage(this, CUP_HOLDER), crop.x, crop.y, crop.width, crop.height, 0, 0, box.width, box.height);
+      const source = sourceImage(this, CUP_HOLDER);
+      for (let row = 0; row < crop.height; row++) {
+        const y0 = holderSurfaceY(row) / HOLDER_HEIGHT * box.height;
+        const y1 = holderSurfaceY(row + 1) / HOLDER_HEIGHT * box.height;
+        c.drawImage(source, crop.x, crop.y + row, crop.width, 1, 0, y0, box.width, y1 - y0 + 0.08);
+      }
     });
-    this.holder.setTexture(matKey).setPosition(box.left, box.top).setDisplaySize(box.width, box.height);
+    // Cast from the finished silhouette once, leaving space for the soft edge on all sides.
+    const pad = 8;
+    const holderKey = bakeCanvas(this, `holder-contact:${sized(box.width, box.height)}`,
+      box.width + pad * 2, box.height + pad * 2, c => {
+        const face = this.textures.get(faceKey).getSourceImage() as CanvasImageSource;
+        c.shadowColor = '#69513d42';
+        c.shadowBlur = 3.5;
+        c.shadowOffsetX = -2;
+        c.shadowOffsetY = 2.5;
+        c.drawImage(face, pad, pad, box.width, box.height);
+      });
+    this.holder.setTexture(holderKey).setPosition(box.left - pad, box.top - pad)
+      .setDisplaySize(box.width + pad * 2, box.height + pad * 2);
+    const frontKey = bakeCanvas(this, `holder-near-lip:${sized(box.width, box.height)}`, box.width, box.height, c => {
+      const recess = HOLDER_RECESS;
+      const px = (x: number) => x / CUP_HOLDER_ART.width * box.width;
+      const py = (y: number) => holderSurfaceY(y) / HOLDER_HEIGHT * box.height;
+      c.beginPath();
+      c.moveTo(px(recess.x - recess.rx), py(recess.y));
+      // Trace the projected near ellipse, then keep only the actual painted holder below it.
+      for (let step = 1; step <= 64; step++) {
+        const angle = Math.PI - step / 64 * Math.PI;
+        c.lineTo(px(recess.x + Math.cos(angle) * recess.rx), py(recess.y + Math.sin(angle) * recess.ry));
+      }
+      c.lineTo(box.width, box.height); c.lineTo(0, box.height); c.closePath();
+      c.clip();
+      c.drawImage(this.textures.get(faceKey).getSourceImage() as CanvasImageSource, 0, 0, box.width, box.height);
+    });
+    this.holderFront.setTexture(frontKey).setPosition(box.left, box.top).setDisplaySize(box.width, box.height);
   }
 
   /** Locks, labels and the active tap: everything about the equipment that follows the drink. */
@@ -1397,13 +1434,20 @@ export class KitchenScene extends Phaser.Scene {
       const onMat = Math.abs(x - layout.homeX) < 0.5 && Math.abs(y - layout.homeY) < 0.5
         && Math.abs(scale - 1) < 0.01 && this.gesture?.kind !== 'cup';
       this.cupShadow.setVisible(docked || onMat).setAlpha(this.appear);
+      this.holderFront.setVisible(onMat).setAlpha(this.appear);
       if (docked || onMat) {
         const w = layout.cupW * scale;
-        const h = w * 0.18;
-        this.cupShadow.setPosition(x + w * 0.12, y + layout.cupH * scale * CUP_FOOT / CUP_ART.h - h / 2)
-          .setDisplaySize(w * 0.76, h);
+        const footY = y + layout.cupH * scale * CUP_FOOT / CUP_ART.h;
+        const sw = onMat ? w * (CUP_BASE.rx * 2 + 5) / CUP_ART.w : w * 0.76;
+        const sh = onMat ? layout.cupH * scale * (CUP_BASE.ry * 2 + 6) / CUP_ART.h : w * 0.18;
+        this.cupShadow.setTexture(onMat ? cupSeatShadowTexture(this) : cupShadowTexture(this))
+          .setPosition(x + w / 2 - sw / 2, footY - sh / 2 + (onMat ? 0.5 : 0))
+          .setDisplaySize(sw, sh);
       }
-    } else this.cupShadow.setVisible(false);
+    } else {
+      this.cupShadow.setVisible(false);
+      this.holderFront.setVisible(false);
+    }
     this.reportCup();
 
     // The stream, and the meter over the kitchen.

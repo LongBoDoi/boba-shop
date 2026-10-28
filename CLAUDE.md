@@ -890,34 +890,43 @@ Whole rotated outlines fit the mouth, tapered walls, and curved floor before cli
 cubes settle on the floor or topping bed, then rise continuously as liquid reaches them.
 `check-cup-contents.cjs` checks 11,520 outlines, spacing, dry-to-wet continuity, floor clearance,
 and cream contact. The active ice uses `ice-natural-front.png`, the untouched full-resolution
-clear-ice painting, with neutral translucent shading instead of opaque blue faces.
+clear-ice painting at low opacity beneath broad, translucent facets. Submerged cubes pick up
+the tea colour and lose contrast with depth; milk obscures them more strongly. Glass reflections
+remain in front of both exposed and submerged ice. Topping washes use each sprite’s actual alpha,
+with smaller, softer rear pieces and stronger front pieces. Syrup pools on the floor before a pour
+and dissolves into the first shallow fill; freshly poured milk briefly forms translucent swirls.
 
 ### Liquid and glass layers
 
 The frontal cup uses a 113 x 174 coordinate box, a shallow mouth, and base contact y157.5.
-`cupDesign.ts` defines the reference clear shell, separate gray curled silicone holder, cat-ear dome and
-hollow transparent straw as shared paths and gradients for both Canvas and SVG.
-`frontalCupArt.ts` rasterises the shell at six pixels per unit (678×1044); the opening is a
-transparent hole in the rolled rim, not a filled oval. `CupView` draws one live drink canvas,
-the lid/straw, and a size badge. The old cat-face decal is no longer loaded.
-The finishing texture reserves 70 units above the rim, independently of the cream's 40-unit
-headroom. The straw passes through the dome's central hole at x56.5/y−21, with reduced opacity
-below it. Order-size icons, customer cups and the carried straw share the same drawing.
-The gray holder replaces the yellow mat as a counter object, with a centered recessed seat;
-it stays behind during cup carries. The cup shell has a simple clear bottom with no attached curl.
-See `docs/cat-cup-design.md`.
+`referenceCupArt.ts` registers the painted cup, cat-ear lid, straw and separate silicone holder
+from `cup-reference-painted.png` (1536×1024 RGBA). The display aspect is 113×154 while the live
+contents retain their 113×174 coordinate system. `frontalCupArt.ts` registers the shell at six
+pixels per unit; no extra vector outline or cat-face decal covers it.
+The finishing texture reserves 100 units above the rim, independently of cream's 40-unit
+headroom. The straw passes through the lid at x56.5/y−35, with reduced opacity below it.
+Order-size icons, customer cups and carried straws use the same painted crops.
+The holder's top plane is expanded and its front wall shortened with a continuous row projection.
+`HOLDER_SEAT` derives from that projection; all cup sizes stand on the measured recess center.
+A padded silhouette shadow grounds the holder on the marble. A separate oval contact shadow
+matches the cup base and disappears on pickup. `HOLDER_RECESS` also defines a painted front-lip
+layer above the resting cup, with `CUP_SEAT_DEPTH` giving the small seated overlap; that layer
+hides immediately on carry or docking elsewhere. The lower glass split stays inside the well so
+it cannot cut gaps out of the cup's wall contours. See `docs/cat-cup-design.md`.
 
-`cupPainter.ts` paints live liquid, rear floor glass, submerged ice, painted toppings, exposed
-ice, rear glass, cream, then the near glass and actual rolled lip. Everything stays behind the
+`cupPainter.ts` paints rear floor glass, live liquid, syrup, submerged ice, painted toppings,
+exposed ice, rear glass, cream, then the near glass and actual rolled lip. Everything stays behind the
 shared curved contents boundary. No old low-resolution cup backing, edge, or extra glint layer
 is loaded. See `docs/frontal-cup.md`.
 
-- **Liquid and ice share `cupSurface(level)`.** Empty is y157.5/rx33.5/ry9.5; full is y28/rx42.9/ry10.08.
+- **Liquid and ice share `cupSurface(level)`.** Empty is y157.5/rx29.5/ry9.5; full is y28/rx42.9/ry10.08.
   The lower surface meets the same rounded floor as the contents; a small three-unit clear plastic band remains below it. The stream and fill meter use the same endpoints.
 - **Milk uses each tea's milky palette.** Body and surface gradients preserve volume, with
   restrained painted detail, gentle meniscus reflections, pour ripples, and bubbles.
 - **Glass has warm, natural material detail.** Clear PET reflections cross filled regions at
-  18%; a rolled rim, curved base ring and broad white glints stay crisp at device density.
+  62%; reflections continue across ice and the topping bed. A cached front-wall texture replaces
+  only the back-floor painting with continuous wall material, so the rear base ellipse stays
+  behind the contents. A rolled rim and the outer base contour stay crisp at device density.
 - **Ingredients are identified by pictures, without name tags.** Tea tanks have distinct
   leaf, jasmine, anise, rolled-leaf, taro and matcha emblems (`art/ingredientMarks.ts`). Topping
   pans show their contents unobscured. Sugar uses a cube motif; the ice box keeps its original
@@ -949,11 +958,12 @@ is loaded. See `docs/frontal-cup.md`.
   ingredient name captions or plaques.
 - **Cream is a natural painted swirl** (`kitchen/creamPainter.ts`), using the new transparent
   `cup-cream-natural-front.png` with finer moist grooves, soft ivory folds, and a curled peak.
-  Brulee gets golden custard shading, caramel patches, and flecks. Only the painted swirl and a soft contact
-  edge meet the tea; the separate cap and mixing-plume overlay are removed so the drink
-  contents stay visible. The actual near rim crosses in front. Cream leaves tea level and ice
+  Brulee gets golden custard shading, caramel patches, and flecks. The swirl sits at the liquid
+  surface with a narrow foam bed around it and three short dissolving trails below the wet edge.
+  Its foot extends behind the near rim. Cream leaves tea level and ice
   positions unchanged; 40 units of texture headroom preserve the peak. The new source crop is
-  x130..1324, y82..1046, with contact y753. See `docs/frontal-cup.md` for prompts.
+  x130..1324, y82..1046, with contact y753. See `docs/frontal-cup.md` for prompts
+  and `docs/cup-contents-rendering.md` for compositing and browser checks.
 - **The dispenser's tea** is drawn into the tank's transparent chamber with the same shading, more
   strongly: it is a big volume behind glass, and the raster texture that works in a cup softens it.
   The tank's own glass and hardware are the painted sprite, untouched.
@@ -1233,11 +1243,11 @@ The active room uses `ROOM_BG_SIZE` (1920×1430 logical coordinates), with the o
 vertical offset and horizontal pan.
 Re-measure `ROOM_BG_*` anchors and topping tray edges when changing the active plate.
 
-`kitchenHolderFor` places one shared mat near the center of the clear foreground marble, with
-space before the counter edge and beside the sugar tray. Its preferred width is 250 logical
-units; it preserves the painted aspect ratio and enough clearance around an L cup on short screens.
-The mat stays fixed while the room pans. Both preparation and finished cups stand by `CUP_FOOT`
-at the same mat center; there is no separate finishing home. See [single mat](docs/single-cup-mat.md).
+`kitchenHolderFor` places one silicone holder on the clear foreground marble, with space before
+the counter edge and beside the sugar tray. Its preferred width is 250 logical units. Its height
+and recessed seat come from the same tabletop projection in `referenceCupArt.ts`.
+The holder stays fixed while the room pans. Preparation and finished cups stand by `CUP_FOOT`
+at `HOLDER_SEAT`; there is no separate finishing home. See [holder](docs/cat-cup-design.md).
 The room opens panned all the way to the left.
 
 The background contains empty pans, so the topping atlas fills their measured plane. Each row

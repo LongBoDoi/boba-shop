@@ -109,7 +109,7 @@ try {
       }
     }
   }
-  // Cream rises above the tea without losing contact; its peak still fits the texture.
+  // The swirl sits in a thin foam bed at the actual tea level; its peak fits the texture.
   const headroom = CUP_OVERFLOW * CUP_ART.h;
   for (let fill = 0; fill <= 1.1501; fill += 0.02) {
     const box = creamBox(fill);
@@ -119,15 +119,18 @@ try {
     const surface = cupSurface(fill);
     const contact = creamSurface(fill);
     assert(Math.abs(box.x + 52 * scale - 56.5) < 0.001, 'Cream shares the tea centre');
-    assert(Math.abs(box.y + 58 * scale - contact.y) < 0.001, 'Cream and its soft edge share the raised contact');
+    assert(Math.abs(box.y + 58 * scale - contact.y) < 0.001, 'Cream and its soft edge share the contact');
     assert(contact.y <= surface.y, 'Cream stands above the tea instead of lowering it');
+    assert(surface.y - contact.y < 2, 'The cream foot stays seated in the tea instead of hovering above it');
     assert(contact.y + contact.ry >= surface.y, 'The raised cream still touches the tea');
-    if (fill >= 1) assert(contact.y + contact.ry <= 31, 'At full, the cream sits almost entirely above the near lip');
-    assert(Math.abs(42 * scale - surface.rx) < 0.001, 'Cream matches the tea width');
+    if (fill >= 1) assert(contact.y + contact.ry > 31 && contact.y + contact.ry < 38,
+      'At full, the wet cream foot extends behind the near lip');
+    const foamBed = surface.rx - 42 * scale;
+    assert(foamBed > 1 && foamBed < 3, 'A narrow foam bed surrounds the swirl within the liquid footprint');
   }
 
   console.log(`check-cup-contents: ${outlines} ice outlines fit the cup; toppings clear the floor; `
-    + 'second scoop stays spaced near the surface; raised cream keeps contact with the tea and its peak fits the texture.');
+    + 'second scoop stays spaced near the surface; cream stays seated in its foam bed and its peak fits the texture.');
 
 } finally {
   if (previousLoader) require.extensions['.ts'] = previousLoader;

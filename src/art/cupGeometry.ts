@@ -45,7 +45,7 @@ const MOUTH_RY = 10.1;
 /** All contents stay behind the inner mouth, tapered walls and curved floor of the painted glass. */
 export const CUP_CONTENTS = `M13.6 ${MOUTH_Y} A${MOUTH_RX} ${MOUTH_RY} 0 0 1 99.4 ${MOUTH_Y} ${CUP_FLOOR}`;
 /** The inner floor painting is behind the ingredients; its front edge and wall glints are in front. */
-export const CUP_REAR_FLOOR_GLASS = `M21.3 132H91.7 ${CUP_FLOOR}`;
+export const CUP_REAR_FLOOR_GLASS = `M24.4 132H88.6 ${CUP_FLOOR}`;
 /**
  * Near glass traced from cup.png's painted lip, independently of the liquid well.
  * The actual front lip crosses the centre at y29–31; the old y35.5 split missed it.

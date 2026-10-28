@@ -173,3 +173,20 @@ export function cupShadowTexture(scene: Phaser.Scene): string {
   scene.textures.addCanvas(key, canvas);
   return key;
 }
+
+/** A tight oval contact follows the cup foot inside the silicone recess. */
+export function cupSeatShadowTexture(scene: Phaser.Scene): string {
+  return bakeCanvas(scene, 'cup-seat-contact', 100, 40, c => {
+    c.save();
+    c.translate(50, 20);
+    c.scale(47, 17);
+    const g = c.createRadialGradient(0, 0, 0.7, 0, 0, 1);
+    g.addColorStop(0, '#44382c00');
+    g.addColorStop(0.8, '#44382c0d');
+    g.addColorStop(0.9, '#44382c38');
+    g.addColorStop(1, '#44382c00');
+    c.fillStyle = g;
+    c.beginPath(); c.arc(0, 0, 1, 0, Math.PI * 2); c.fill();
+    c.restore();
+  });
+}

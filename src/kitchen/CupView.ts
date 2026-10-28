@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 
 import { Drink } from '../game/ingredients';
-import { CUP_FINISH_RISE, paintLid, paintStraw } from '../art/finishingArt';
+import { CUP_FINISH_RISE, paintLid, paintInsertedStraw } from '../art/finishingArt';
 import {
   CUP_CREAM, CUP_ICE, DRINK, DRINK_MILKY, DRINK_MILKY_TOP, DRINK_TOP,
 } from '../art/kitchenArt';
@@ -23,6 +23,7 @@ let viewCount = 0;
 function images(scene: Phaser.Scene): CupImages {
   const img = (asset: string) => scene.textures.get(tex(asset)).getSourceImage() as CanvasImageSource;
   return {
+    reference: img(CUP_GLASS),
     sprite: frontalCupGlass(img(CUP_GLASS)),
     cream: img(CUP_CREAM),
     ice: img(CUP_ICE),
@@ -59,6 +60,8 @@ export class CupView {
   private readonly sizeTag: Phaser.GameObjects.Image;
   private sizeTagWidth = 0;
   private readonly finish: Phaser.GameObjects.Image;
+  private lidded = false;
+  private insertedStraw = false;
 
   constructor(private readonly scene: Phaser.Scene, readonly width: number, readonly height: number, drink: Drink) {
     this.key = `cup-canvas-${++viewCount}`;
@@ -78,14 +81,18 @@ export class CupView {
   }
 
   setFinish(lidded: boolean, straw: boolean) {
+    const inserted = lidded && straw;
+    if (this.lidded !== lidded || this.insertedStraw !== inserted) this.dirty = true;
+    this.lidded = lidded;
+    this.insertedStraw = inserted;
     this.finish.setVisible(lidded);
     if (!lidded) return;
     const overflow = this.height * CUP_FINISH_RISE / 174;
     const key = bakeCanvas(this.scene, `cup-finish:${this.width}:${straw}`, this.width, this.height + overflow, (c) => {
       c.scale(this.width / 113, this.height / 174);
       c.translate(0, CUP_FINISH_RISE);
-      paintLid(c, this.scene.textures.get(tex(CUP_GLASS)).getSourceImage() as CanvasImageSource);
-      if (straw) paintStraw(c, this.scene.textures.get(tex(CUP_GLASS)).getSourceImage() as CanvasImageSource, true);
+      paintLid(c, this.scene.textures.get(tex(CUP_GLASS)).getSourceImage() as CanvasImageSource, 'front');
+      if (inserted) paintInsertedStraw(c, this.scene.textures.get(tex(CUP_GLASS)).getSourceImage() as CanvasImageSource, 'outside');
     });
     this.finish.setY(-overflow).setTexture(key).setDisplaySize(this.width, this.height + overflow);
   }
@@ -158,6 +165,8 @@ export class CupView {
       portionSettle: this.portionStart.map(progress),
       phase: this.phase,
       agitation: this.agitation,
+      lidded: this.lidded,
+      straw: this.insertedStraw,
     });
     this.texture.refresh();
   }

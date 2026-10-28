@@ -50,7 +50,7 @@ import pieceIceV2 from '../assets/kitchen/piece-ice-v2.png';
 import pieceIceClear from '../assets/kitchen/ice-natural-front.png';
 import kitchenOverhead from '../assets/kitchen/kitchen-overhead.png';
 import sugarScoop from '../assets/kitchen/liquid-sugar-ladle.png';
-import { REFERENCE_CUP, REFERENCE_CUP_PARTS, CUP_DISPLAY_HEIGHT } from './referenceCupArt';
+import { REFERENCE_CUP, REFERENCE_CUP_PARTS, CUP_DISPLAY_HEIGHT, HOLDER_HEIGHT } from './referenceCupArt';
 import iconTrash from '../assets/kitchen/icon-trash.png';
 import iconCup from '../assets/kitchen/icon-cup.png';
 
@@ -251,7 +251,7 @@ export const ROOM_BG_EXTRAS = {
  * Where the lifted cup holder fits on the extended work top. It does not pan with the room:
  * one shared mat occupies the foreground, clear of the counter's front edge.
  */
-export const ROOM_BG_CUP_HOLDER = { x: 835, y: 805 + ROOM_EXTRA_HEIGHT, width: 250, height: 250 * 211 / 598 };
+export const ROOM_BG_CUP_HOLDER = { x: 835, y: 805 + ROOM_EXTRA_HEIGHT, width: 250, height: 250 * HOLDER_HEIGHT / 598 };
 /**
  * The rows of the plate that have to stay on screen whatever shape the room is given: the crown
  * of a tank standing on the upper shelf, down to the front edge of the cup's holder. Between them

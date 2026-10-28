@@ -5,7 +5,21 @@ import { el } from './svg';
 export const REFERENCE_CUP = reference;
 export const REFERENCE_CUP_ATLAS = { width: 1536, height: 1024 };
 export const CUP_DISPLAY_HEIGHT = 154;
-export const HOLDER_SEAT = { x: 0.615, y: 0.39 };
+/** Expand the top plane and shorten the front wall, with a smooth change in slope. */
+export function holderSurfaceY(y: number) {
+  const start = 105, end = 150, topScale = 1.48, frontScale = 0.56;
+  if (y <= start) return y * topScale;
+  const span = end - start;
+  const t = Math.min(y, end) - start;
+  const bend = (frontScale - topScale) / (2 * span);
+  return start * topScale + t * topScale + bend * t * t + Math.max(0, y - end) * frontScale;
+}
+export const HOLDER_HEIGHT = holderSurfaceY(211);
+/** Measured inner seat ellipse, in the holder crop's source coordinates. */
+export const HOLDER_RECESS = { x: 375, y: 83, rx: 145, ry: 30 };
+export const HOLDER_SEAT = { x: HOLDER_RECESS.x / 598, y: holderSurfaceY(HOLDER_RECESS.y) / HOLDER_HEIGHT };
+/** A cup settles slightly into the silicone recess, behind its near lip. */
+export const CUP_SEAT_DEPTH = 3;
 export const REFERENCE_CUP_PARTS = {
   cup: { source: { x: 74, y: 106, width: 552, height: 763 }, target: { x: 3, y: 2, width: 107, height: 168 } },
   lid: { source: { x: 691, y: 162, width: 565, height: 386 }, target: { x: 3, y: -53, width: 107, height: 84 } },

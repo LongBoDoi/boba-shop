@@ -1,4 +1,4 @@
-import { HOLDER_SEAT } from '../art/referenceCupArt';
+import { CUP_SEAT_DEPTH, HOLDER_SEAT } from '../art/referenceCupArt';
 import { CupSize, CUP_SIZE_SCALE, Drink, getIngredient } from '../game/ingredients';
 import { DayConfig } from '../game/levels';
 import { CupBuild } from '../game/reducer';
@@ -211,7 +211,7 @@ export function layoutKitchen(config: DayConfig, W: number, H: number, size: Cup
   return {
     stations, emptyBins, cupW, cupH,
     homeX: holder.left + holder.width * HOLDER_SEAT.x - cupW / 2,
-    homeY: holder.top + holder.height * HOLDER_SEAT.y - cupH * CUP_FOOT / CUP_ART.h,
+    homeY: holder.top + holder.height * HOLDER_SEAT.y - cupH * (CUP_FOOT - CUP_SEAT_DEPTH) / CUP_ART.h,
     room: { scale, top, width: drawnWidth, height: drawnHeight, maxPan: Math.max(0, drawnWidth - W) },
     holder,
     rack,

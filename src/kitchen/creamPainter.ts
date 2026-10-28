@@ -1,4 +1,5 @@
-import { CUP_ART, CUP_SURFACE_RATIO, cupSurface, pourLevel } from '../art/cupGeometry';
+import { CUP_ART, CUP_SURFACE_RATIO, cupFillPath, cupSurface } from '../art/cupGeometry';
+import { blend, shade } from './color';
 
 const RX = 42;
 const WIDTH = 104, HEIGHT = 80, ORIGIN_X = 52, ORIGIN_Y = 58;
@@ -123,19 +124,57 @@ export function prepareCupCream(id: string, color: string, sprite: CanvasImageSo
 }
 
 export function paintCupCream(c: CanvasRenderingContext2D, level: number, id: string, color: string, sprite: CanvasImageSource, teaColor?: string) {
+  if (teaColor && level > 0) paintCreamInterface(c, level, id, teaColor);
   const { x, y, w, h } = creamBox(level);
   c.drawImage(creamArt(id, color, sprite, teaColor), x, y, w, h);
 }
 
-/** Lift the mound as the cup fills; its curved lower edge still overlaps the tea. */
+/** A wet foam bed and a few dissolving trails join the piped folds to the actual liquid oval. */
+function paintCreamInterface(c: CanvasRenderingContext2D, level: number, id: string, tea: string) {
+  const s = cupSurface(level);
+  const cream = id === 'brulee' ? '#EFCB8F' : '#F8EBD1';
+  c.save();
+  c.clip(new Path2D(cupFillPath(level)));
+  // Soft, uneven diffusion below the near edge, instead of a solid cream-coloured outline.
+  for (const [offset, width, length, bend] of [[-0.58, 6, 12, 3], [-0.12, 9, 8, -3], [0.47, 5, 15, -4]]) {
+    const x = 56.5 + offset * s.rx;
+    const y = s.y + s.ry * Math.sqrt(1 - offset * offset) - 2;
+    const fade = c.createLinearGradient(0, y, 0, y + length);
+    fade.addColorStop(0, `${blend(cream, tea, 0.18)}B0`);
+    fade.addColorStop(0.4, `${blend(cream, tea, 0.34)}60`);
+    fade.addColorStop(1, `${cream}00`);
+    c.fillStyle = fade;
+    c.fill(new Path2D(`M${x - width / 2} ${y} Q${x - width / 2 + bend} ${y + length * 0.6} ${x + bend} ${y + length}
+      Q${x + width / 2 + bend} ${y + length * 0.5} ${x + width / 2} ${y}Z`));
+  }
+  const wet = c.createLinearGradient(0, s.y + s.ry - 3, 0, s.y + s.ry + 4);
+  wet.addColorStop(0, `${cream}E0`);
+  wet.addColorStop(1, `${blend(cream, tea, 0.45)}00`);
+  c.fillStyle = wet;
+  c.beginPath();
+  c.ellipse(56.5, s.y + 1.3, s.rx, s.ry + 2.5, 0, 0, Math.PI * 2);
+  c.fill();
+  const top = c.createLinearGradient(0, s.y - s.ry, 0, s.y + s.ry);
+  top.addColorStop(0, blend(cream, tea, 0.2));
+  top.addColorStop(0.45, shade(cream, 10));
+  top.addColorStop(1, blend(cream, tea, 0.12));
+  c.fillStyle = top;
+  c.beginPath();
+  c.ellipse(56.5, s.y, s.rx - 0.35, s.ry, 0, 0, Math.PI * 2);
+  c.fill();
+  c.restore();
+}
+
+/** The mound is seated in the liquid, with a narrow foam bed visible around its foot. */
 export function creamSurface(level: number) {
   const surface = cupSurface(level);
-  const scale = surface.rx / RX;
-  return { ...surface, y: Math.min(surface.y - 8 * pourLevel(level),
+  const scale = surface.rx * 0.94 / RX;
+  return { ...surface, rx: surface.rx * 0.94, ry: surface.ry * 0.94,
+    y: Math.min(surface.y - 1.2,
     CUP_ART.h - (HEIGHT - ORIGIN_Y) * scale - 1) };
 }
 
-/** Cream keeps the tea's width and perspective while standing mostly above the rim at full. */
+/** Cream keeps the tea's perspective, leaving room for the surrounding wet foam edge. */
 export function creamBox(level: number) {
   const surface = creamSurface(level);
   const scale = surface.rx / RX;
