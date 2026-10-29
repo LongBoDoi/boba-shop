@@ -1,5 +1,8 @@
 # Cup organizer on the counter
 
+The current ivory cat-themed rack and straw box supersede the wooden organizer and separate
+plaques described below. See [cat organizers](cat-organizers.md) for assets, anchors and checks.
+
 Removed the long open-backed wooden shelf/bench behind the cup stacks. The compact three-stack wooden cup organizer remains, now resting directly on the marble counter with a contact shadow. The clean sunlit wall, tall tea rack, machine, straw box, boards, pans and ice keep their existing designs.
 
 Built-in imagegen, edit mode. Saved asset: `src/assets/kitchen/kitchen-room-counter-cups.png` (1452×1083), selected source `exec-4767d549-40e4-42ba-936d-c24c4b50d63f.png`. The earlier backgrounds remain available as references. `kitchenRoomArt.ts` loads the new complete background without wall strips. `ROOM_BG_CUP_STATION` now spans logical y410..680, with stack tops 484/453/410 for S/M/L, aligning selection and badges with the lower organizer.

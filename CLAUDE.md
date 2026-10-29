@@ -962,9 +962,10 @@ is loaded. See `docs/frontal-cup.md`.
   follow the background scale in every orientation, and stay the same when picked up. Cream counter objects
   hide while held. See `docs/milk-cartons.md`, `docs/cream-options.md` and `docs/visual-orders.md`.
 - **Functional kitchen lettering keeps an 11 CSS pixel minimum** (`kitchen/typography.ts`):
-  cup-size badges, quantities and hints. Small warm-paper S/M/L plaques sit centered beneath the
-  painted stacks on the rack's wooden front; their anchors follow `ROOM_BG_CUP_STATION.labels`,
-  independently of touch-target minimums. The cup-size badge compensates for
+  cup-size badges, quantities and hints. The ivory cup rack has painted S/M/L cat medallions,
+  with no separate plaque overlays. Its clear stacks and the matching wrapped-straw box use
+  two small local patches; all other background pixels remain original. Touch targets follow
+  their measured footprints. See `docs/cat-organizers.md`. The cup-size badge compensates for
   docking scale. Ingredient names remain available to screen readers; there are no visible
   ingredient name captions or plaques.
 - **Cream is a natural painted swirl** (`kitchen/creamPainter.ts`), using the new transparent

@@ -4,7 +4,7 @@ import {
   CupSize, Drink, EMPTY_DRINK, getIngredient, MAX_ICE_SCOOPS, MAX_POUR, MILK_SPLASH, POUR_RATE, SUGAR_STEPS,
 } from '../game/ingredients';
 import { GameState } from '../game/reducer';
-import { CUP_HOLDER, CUP_HOLDER_ART, ROOM_BG_CUP_STATION, ROOM_BG_LIDDING, ROOM_BG_SIZE, TEA_DISPENSER_ART, TEA_DISPENSERS } from '../art/kitchenArt';
+import { CUP_HOLDER, CUP_HOLDER_ART, ROOM_BG_LIDDING, ROOM_BG_SIZE, TEA_DISPENSER_ART, TEA_DISPENSERS } from '../art/kitchenArt';
 import { ORIGINAL_ROOM_SIZE, ROOM_EXTRA_HEIGHT } from '../art/roomGeometry';
 import { TOPPING_PANS } from '../art/toppingArt';
 import { equipmentFrame, PaintedEquipmentId } from '../art/equipmentArt';
@@ -13,6 +13,7 @@ import {
   KITCHEN_ORIGINAL_COUNTER, KITCHEN_ORIGINAL_COUNTER_ART, KITCHEN_ROOM_TRAY_CELLS,
   KITCHEN_BOARDS, KITCHEN_BOARD_ART, KITCHEN_CLEAR_BOARDS, KITCHEN_CLEAR_BOARDS_PATCH,
   KITCHEN_ROOM_TRAY_RAISE, KITCHEN_ROOM_CLEAR_ICE, KITCHEN_ROOM_CLEAR_ICE_PATCH,
+  KITCHEN_ORGANIZER_PATCHES,
 } from '../art/kitchenRoomArt';
 import { holderSurfaceY, HOLDER_HEIGHT, HOLDER_RECESS } from '../art/referenceCupArt';
 import { CUP_ART, CUP_BASE, CUP_FOOT } from '../art/cupGeometry';
@@ -207,6 +208,30 @@ export class KitchenScene extends Phaser.Scene {
     // Render the repaired wall and room together: separate strips left a visible blurred join.
     this.room.add(this.add.image(0, room.top, tex(KITCHEN_ROOM_RENDER))
       .setOrigin(0).setDisplaySize(room.width, ROOM_BG_SIZE.height * room.scale));
+    // Only feather the surrounding wall/marble, never the organizers themselves.
+    // Original background pixels outside these small rectangles are untouched.
+    for (const [index, patch] of KITCHEN_ORGANIZER_PATCHES.entries()) {
+      const key = bakeCanvas(this, `cat-organizer:${index}`, patch.width, patch.height, c => {
+        c.drawImage(sourceImage(this, patch.image), 0, 0, patch.width, patch.height);
+        c.globalCompositeOperation = 'destination-in';
+        const across = c.createLinearGradient(0, 0, patch.width, 0);
+        across.addColorStop(0, 'transparent');
+        across.addColorStop(patch.feather / patch.width, '#000');
+        across.addColorStop(1 - patch.feather / patch.width, '#000');
+        across.addColorStop(1, patch.x + patch.width === KITCHEN_ROOM_ART.width ? '#000' : 'transparent');
+        c.fillStyle = across; c.fillRect(0, 0, patch.width, patch.height);
+        const down = c.createLinearGradient(0, 0, 0, patch.height);
+        down.addColorStop(0, 'transparent');
+        down.addColorStop(patch.feather / patch.height, '#000');
+        down.addColorStop(1 - patch.feather / patch.height, '#000');
+        down.addColorStop(1, 'transparent');
+        c.fillStyle = down; c.fillRect(0, 0, patch.width, patch.height);
+      });
+      this.room.add(this.add.image(patch.x / KITCHEN_ROOM_ART.width * room.width,
+        room.top + patch.y / KITCHEN_ROOM_ART.height * room.height, key).setOrigin(0)
+        .setDisplaySize(patch.width / KITCHEN_ROOM_ART.width * room.width,
+          patch.height / KITCHEN_ROOM_ART.height * room.height));
+    }
     // Read the first design directly, without regenerating or baking its boards and counter.
     const counter = KITCHEN_ORIGINAL_COUNTER_ART;
     const counterTexture = this.textures.get(tex(KITCHEN_ORIGINAL_COUNTER));
@@ -319,34 +344,6 @@ export class KitchenScene extends Phaser.Scene {
     const sized = (w: number, h: number) => `${w.toFixed(1)}x${h.toFixed(1)}`;
     type Piece = { frame: string; x: number; y: number; w: number; h: number; dims?: boolean; name?: string; visible?: boolean };
     const pieces: { station?: Station; items: Piece[] }[] = [];
-
-    // Small paper plaques sit on the wooden front, centered under the actual painted stacks.
-    const labels = ROOM_BG_CUP_STATION.labels;
-    layout.rack.forEach((stack, index) => {
-      const w = Math.max(26, labels.width * room.scale);
-      const h = Math.max(14, labels.height * room.scale);
-      const frame = atlas.add(`cup-size:${stack.size}:${sized(w, h)}`, w, h, c => {
-        // A tight contact shadow and warm paper shading keep these part of the organizer.
-        roundRect(c, 1, 1.5, w - 2, h - 2, 2);
-        c.fillStyle = 'rgba(100, 57, 23, 0.22)'; c.fill();
-        const paper = c.createLinearGradient(0, 1, 0, h - 2);
-        paper.addColorStop(0, '#FFF0CF'); paper.addColorStop(1, '#EAC995');
-        roundRect(c, 1, 0.5, w - 2, h - 2, 2);
-        c.fillStyle = paper; c.fill();
-        c.strokeStyle = '#BA8C55'; c.lineWidth = 0.65; c.stroke();
-        c.fillStyle = 'rgba(255, 250, 225, 0.7)'; c.fillRect(3, 1.5, w - 6, 0.6);
-        c.fillStyle = '#BB915E';
-        for (const x of [4, w - 4]) {
-          c.beginPath(); c.arc(x, (h - 1) / 2, 0.65, 0, Math.PI * 2); c.fill();
-        }
-        c.font = canvasFont(Math.max(KITCHEN_TEXT_MIN, h * 0.58), 700);
-        c.textAlign = 'center'; c.textBaseline = 'alphabetic'; c.fillStyle = '#79502F';
-        const glyph = c.measureText(stack.size);
-        c.fillText(stack.size, w / 2, (h - 1 + glyph.actualBoundingBoxAscent - glyph.actualBoundingBoxDescent) / 2);
-      });
-      pieces.push({ items: [{ frame, x: labels.centers[index] * room.scale - w / 2,
-        y: room.top + labels.y * room.scale - h / 2, w, h }] });
-    });
 
     for (const bin of layout.emptyBins) {
       const extent = panExtent(bin.w, bin.h, bin.panShape);

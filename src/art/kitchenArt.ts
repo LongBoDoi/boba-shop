@@ -59,6 +59,7 @@ import { EXTENDED_ROOM_SIZE, EXTENDED_TEA_WIDTH, ROOM_EXTRA_HEIGHT } from './roo
 import {
   KITCHEN_ROOM_RENDER, KITCHEN_ROOM_TRAYS, KITCHEN_ORIGINAL_COUNTER, KITCHEN_ROOM_ART,
   KITCHEN_ROOM_TRAY_RAISE, KITCHEN_ROOM_CLEAR_ICE, KITCHEN_CLEAR_BOARDS,
+  KITCHEN_ORGANIZER_PATCHES,
 } from './kitchenRoomArt';
 import { TOPPING_TRAY_EDGES } from './toppingGeometry';
 import { EQUIPMENT_FRAMES, PAINTED_EQUIPMENT, PAINTED_MILK } from './equipmentArt';
@@ -216,12 +217,12 @@ export const ROOM_BG_TEA_SHELF = {
   slots: ['black', 'green', 'thai', 'oolong', 'taro', 'matcha'],
 };
 /** Painted stations share the room's scrolling coordinates and counter surface. */
-// The compact organizer sits directly on the counter, without a long shelf behind it.
+// Measured against the local cat organizer artwork, in original room pixels.
+const roomX = ROOM_BG_SIZE.width / KITCHEN_ROOM_ART.width;
+const roomY = ROOM_BG_SIZE.height / KITCHEN_ROOM_ART.height;
 export const ROOM_BG_CUP_STATION = {
-  x: 910, y: 60 + ROOM_EXTRA_HEIGHT, width: 440, height: 270,
-  stackTops: [134, 103, 60].map(y => y + ROOM_EXTRA_HEIGHT),
-  // Measured centers beneath the painted stacks, independent of minimum-size touch targets.
-  labels: { centers: [985, 1120, 1263], y: 660, width: 60, height: 30 },
+  x: 656 * roomX, y: 270 * roomY, width: 368 * roomX, height: 257 * roomY,
+  stackTops: [325, 302, 270].map(y => y * roomY),
 };
 export const ROOM_BG_ICE_MACHINE = {
   x: 40, y: 629 + ROOM_EXTRA_HEIGHT - KITCHEN_ROOM_TRAY_RAISE * ROOM_BG_SIZE.height / KITCHEN_ROOM_ART.height,
@@ -229,7 +230,7 @@ export const ROOM_BG_ICE_MACHINE = {
 };
 export const ROOM_BG_LIDDING = {
   lid: { x: 1440, y: 90 + ROOM_EXTRA_HEIGHT, width: 320, height: 300 },
-  straw: { x: 1770, y: 170 + ROOM_EXTRA_HEIGHT, width: 135, height: 220 },
+  straw: { x: 1334 * roomX, y: 314 * roomY, width: 106 * roomX, height: 234 * roomY },
   bay: { x: 1540, y: 208 + ROOM_EXTRA_HEIGHT, width: 142, height: 120, cx: 1605, foot: 320 + ROOM_EXTRA_HEIGHT },
   head: { x: 1510, y: 166 + ROOM_EXTRA_HEIGHT, width: 197, height: 34 },
 };
@@ -390,6 +391,7 @@ export const ART = {
 export const PRELOAD: Sprite[] = [
   // the room itself, and what stands in it
   KITCHEN_ROOM_RENDER,
+  ...KITCHEN_ORGANIZER_PATCHES.map(patch => patch.image),
   KITCHEN_ROOM_TRAYS,
   KITCHEN_ROOM_CLEAR_ICE,
   KITCHEN_ORIGINAL_COUNTER,

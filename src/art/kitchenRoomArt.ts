@@ -4,10 +4,17 @@ import originalCounter from '../assets/kitchen/kitchen-overhead.png';
 import clearIceCounter from '../assets/kitchen/kitchen-room-clear-ice.png';
 import clearBoardsCounter from '../assets/kitchen/kitchen-counter-clear-boards.png';
 import overheadDairy from '../assets/kitchen/dairy-boards-overhead-v2.png';
+import catCupRack from '../assets/kitchen/cat-cup-rack.png';
+import catStrawBox from '../assets/kitchen/cat-straw-box.png';
 
 /** Preserve the room before the repeated whole-image edits softened its details. */
 export const KITCHEN_ROOM_RENDER = originalRoom;
 export const KITCHEN_ROOM_ART = { width: 1452, height: 1083 };
+/** Local replacements only; the original room remains the source everywhere else. */
+export const KITCHEN_ORGANIZER_PATCHES = [
+  { image: catCupRack, x: 624, y: 252, width: 422, height: 303, feather: 10 },
+  { image: catStrawBox, x: 1328, y: 298, width: 124, height: 260, feather: 5 },
+];
 /** Untouched first design: native-resolution counter, including both wooden boards. */
 export const KITCHEN_ORIGINAL_COUNTER = originalCounter;
 export const KITCHEN_ORIGINAL_COUNTER_ART = { width: 1672, height: 941, top: 343 };
