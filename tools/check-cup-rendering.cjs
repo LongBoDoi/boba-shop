@@ -79,6 +79,30 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
       const drySyrup = difference(render({ sweetness: '100' }, 0), empty, [30, 150, 83, 165]);
       const dissolved = difference(render({ sweetness: '100', tea: 'black' }, 0.2),
         render({ tea: 'black' }, 0.2), [25, 130, 88, 168]);
+      const finished = (milk, straw, foam = null) => render({ tea: 'black', milk, foam }, 0.8,
+        { lidded: true, straw });
+      const strawAir = difference(finished(null, true), finished(null, false), [53, -25, 60, -10]);
+      const strawTea = difference(finished(null, true), finished(null, false), [53, 112, 60, 138]);
+      const strawMilk = difference(finished('whole', true), finished('whole', false), [53, 112, 60, 138]);
+      const strawCream = difference(finished(null, true, 'cheese'), finished(null, false, 'cheese'), [53, 27, 60, 45]);
+      const belowStraw = difference(finished(null, true), finished(null, false), [48, 157, 66, 173]);
+      const teaFrame = ambientPhase => render({ tea: 'oolong' }, 0.8, { ambientPhase });
+      const ambientMotion = difference(teaFrame(0.2), teaFrame(0.65), [30, 65, 85, 145]);
+      const loopSeam = difference(teaFrame(0), teaFrame(1), [30, 65, 85, 145]);
+      const chroma = pixels => {
+        let sum = 0, n = 0;
+        for (let y = 80; y < 130; y++) for (let x = 35; x < 80; x++) {
+          const at = ((y + 40) * 2 * 226 + x * 2) * 4;
+          const rgb = [pixels[at], pixels[at + 1], pixels[at + 2]];
+          sum += Math.max(...rgb) - Math.min(...rgb); n++;
+        }
+        return sum / n;
+      };
+      const milkColour = TEAS.map(tea => {
+        const plain = chroma(render({ tea: tea.id }, 0.8));
+        const milk = chroma(render({ tea: tea.id, milk: 'whole' }, 0.8));
+        return { id: tea.id, retainedChroma: milk / plain };
+      });
       const start = performance.now();
       for (let i = 0; i < 100; i++) painter.paint({ ...frame,
         drink: { ...EMPTY_DRINK, tea: 'black', milk: 'whole', ice: 'regular',
@@ -88,12 +112,21 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
       painter.canvas.getContext('2d').getImageData(0, 0, 1, 1);
       const averagePaintMs = (performance.now() - start) / 100;
       return { checked, leaks, clearIce: iceContrast(null), milkyIce: iceContrast('whole'),
-        drySyrup, dissolved, averagePaintMs };
+        drySyrup, dissolved, strawAir, strawTea, strawMilk, strawCream, belowStraw, ambientMotion, loopSeam, milkColour, averagePaintMs };
     });
     assert.deepEqual(result.leaks, [], 'Ingredients must never change pixels outside the cup interior');
     assert(result.clearIce > result.milkyIce, 'Milk obscures submerged ice more than clear tea');
     assert(result.drySyrup > 1, 'Syrup is visible before adding tea');
     assert.equal(result.dissolved, 0, 'Syrup has dissolved once tea covers the floor');
+    assert(result.strawAir > result.strawTea && result.strawTea > result.strawMilk,
+      'The straw is clearest in air, tinted in tea, and softened in milk');
+    assert(result.strawMilk > 12, 'The submerged straw stays readable in milk tea');
+    assert(result.milkColour.every(tea => tea.retainedChroma > 0.55),
+      'Every milk tea retains its pigment instead of washing out to near-white');
+    assert(result.strawCream < 1, 'Opaque cream occludes the inserted straw');
+    assert.equal(result.belowStraw, 0, 'The straw ends above the curved floor');
+    assert(result.ambientMotion > 0.1, 'Settled tea has visible ambient movement without pouring');
+    assert(result.loopSeam < 0.05, 'Ambient tea loops without a visible jump');
     console.log('check-cup-rendering:', JSON.stringify(result));
   } finally {
     await browser.close();

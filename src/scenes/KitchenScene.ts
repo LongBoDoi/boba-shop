@@ -1428,7 +1428,8 @@ export class KitchenScene extends Phaser.Scene {
       const { x, y, scale } = this.cupPos;
       this.cup.container.setPosition(x, y - (1 - this.appear) * 10).setScale(scale).setAlpha(this.appear);
       this.cup.level = this.level;
-      this.cup.update(time, delta);
+      this.cup.update(time, delta, state.phase === 'playing' && !state.paused
+        && !uiState.value.opening && uiState.value.pageOffset > 0.1);
       this.spill?.update(this.level);
       const docked = Boolean(this.dock);
       const onMat = Math.abs(x - layout.homeX) < 0.5 && Math.abs(y - layout.homeY) < 0.5

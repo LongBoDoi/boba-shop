@@ -21,9 +21,10 @@ import {
 } from '../art/cupGeometry';
 import { IcePlacement } from '../art/iceLayout';
 import { TOPPING_PIECE_ART } from '../art/toppingArt';
-import { blend, shade } from './color';
+import { shade } from './color';
 import { CUP_OVERFLOW, paintCupCream } from './creamPainter';
 import { CUP_LID_HOLE_Y, paintInsertedStraw, paintLid } from '../art/finishingArt';
+import { cupTeaGlow, cupTeaTint, paintTeaBody, paintTeaSurface } from './teaPainter';
 
 /**
  * The drink in the cup, painted with the browser's 2D canvas into one texture.
@@ -66,6 +67,8 @@ export interface CupFrame {
   /** The pour's ripple clock, 0–1, and how stirred up the surface is, 0–1. */
   phase: number;
   agitation: number;
+  /** Slow ambient loop, independent of the faster pouring ripples. */
+  ambientPhase?: number;
 }
 
 const W = CUP_ART.w;
@@ -103,6 +106,25 @@ const FRONT = new Path2D(FRONT_GLASS);
 const REAR = new Path2D(`${BOX} ${FRONT_GLASS}`);
 const FLOOR_EDGE = new Path2D(CUP_FLOOR_EDGE);
 const frontWalls = new WeakMap<object, HTMLCanvasElement>();
+type ContentsDepth = 'all' | 'rear' | 'front';
+const wetStraws = new Map<string, HTMLCanvasElement>();
+
+/** A wet tube carries the tea's colour while preserving the painted hollow edges. */
+function wetStraw(source: CanvasImageSource, tint: string) {
+  const known = wetStraws.get(tint);
+  if (known) return known;
+  const canvas = document.createElement('canvas');
+  canvas.width = W * 4; canvas.height = H * 4;
+  const c = canvas.getContext('2d')!;
+  c.scale(4, 4);
+  paintInsertedStraw(c, source, 'inside');
+  c.globalCompositeOperation = 'source-atop';
+  c.globalAlpha = 0.24;
+  c.fillStyle = tint;
+  c.fillRect(0, 0, W, H);
+  wetStraws.set(tint, canvas);
+  return canvas;
+}
 
 /** The back base ellipse is behind the ingredients. Continue only the wall material over it. */
 function frontWall(sprite: CanvasImageSource) {
@@ -288,14 +310,14 @@ export class CupPainter {
     const ice = ICE_LEVELS.find((option) => option.id === drink.ice);
     const raw = tea || milk ? level : 0;
     const filled = cupFillPath(raw);
-    const tint = tea ? (milk ? blend(tea.milkyColor, milk.color, 0.09) : tea.color) : milk?.color;
+    const tint = tea ? cupTeaTint(tea, milk?.color) : milk?.color;
 
     if (frame.lidded) paintLid(c, this.images.reference, 'rear');
     // The part in the dome's air space is behind the cream and the lid's front reflection.
     if (frame.straw) {
       c.save();
       c.clip(path(`M0 ${CUP_LID_HOLE_Y}H113V174H0Z ${CUP_CONTENTS}`), 'evenodd');
-      c.globalAlpha = 0.7;
+      c.globalAlpha = 0.78;
       paintInsertedStraw(c, this.images.reference, 'inside');
       c.restore();
     }
@@ -305,22 +327,23 @@ export class CupPainter {
     c.clip(CONTENTS);
     // The back of the moulded floor is behind the drink, never a translucent band over it.
     this.glass('', path(CUP_REAR_FLOOR_GLASS), false);
-    if (tint) this.liquid(tea, milk?.color, raw, frame.phase, frame.agitation);
-    if (frame.straw) this.innerStraw(filled, Boolean(milk));
+    if (tint) this.liquid(tea, milk?.color, raw, frame.phase, frame.agitation, frame.ambientPhase ?? 0);
     this.syrup(drink.sweetness, raw);
 
     const poses = ice ? this.icePoses(frame, raw) : null;
-    if (ice && poses) this.ice('submerged', frame, poses, ice.cubes, raw, tint, Boolean(milk));
-
-    // The pile, inside the well.
-    if (drink.toppings.length) {
-      c.save();
-      c.clip(WELL);
-      this.toppings(drink.toppings, frame.portionSettle, filled, tint, Boolean(milk));
-      c.restore();
+    const depths: ContentsDepth[] = frame.straw ? ['rear', 'front'] : ['all'];
+    for (const depth of depths) {
+      // The straw occupies the middle of the drink: some solids behind it, others in front.
+      if (depth === 'front') this.innerStraw(raw, tint, Boolean(milk));
+      if (ice && poses) this.ice('submerged', frame, poses, ice.cubes, raw, tint, Boolean(milk), depth);
+      if (drink.toppings.length) {
+        c.save();
+        c.clip(WELL);
+        this.toppings(drink.toppings, frame.portionSettle, filled, tint, Boolean(milk), depth);
+        c.restore();
+      }
+      if (ice && poses) this.ice('exposed', frame, poses, ice.cubes, raw, tint, Boolean(milk), depth);
     }
-
-    if (ice && poses) this.ice('exposed', frame, poses, ice.cubes, raw, tint, Boolean(milk));
     c.restore();
     const glass = this.images.sprite;
 
@@ -353,14 +376,33 @@ export class CupPainter {
     c.restore();
   }
 
-  /** The inner tube is behind all solids and the glass, and is obscured by opaque milk. */
-  private innerStraw(filled: string, milky: boolean) {
+  /** The tube enters the MIDDLE of the surface, not the far edge of the liquid silhouette. */
+  private innerStraw(level: number, tint: string | undefined, milky: boolean) {
     const { c } = this;
+    const surface = cupSurface(level);
+    const waterY = surface.y + surface.ry * 0.15;
+    const filled = level > 0 && Boolean(tint);
     for (const wet of filled ? [false, true] : [false]) {
       c.save();
-      if (filled) c.clip(path(wet ? filled : `${BOX} ${filled}`), wet ? 'nonzero' : 'evenodd');
-      c.globalAlpha = wet ? (milky ? 0.075 : 0.23) : 0.7;
-      paintInsertedStraw(c, this.images.reference, 'inside');
+      if (filled) {
+        c.beginPath();
+        c.rect(0, wet ? waterY : -40, W, wet ? H - waterY : waterY + 40);
+        c.clip();
+      }
+      c.globalAlpha = wet ? (milky ? 0.46 : 0.64) : 0.78;
+      if (wet) {
+        // A slight refractive shift at the waterline locates the tube within the liquid.
+        c.drawImage(wetStraw(this.images.reference, tint!), 0.8, 0, W, H);
+      } else paintInsertedStraw(c, this.images.reference, 'inside');
+      c.restore();
+    }
+    if (filled && waterY < 150) {
+      c.save();
+      c.lineWidth = 0.6;
+      c.strokeStyle = shade(tint!, -25) + '88';
+      c.beginPath(); c.ellipse(56.9, waterY + 0.3, 4.1, 1.2, 0, 0, Math.PI); c.stroke();
+      c.strokeStyle = '#FFF1D58C';
+      c.beginPath(); c.ellipse(56.9, waterY - 0.1, 3.9, 1, 0, Math.PI, Math.PI * 1.65); c.stroke();
       c.restore();
     }
   }
@@ -390,10 +432,10 @@ export class CupPainter {
   }
 
   // ---------------------------------------------------------------- the tea
-  private liquid(tea: Tea | undefined, milkColor: string | undefined, level: number, phase: number, agitation: number) {
+  private liquid(tea: Tea | undefined, milkColor: string | undefined, level: number, phase: number, agitation: number, ambient: number) {
     if (level <= 0) return;
     const { c } = this;
-    const tint = tea ? (milkColor ? blend(tea.milkyColor, milkColor, 0.09) : tea.color) : milkColor!;
+    const tint = tea ? cupTeaTint(tea, milkColor) : milkColor!;
     const art = tea ? this.images.drink(tea.id, Boolean(milkColor)) : {};
     const s = cupSurface(level);
     const body = path(cupLiquidPath(s.y, s.rx, s.ry));
@@ -406,27 +448,29 @@ export class CupPainter {
 
     // The body, shaded across its own width.
     const across = c.createLinearGradient(left, 0, right, 0);
-    across.addColorStop(0, shade(tint, -23));
-    across.addColorStop(0.22, shade(tint, 15));
-    across.addColorStop(0.48, shade(tint, 4));
-    across.addColorStop(0.7, tint);
-    across.addColorStop(0.86, shade(tint, -9));
-    across.addColorStop(1, shade(tint, -25));
+    across.addColorStop(0, shade(tint, tea ? -43 : -23));
+    across.addColorStop(0.19, tea ? cupTeaGlow(tea, milkColor) : shade(tint, 22));
+    across.addColorStop(0.38, shade(tint, 8));
+    across.addColorStop(0.62, tea ? shade(tint, -12) : tint);
+    across.addColorStop(0.85, shade(tint, -22));
+    across.addColorStop(1, shade(tint, tea ? -45 : -25));
     c.fillStyle = across;
     c.fill(body);
 
     c.save();
     c.clip(body);
     if (art.body) {
-      c.globalAlpha = 0.13;
+      c.globalCompositeOperation = 'soft-light';
+      c.globalAlpha = 0.25;
       // Map only the painted body into the current well; its transparent upper padding would
       // otherwise leave a second horizontal edge below a raised liquid surface.
       c.drawImage(art.body, 0, BODY_ART_TOP, W, CUP_FLOOR_FRONT - BODY_ART_TOP,
         0, CUP_SURFACE_TOP, W, CUP_FLOOR_FRONT - CUP_SURFACE_TOP);
       c.globalAlpha = 1;
+      c.globalCompositeOperation = 'source-over';
     }
     const light = c.createRadialGradient(0, 0, 0, 0, 0, 1);
-    light.addColorStop(0, 'rgba(255,241,190,0.07)');
+    light.addColorStop(0, 'rgba(255,217,132,0.22)');
     light.addColorStop(1, 'rgba(255,241,190,0)');
     c.save();
     c.translate(W * 0.38, 150);
@@ -439,9 +483,10 @@ export class CupPainter {
     const depth = c.createLinearGradient(0, s.y, 0, CUP_FLOOR_FRONT);
     depth.addColorStop(0, 'rgba(255,234,192,0.12)');
     depth.addColorStop(0.45, withAlpha(tint, 0));
-    depth.addColorStop(1, `rgba(53,26,17,${milkColor ? 0.09 : 0.22})`);
+    depth.addColorStop(1, `rgba(53,26,17,${milkColor ? 0.14 : 0.32})`);
     c.fillStyle = depth;
     c.fillRect(0, s.y, W, CUP_FLOOR_FRONT - s.y);
+    if (tea) paintTeaBody(c, level, tint, Boolean(milkColor), ambient, agitation);
     if (milkColor && agitation > 0.001) {
       // A fresh splash blooms through the drink, then disappears as it mixes.
       // These translucent ribbons never create a second, horizontal liquid level.
@@ -477,9 +522,10 @@ export class CupPainter {
 
     // The surface: a lit oval in the rim's own perspective.
     const top = c.createLinearGradient(0, s.y - s.ry, 0, s.y + s.ry);
-    top.addColorStop(0, shade(tint, -13));
-    top.addColorStop(0.45, shade(tint, 17));
-    top.addColorStop(1, shade(tint, 8));
+    top.addColorStop(0, shade(tint, -27));
+    top.addColorStop(0.4, tea ? cupTeaGlow(tea, milkColor) : shade(tint, 32));
+    top.addColorStop(0.78, shade(tint, 12));
+    top.addColorStop(1, shade(tint, -8));
     c.beginPath();
     c.ellipse(cx, s.y, s.rx, s.ry, 0, 0, Math.PI * 2);
     c.fillStyle = top;
@@ -488,10 +534,11 @@ export class CupPainter {
     c.strokeStyle = withAlpha(shade(tint, -14), 0.5);
     c.stroke();
     if (art.top) {
-      c.globalAlpha = 0.28;
+      c.globalAlpha = 0.4;
       c.drawImage(art.top, cx - s.rx, s.y - s.ry, s.rx * 2, s.ry * 2);
       c.globalAlpha = 1;
     }
+    if (tea) paintTeaSurface(c, level, tint, Boolean(milkColor), ambient, agitation);
     c.globalAlpha = 0.28;
     c.lineWidth = 0.7;
     c.strokeStyle = '#FFEAC2';
@@ -579,14 +626,15 @@ export class CupPainter {
     return canvas;
   }
 
-  private toppings(ids: string[], settle: number[], filled: string, tint: string | undefined, milky: boolean) {
+  private toppings(ids: string[], settle: number[], filled: string, tint: string | undefined, milky: boolean, depth: ContentsDepth) {
     const { c } = this;
     // Rear portions and rear rows are seen through more liquid than pieces against the front wall.
     for (let portion = ids.length - 1; portion >= 0; portion--) {
       const id = ids[portion];
       if (!TOPPING_PIECE_ART.cells[id]) continue;
       const fall = -14 * (1 - (settle[portion] ?? 1));
-      for (const band of portionFor(id, portion).bands) {
+      for (const [row, band] of portionFor(id, portion).bands.entries()) {
+        if (depth !== 'all' && (row === 2) !== (depth === 'front')) continue;
         const distance = Math.min(1, band.depth + portion * 0.08);
         const wash = milky ? 0.28 + distance * 0.36 : 0.12 + distance * 0.25;
         const wet = tint && filled;
@@ -628,11 +676,12 @@ export class CupPainter {
   }
 
   private ice(layer: 'submerged' | 'exposed', frame: CupFrame, poses: ReturnType<CupPainter['icePoses']>,
-    cubes: number, raw: number, liquidTint?: string, milky = false) {
+    cubes: number, raw: number, liquidTint: string | undefined, milky: boolean, depth: ContentsDepth) {
     const { c } = this;
     const submerged = layer === 'submerged';
     const water = cupIceFillPath(raw);
     const standing = frame.iceLayout.slice(0, cubes).map((cube, at) => ({ cube, at }))
+      .filter(({ cube }) => depth === 'all' || (cube.depth > 0.3) === (depth === 'front'))
       .sort((a, b) => poses[a.at].pose.cy - poses[b.at].pose.cy);
     // Contact shadows belong to the cup's floor, so they are never clipped to the tea.
     if (submerged) {

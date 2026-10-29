@@ -56,6 +56,9 @@ export class CupView {
   private pouring = false;
   private agitation = 0;
   private phase = 0;
+  private ambientPhase = 0;
+  private ambientElapsed = 0;
+  private readonly reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
   private dirty = true;
   private readonly sizeTag: Phaser.GameObjects.Image;
   private sizeTagWidth = 0;
@@ -135,7 +138,7 @@ export class CupView {
   }
 
   /** Advance whatever is moving, and repaint if anything did. Called once a frame. */
-  update(time: number, delta: number) {
+  update(time: number, delta: number, animate = true) {
     const tagScale = 1 / Math.max(0.01, Math.min(1, this.container.scaleX));
     const tagWidth = this.sizeTagWidth * tagScale;
     // Preserve CSS dimensions: setting the raw scale also enlarges high-density textures.
@@ -150,9 +153,19 @@ export class CupView {
       this.agitation = target > this.agitation ? Math.min(1, this.agitation + rate) : Math.max(0, this.agitation - rate);
       this.dirty = true;
     }
-    if (this.pouring || this.agitation > 0) {
+    if (animate && (this.pouring || this.agitation > 0)) {
       this.phase = (this.phase + delta / 1200) % 1;
       this.dirty = true;
+    }
+    if (animate && !this.reducedMotion.matches && this.drink.tea && this.levelValue > 0.02) {
+      const step = Math.min(delta, 80);
+      this.ambientPhase = (this.ambientPhase + step / 9000) % 1;
+      this.ambientElapsed += step;
+      // Keep idle motion smooth without uploading the full cup texture every display frame.
+      if (this.ambientElapsed >= 1000 / 24) {
+        this.ambientElapsed %= 1000 / 24;
+        this.dirty = true;
+      }
     }
     if (!this.dirty && !moving) return;
     this.dirty = false;
@@ -165,6 +178,7 @@ export class CupView {
       portionSettle: this.portionStart.map(progress),
       phase: this.phase,
       agitation: this.agitation,
+      ambientPhase: this.ambientPhase,
       lidded: this.lidded,
       straw: this.insertedStraw,
     });

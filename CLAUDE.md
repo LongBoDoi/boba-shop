@@ -904,7 +904,12 @@ from `cup-reference-painted.png` (1536×1024 RGBA). The display aspect is 113×1
 contents retain their 113×174 coordinate system. `frontalCupArt.ts` registers the shell at six
 pixels per unit; no extra vector outline or cat-face decal covers it.
 The finishing texture reserves 100 units above the rim, independently of cream's 40-unit
-headroom. The straw passes through the lid at x56.5/y−35, with reduced opacity below it.
+headroom. The straw passes through the lid at x56.5/y−35 and extends to y155. Its inner segment is
+painted between rear and near ice/topping rows, behind cream and the cup wall, with separate
+air/tea/milk opacity. Its wet boundary crosses the centre of the tea oval, with a small meniscus
+and refractive shift; the tinted submerged tube remains readable in milk. Only
+the exposed segment is in the finishing overlay. The lid’s far sealing arc is behind the cream;
+its dome reflections and near rim stay in front. Finishing changes mark the contents texture dirty.
 Order-size icons, customer cups and carried straws use the same painted crops.
 The holder's top plane is expanded and its front wall shortened with a continuous row projection.
 `HOLDER_SEAT` derives from that projection; all cup sizes stand on the measured recess center.
@@ -921,8 +926,13 @@ is loaded. See `docs/frontal-cup.md`.
 
 - **Liquid and ice share `cupSurface(level)`.** Empty is y157.5/rx29.5/ry9.5; full is y28/rx42.9/ry10.08.
   The lower surface meets the same rounded floor as the contents; a small three-unit clear plastic band remains below it. The stream and fill meter use the same endpoints.
-- **Milk uses each tea's milky palette.** Body and surface gradients preserve volume, with
-  restrained painted detail, gentle meniscus reflections, pour ripples, and bubbles.
+- **Cup tea matches the tanks’ rich pigment and transmitted light.** `teaPainter.ts` owns six
+  clear-tea palettes, cached irregular brush washes/grain, soft flowing highlights, surface glints
+  and tiny rising bubbles. Milk blends the concentrated pigment toward its creamy palette instead
+  of replacing it with a pale swatch, retaining each tea’s hue and diffuse texture. A nine-second
+  ambient loop refreshes at 24 fps independently of faster pouring ripples; it stops while paused,
+  off the kitchen page, or under reduced motion. All motion stays clipped to the real liquid fill
+  and behind ingredients, glass and finishing parts. No fill-level or gameplay change is involved.
 - **Glass has warm, natural material detail.** Clear PET reflections cross filled regions at
   62%; reflections continue across ice and the topping bed. A cached front-wall texture replaces
   only the back-floor painting with continuous wall material, so the rear base ellipse stays
