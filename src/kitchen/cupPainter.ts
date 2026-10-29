@@ -221,7 +221,7 @@ const CUBE_RES = 5;
 let cubeArt: HTMLCanvasElement | null = null;
 const tintedCubes = new Map<string, HTMLCanvasElement>();
 
-/** Clear melted ice with warm neutral refraction, drawn once for every pose. */
+/** Clear ice with cool shaded facets and crisp wet edges, drawn once for every pose. */
 function cubeSprite(iceTexture: CanvasImageSource): HTMLCanvasElement {
   if (cubeArt) return cubeArt;
   const canvas = document.createElement('canvas');
@@ -235,7 +235,7 @@ function cubeSprite(iceTexture: CanvasImageSource): HTMLCanvasElement {
     for (const [at, color] of stops) g.addColorStop(at, color);
     return g;
   };
-  c.fillStyle = grad(-22, -21, 22, 23, [[0, '#F2F8F2C0'], [0.4, '#C5D8D35C'], [1, '#718D8A70']]);
+  c.fillStyle = grad(-22, -21, 22, 23, [[0, '#EAF5F5D4'], [0.4, '#A1C3CC88'], [1, '#527D929C']]);
   c.fill(body);
   c.save();
   c.clip(body);
@@ -244,16 +244,19 @@ function cubeSprite(iceTexture: CanvasImageSource): HTMLCanvasElement {
   c.drawImage(iceTexture, -24, -24, 48, 48);
   c.restore();
   c.lineJoin = 'round';
-  c.fillStyle = grad(-10, -20, 6, 0, [[0, '#FFFFFFB8'], [1, '#E5F2EC24']]);
+  c.fillStyle = grad(-10, -20, 6, 0, [[0, '#FFFFFFE0'], [1, '#DDEFF454']]);
   c.fill(new Path2D('M-20-11L-5-20L20-13L8-1Z'));
-  c.fillStyle = grad(8, 0, 20, 12, [[0, '#77999130'], [1, '#607F7C60']]);
+  c.fillStyle = grad(8, 0, 20, 12, [[0, '#658EAA66'], [1, '#456A86A0']]);
   c.fill(new Path2D('M8-1L20-12L17 16L7 22Z'));
-  c.strokeStyle = '#6D848046';
-  c.lineWidth = 0.5;
+  c.strokeStyle = '#4D7286AD';
+  c.lineWidth = 0.8;
   c.stroke(body);
   c.lineCap = 'round';
-  c.strokeStyle = '#FCFFF59C';
-  c.lineWidth = 0.85;
+  c.strokeStyle = '#527A8A80';
+  c.lineWidth = 1.9;
+  c.stroke(new Path2D('M-19-9L8-1L6 20 M8-1L19-10'));
+  c.strokeStyle = '#FCFFF5E0';
+  c.lineWidth = 1.05;
   c.stroke(new Path2D('M-19-9L8-1L6 20 M8-1L19-10'));
   c.strokeStyle = 'rgba(255,255,247,0.65)';
   c.lineWidth = 1.8;
@@ -707,13 +710,13 @@ export class CupPainter {
     for (const { cube, at } of standing) {
       const { pose } = poses[at];
       const fall = 1 - (frame.iceSettle[at] ?? 1);
-      // Submerged facets lose contrast with depth, especially in opaque milk tea.
+      // Preserve readable facet contrast even in milk; immersion adds colour without erasing ice.
       // Quantized washes keep cached sprites bounded while the liquid level animates.
       const depth = Math.max(0, Math.min(1, (pose.cy - surface.y) / 48));
-      const wash = Math.round((milky ? 0.42 + depth * 0.3 : 0.2 + depth * 0.24) * 12) / 12;
+      const wash = Math.round((milky ? 0.16 + depth * 0.18 : 0.1 + depth * 0.14) * 12) / 12;
       const sprite = submerged && liquidTint ? tintedCube(this.images.ice, liquidTint, wash) : cubeSprite(this.images.ice);
       c.save();
-      c.globalAlpha = submerged ? (milky ? 0.64 - depth * 0.29 : 0.8 - depth * 0.2) : 0.94;
+      c.globalAlpha = submerged ? (milky ? 0.86 - depth * 0.14 : 0.94 - depth * 0.12) : 0.97;
       c.translate(pose.cx, pose.cy - 10 * fall);
       c.rotate((pose.angle - 7 * fall) * Math.PI / 180);
       c.drawImage(sprite, -cube.r, -cube.r, cube.r * 2, cube.r * 2);

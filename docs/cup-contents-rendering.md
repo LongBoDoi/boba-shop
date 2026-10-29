@@ -6,9 +6,10 @@ holder position, cup outline, ingredient quantities and game rules are unchanged
 - Liquid has deeper tank-inspired pigments and warm transmitted-light highlights. Cached brush
   washes and grain give each tea painted texture; soft swirls, glints and tiny bubbles move slowly
   inside the drink. Milk uses the softer milky palette, with additional mixing ribbons during pouring.
-- Ice retains its stable layout and whole-outline containment. Broad translucent faces replace
-  the prominent fine crack texture. Submerged facets absorb tea colour and lose contrast with
-  depth, more strongly in milk. Their reflections remain behind the cup wall.
+- Ice retains its stable layout and whole-outline containment. Broad translucent faces have cool side shading,
+  clearer contours and bright wet edges instead of prominent fine cracks. Submerged facets take
+  a restrained tea-colour wash and retain readable contrast even in milk. Their reflections
+  remain behind the cup wall. The browser regression checks all six milk-tea palettes.
 - All nine toppings retain their painted identities. Stable size/angle/position variation loosens
   the bed. Rear pieces are softer and more strongly tinted by liquid; front pieces remain readable.
   Wet tinting uses the sprite alpha rather than approximate silhouette shapes, avoiding halos.
@@ -85,3 +86,5 @@ cream still hides it and its tip still clears the floor. Front/rear ingredient g
 only when a straw is inserted, preserving the unsealed cup’s arrangement.
 
 [Milk colours and submerged straws](cup-milk-straw-palette.png).
+
+[Ice visibility across all six teas](cup-ice-contrast.png).

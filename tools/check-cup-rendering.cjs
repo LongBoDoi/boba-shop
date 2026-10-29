@@ -76,6 +76,10 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
       };
       const iceContrast = milk => difference(render({ tea: 'black', milk, ice: 'regular' }, 0.8),
         render({ tea: 'black', milk }, 0.8), [28, 80, 85, 106]);
+      const iceVisibility = TEAS.map(tea => ({ id: tea.id,
+        contrast: difference(render({ tea: tea.id, milk: 'whole', ice: 'regular' }, 0.8),
+          render({ tea: tea.id, milk: 'whole' }, 0.8), [28, 80, 85, 106]),
+      }));
       const drySyrup = difference(render({ sweetness: '100' }, 0), empty, [30, 150, 83, 165]);
       const dissolved = difference(render({ sweetness: '100', tea: 'black' }, 0.2),
         render({ tea: 'black' }, 0.2), [25, 130, 88, 168]);
@@ -112,10 +116,12 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
       painter.canvas.getContext('2d').getImageData(0, 0, 1, 1);
       const averagePaintMs = (performance.now() - start) / 100;
       return { checked, leaks, clearIce: iceContrast(null), milkyIce: iceContrast('whole'),
-        drySyrup, dissolved, strawAir, strawTea, strawMilk, strawCream, belowStraw, ambientMotion, loopSeam, milkColour, averagePaintMs };
+        iceVisibility, drySyrup, dissolved, strawAir, strawTea, strawMilk, strawCream, belowStraw, ambientMotion, loopSeam, milkColour, averagePaintMs };
     });
     assert.deepEqual(result.leaks, [], 'Ingredients must never change pixels outside the cup interior');
     assert(result.clearIce > result.milkyIce, 'Milk obscures submerged ice more than clear tea');
+    assert(result.iceVisibility.every(tea => tea.contrast > 12),
+      'Ice remains readable in every milk-tea palette');
     assert(result.drySyrup > 1, 'Syrup is visible before adding tea');
     assert.equal(result.dissolved, 0, 'Syrup has dissolved once tea covers the floor');
     assert(result.strawAir > result.strawTea && result.strawTea > result.strawMilk,

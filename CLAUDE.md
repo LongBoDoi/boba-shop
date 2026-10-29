@@ -890,8 +890,9 @@ Whole rotated outlines fit the mouth, tapered walls, and curved floor before cli
 cubes settle on the floor or topping bed, then rise continuously as liquid reaches them.
 `check-cup-contents.cjs` checks 11,520 outlines, spacing, dry-to-wet continuity, floor clearance,
 and cream contact. The active ice uses `ice-natural-front.png`, the untouched full-resolution
-clear-ice painting at low opacity beneath broad, translucent facets. Submerged cubes pick up
-the tea colour and lose contrast with depth; milk obscures them more strongly. Glass reflections
+clear-ice painting at low opacity beneath broad, translucent facets. Cool blue-grey side shading,
+crisp slate contours and bright wet edges keep each cube readable. Submerged cubes pick up a
+restrained tea-colour wash; depth and milk soften them without erasing the faces. Glass reflections
 remain in front of both exposed and submerged ice. Topping washes use each sprite’s actual alpha,
 with smaller, softer rear pieces and stronger front pieces. Syrup pools on the floor before a pour
 and dissolves into the first shallow fill; freshly poured milk briefly forms translucent swirls.
