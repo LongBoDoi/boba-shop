@@ -906,9 +906,10 @@ contents retain their 113×174 coordinate system. `frontalCupArt.ts` registers t
 pixels per unit; no extra vector outline or cat-face decal covers it.
 The finishing texture reserves 100 units above the rim, independently of cream's 40-unit
 headroom. The straw passes through the lid at x56.5/y−35 and extends to y155. Its inner segment is
-painted between rear and near ice/topping rows, behind cream and the cup wall, with separate
+painted after the far cup rim and between rear and near ice/topping rows, behind cream and the near cup wall, with separate
 air/tea/milk opacity. Its wet boundary crosses the centre of the tea oval, with a small meniscus
-and refractive shift; the tinted submerged tube remains readable in milk. Only
+and refractive shift; both sections lean slightly through the fixed lid hole, with stronger
+wet edges keeping the tinted submerged tube readable in milk. Only
 the exposed segment is in the finishing overlay. The lid’s far sealing arc is behind the cream;
 its dome reflections and near rim stay in front. Finishing changes mark the contents texture dirty.
 Order-size icons, customer cups and carried straws use the same painted crops.

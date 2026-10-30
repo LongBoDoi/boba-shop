@@ -23,7 +23,7 @@ import { IcePlacement } from '../art/iceLayout';
 import { TOPPING_PIECE_ART } from '../art/toppingArt';
 import { shade } from './color';
 import { CUP_OVERFLOW, paintCupCream } from './creamPainter';
-import { CUP_LID_HOLE_Y, paintInsertedStraw, paintLid } from '../art/finishingArt';
+import { CUP_LID_HOLE_Y, insertedStrawX, paintInsertedStraw, paintLid } from '../art/finishingArt';
 import { cupTeaGlow, cupTeaTint, paintTeaBody, paintTeaSurface } from './teaPainter';
 
 /**
@@ -119,7 +119,7 @@ function wetStraw(source: CanvasImageSource, tint: string) {
   c.scale(4, 4);
   paintInsertedStraw(c, source, 'inside');
   c.globalCompositeOperation = 'source-atop';
-  c.globalAlpha = 0.24;
+  c.globalAlpha = 0.3;
   c.fillStyle = tint;
   c.fillRect(0, 0, W, H);
   wetStraws.set(tint, canvas);
@@ -316,6 +316,14 @@ export class CupPainter {
     const tint = tea ? cupTeaTint(tea, milk?.color) : milk?.color;
 
     if (frame.lidded) paintLid(c, this.images.reference, 'rear');
+    // The far cup rim must be behind the tube, just like the lid's far sealing arc.
+    // Drawing it after the contents makes the straw appear to pass behind the cup.
+    const glass = this.images.sprite;
+    const walls = path(`${BOX} ${CUP_REAR_FLOOR_GLASS}`);
+    c.save();
+    c.clip(REAR, 'evenodd');
+    this.glass(filled, walls, true, glass);
+    c.restore();
     // The part in the dome's air space is behind the cream and the lid's front reflection.
     if (frame.straw) {
       c.save();
@@ -348,15 +356,7 @@ export class CupPainter {
       if (ice && poses) this.ice('exposed', frame, poses, ice.cubes, raw, tint, Boolean(milk), depth);
     }
     c.restore();
-    const glass = this.images.sprite;
-
-    // Split the cup into a rear and a near wall. Cream belongs between them, just
-    // like the tea: painting it after both walls makes it look pasted on the glass.
-    const walls = path(`${BOX} ${CUP_REAR_FLOOR_GLASS}`);
-    c.save();
-    c.clip(REAR, 'evenodd');
-    this.glass(filled, walls, true, glass);
-    c.restore();
+    // Cream and the tube sit between the far rim and the near glass.
     if (foam) {
       c.save();
       c.clip(CREAM_CONTENTS);
@@ -392,7 +392,7 @@ export class CupPainter {
         c.rect(0, wet ? waterY : -40, W, wet ? H - waterY : waterY + 40);
         c.clip();
       }
-      c.globalAlpha = wet ? (milky ? 0.46 : 0.64) : 0.78;
+      c.globalAlpha = wet ? (milky ? 0.62 : 0.76) : 0.88;
       if (wet) {
         // A slight refractive shift at the waterline locates the tube within the liquid.
         c.drawImage(wetStraw(this.images.reference, tint!), 0.8, 0, W, H);
@@ -400,12 +400,17 @@ export class CupPainter {
       c.restore();
     }
     if (filled && waterY < 150) {
+      const x = insertedStrawX(waterY) + 0.8;
       c.save();
-      c.lineWidth = 0.6;
-      c.strokeStyle = shade(tint!, -25) + '88';
-      c.beginPath(); c.ellipse(56.9, waterY + 0.3, 4.1, 1.2, 0, 0, Math.PI); c.stroke();
-      c.strokeStyle = '#FFF1D58C';
-      c.beginPath(); c.ellipse(56.9, waterY - 0.1, 3.9, 1, 0, Math.PI, Math.PI * 1.65); c.stroke();
+      // A tea-coloured near crescent crosses the tube, seating it IN the surface.
+      c.fillStyle = shade(tint!, -28) + '9C';
+      c.beginPath();
+      c.ellipse(x, waterY + 0.25, 4.6, 1.6, 0, 0, Math.PI);
+      c.ellipse(x, waterY - 0.25, 4.6, 1.1, 0, Math.PI, 0, true);
+      c.fill();
+      c.lineWidth = 0.65;
+      c.strokeStyle = '#FFF1D5AD';
+      c.beginPath(); c.ellipse(x, waterY - 0.1, 4.5, 1.25, 0, Math.PI, Math.PI * 1.7); c.stroke();
       c.restore();
     }
   }

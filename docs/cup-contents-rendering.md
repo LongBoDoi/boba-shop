@@ -50,6 +50,16 @@ oval, with a tight meniscus and a slight refractive shift, rather than at the fa
 keep their proportions while the straight shaft extends. The exposed straw begins at the lid
 opening, y−35, and stays in the finishing overlay above the lid.
 
+The cup's far glass/rim now paints before the straw as well; it previously crossed over the
+tube and made it appear behind the cup. Both shaft sections share a slight lean pivoting at
+the lid opening (x56.5/y−35), ending at x66.95/y155. The submerged section shifts another
+0.8 units through refraction. Stronger wet edges and a tea-coloured near meniscus keep the
+tube distinct from the wall's vertical reflections. Foreground ice, pearls and near glass
+still cover it. The browser check includes the actual front lid overlay, samples along the
+slanted shaft, and checks far-rim occlusion; the previous painter fails that rim check.
+
+[Finished straw materials](cup-straw-depth.png) · [Phone kitchen](cup-straw-depth-390.png)
+
 The lid’s rear sealing arc is painted behind the contents. Its dome reflection and front rim
 are painted over them, preventing the back arc from cutting across a full cream swirl.
 `CupView.setFinish` invalidates the drink texture when either finishing state changes, including

@@ -2,6 +2,9 @@ import { paintReferencePart, REFERENCE_CUP_PARTS } from './referenceCupArt';
 export const CUP_FINISH_RISE = 100;
 export const CUP_LID_HOLE_Y = -35;
 export const CUP_STRAW_BOTTOM = 155;
+/** A slight lean through the fixed lid opening separates the tube from wall reflections. */
+const STRAW_LEAN = 0.055;
+export const insertedStrawX = (y: number) => 56.5 + (y - CUP_LID_HOLE_Y) * STRAW_LEAN;
 /** Only the far arc of the sealing ring belongs behind the cream. */
 export const CUP_LID_REAR_RING = 'M8 15C26 -2 88 -2 105 15L104 20C85 8 28 8 9 20Z';
 
@@ -25,6 +28,8 @@ export function paintInsertedStraw(c: CanvasRenderingContext2D, source: CanvasIm
   if (section === 'inside') c.rect(0, CUP_LID_HOLE_Y, 113, CUP_STRAW_BOTTOM - CUP_LID_HOLE_Y);
   else c.rect(0, -CUP_FINISH_RISE, 113, CUP_FINISH_RISE + CUP_LID_HOLE_Y);
   c.clip();
+  // Both sections share the same axis and meet exactly at the lid opening.
+  c.transform(1, 0, STRAW_LEAN, 1, -CUP_LID_HOLE_Y * STRAW_LEAN, 0);
   // Preserve both rounded ends; extend only the straight part of the tube.
   const end = 4, endPixels = s.height * end / t.height;
   c.drawImage(source, s.x, s.y, s.width, endPixels, t.x, t.y, t.width, end);

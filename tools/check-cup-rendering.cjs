@@ -16,6 +16,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
       const { createIceLayout } = await import('/src/art/iceLayout.ts');
       const { EMPTY_DRINK, TOPPINGS, TEAS, FOAMS } = await import('/src/game/ingredients.ts');
       const { CUP_CONTENTS, CUP_NEAR_LIP_BAND } = await import('/src/art/cupGeometry.ts');
+      const { insertedStrawX, paintInsertedStraw, paintLid } = await import('/src/art/finishingArt.ts');
       const load = async url => { const img = new Image(); img.src = url; await img.decode(); return img; };
       const [sprite, cream, ice, pieces] = await Promise.all([
         load(CUP_GLASS), load(art.CUP_CREAM), load(art.CUP_ICE), load(TOPPING_PIECES),
@@ -83,13 +84,37 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
       const drySyrup = difference(render({ sweetness: '100' }, 0), empty, [30, 150, 83, 165]);
       const dissolved = difference(render({ sweetness: '100', tea: 'black' }, 0.2),
         render({ tea: 'black' }, 0.2), [25, 130, 88, 168]);
-      const finished = (milk, straw, foam = null) => render({ tea: 'black', milk, foam }, 0.8,
-        { lidded: true, straw });
-      const strawAir = difference(finished(null, true), finished(null, false), [53, -25, 60, -10]);
-      const strawTea = difference(finished(null, true), finished(null, false), [53, 112, 60, 138]);
-      const strawMilk = difference(finished('whole', true), finished('whole', false), [53, 112, 60, 138]);
+      const finishOverlay = straw => {
+        const c = painter.canvas.getContext('2d');
+        paintLid(c, sprite, 'front');
+        if (straw) paintInsertedStraw(c, sprite, 'outside');
+        return c.getImageData(0, 0, 226, 428).data;
+      };
+      const finished = (milk, straw, foam = null) => {
+        render({ tea: 'black', milk, foam }, 0.8, { lidded: true, straw });
+        return finishOverlay(straw);
+      };
+      const shaftDifference = (a, b, y0, y1, wet = false) => {
+        let sum = 0;
+        for (let y = y0; y < y1; y++) {
+          const x = Math.round(insertedStrawX(y) + (wet ? 0.8 : 0));
+          sum += difference(a, b, [x - 3, y, x + 3, y + 1]);
+        }
+        return sum / (y1 - y0);
+      };
+      const strawAir = shaftDifference(finished(null, true), finished(null, false), -25, -10);
+      const strawTea = shaftDifference(finished(null, true), finished(null, false), 112, 138, true);
+      const strawMilk = shaftDifference(finished('whole', true), finished('whole', false), 112, 138, true);
       const strawCream = difference(finished(null, true, 'cheese'), finished(null, false, 'cheese'), [53, 27, 60, 45]);
-      const belowStraw = difference(finished(null, true), finished(null, false), [48, 157, 66, 173]);
+      const belowStraw = difference(finished(null, true), finished(null, false), [48, 157, 76, 173]);
+      // Compare against the tube painted directly over the far rim: no far-wall pixels may
+      // cover it. The near wall remains a later layer, retaining the cup's depth cue.
+      render({ tea: 'black' }, 0.8, { lidded: true });
+      const rimContext = painter.canvas.getContext('2d');
+      rimContext.save(); rimContext.globalAlpha = 0.78;
+      paintInsertedStraw(rimContext, sprite, 'inside'); rimContext.restore();
+      const expectedRim = finishOverlay(true);
+      const rearRimOcclusion = shaftDifference(finished(null, true), expectedRim, 3, 7);
       const teaFrame = ambientPhase => render({ tea: 'oolong' }, 0.8, { ambientPhase });
       const ambientMotion = difference(teaFrame(0.2), teaFrame(0.65), [30, 65, 85, 145]);
       const loopSeam = difference(teaFrame(0), teaFrame(1), [30, 65, 85, 145]);
@@ -116,7 +141,8 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
       painter.canvas.getContext('2d').getImageData(0, 0, 1, 1);
       const averagePaintMs = (performance.now() - start) / 100;
       return { checked, leaks, clearIce: iceContrast(null), milkyIce: iceContrast('whole'),
-        iceVisibility, drySyrup, dissolved, strawAir, strawTea, strawMilk, strawCream, belowStraw, ambientMotion, loopSeam, milkColour, averagePaintMs };
+        iceVisibility, drySyrup, dissolved, strawAir, strawTea, strawMilk, strawCream, belowStraw, rearRimOcclusion,
+        ambientMotion, loopSeam, milkColour, averagePaintMs };
     });
     assert.deepEqual(result.leaks, [], 'Ingredients must never change pixels outside the cup interior');
     assert(result.clearIce > result.milkyIce, 'Milk obscures submerged ice more than clear tea');
@@ -124,13 +150,14 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
       'Ice remains readable in every milk-tea palette');
     assert(result.drySyrup > 1, 'Syrup is visible before adding tea');
     assert.equal(result.dissolved, 0, 'Syrup has dissolved once tea covers the floor');
-    assert(result.strawAir > result.strawTea && result.strawTea > result.strawMilk,
-      'The straw is clearest in air, tinted in tea, and softened in milk');
+    assert(result.strawAir > 10, 'The straw remains visible through the complete lid overlay');
+    assert(result.strawTea > result.strawMilk, 'Milk softens the submerged straw more than clear tea');
     assert(result.strawMilk > 12, 'The submerged straw stays readable in milk tea');
     assert(result.milkColour.every(tea => tea.retainedChroma > 0.55),
       'Every milk tea retains its pigment instead of washing out to near-white');
     assert(result.strawCream < 1, 'Opaque cream occludes the inserted straw');
     assert.equal(result.belowStraw, 0, 'The straw ends above the curved floor');
+    assert(result.rearRimOcclusion < 2, 'The far cup rim stays behind the inserted straw (raster tolerance)');
     assert(result.ambientMotion > 0.1, 'Settled tea has visible ambient movement without pouring');
     assert(result.loopSeam < 0.05, 'Ambient tea loops without a visible jump');
     console.log('check-cup-rendering:', JSON.stringify(result));
