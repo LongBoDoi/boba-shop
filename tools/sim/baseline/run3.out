@@ -1,0 +1,33 @@
+
+--- skilled day 30, against the default ---
+default (fifo, eager, watches the tab)         served 26.0 mReq 0.00 mOrd 0.00 money 234  star3% 100 trips/drink 1.94
+batch                                          served 26.6 mReq 0.00 mOrd 0.00 money 247 (5.5%) star3% 100 trips/drink 1.57
+lazy + hop to counter during lid press         served 27.9 mReq 0.00 mOrd 0.00 money 250 (7.1%) star3% 100 trips/drink 1.94
+batch + hop to counter during lid press        served 27.9 mReq 0.00 mOrd 0.00 money 250 (7.1%) star3% 100 trips/drink 1.94
+batch + hop + 3% pour (the abuse)              served 30.7 mReq 0.00 mOrd 0.00 money 279 (19.2%) star3% 100 trips/drink 1.91
+route: natural (card order)                    served 25.3 mReq 0.00 mOrd 0.00 money 227 (-2.8%) star3% 100 trips/drink 1.93
+route: smart (fewest pans)                     served 26.0 mReq 0.00 mOrd 0.00 money 234 (0.0%) star3% 100 trips/drink 1.94
+eager, never watches the tab                   served 26.0 mReq 0.00 mOrd 0.00 money 234 (0.0%) star3% 100 trips/drink 1.93
+batch, never watches the tab                   served 27.4 mReq 0.69 mOrd 0.00 money 256 (9.6%) star3% 98 trips/drink 1.08
+
+--- skilled day 3, against the default ---
+default (fifo, eager, watches the tab)         served 25.0 mReq 0.00 mOrd 0.00 money 238  star3% 100 trips/drink 1.95
+batch                                          served 25.1 mReq 0.00 mOrd 0.00 money 241 (1.3%) star3% 100 trips/drink 1.86
+lazy + hop to counter during lid press         served 25.0 mReq 0.00 mOrd 0.00 money 239 (0.4%) star3% 100 trips/drink 1.99
+batch + hop to counter during lid press        served 25.0 mReq 0.00 mOrd 0.00 money 239 (0.4%) star3% 100 trips/drink 1.99
+batch + hop + 3% pour (the abuse)              served 25.1 mReq 0.00 mOrd 0.00 money 242 (1.4%) star3% 100 trips/drink 2.00
+route: natural (card order)                    served 24.9 mReq 0.00 mOrd 0.00 money 234 (-2.0%) star3% 100 trips/drink 1.93
+route: smart (fewest pans)                     served 25.0 mReq 0.00 mOrd 0.00 money 238 (0.0%) star3% 100 trips/drink 1.95
+eager, never watches the tab                   served 25.0 mReq 0.00 mOrd 0.00 money 238 (0.0%) star3% 100 trips/drink 1.95
+batch, never watches the tab                   served 25.1 mReq 0.00 mOrd 0.00 money 241 (1.3%) star3% 100 trips/drink 1.86
+
+--- sloppy day 30, against the default ---
+default (fifo, eager, watches the tab)         served 14.7 mReq 0.00 mOrd 0.59 money 108  star3% 89 trips/drink 1.80
+batch                                          served 14.8 mReq 0.00 mOrd 0.25 money 111 (2.2%) star3% 94 trips/drink 1.86
+lazy + hop to counter during lid press         served 15.8 mReq 0.00 mOrd 0.16 money 116 (7.7%) star3% 96 trips/drink 1.92
+batch + hop to counter during lid press        served 15.8 mReq 0.00 mOrd 0.16 money 116 (7.7%) star3% 96 trips/drink 1.92
+batch + hop + 3% pour (the abuse)              served 17.1 mReq 0.00 mOrd 0.08 money 131 (20.7%) star3% 98 trips/drink 1.92
+route: natural (card order)                    served 14.7 mReq 0.00 mOrd 0.59 money 108 (0.0%) star3% 89 trips/drink 1.80
+route: smart (fewest pans)                     served 15.2 mReq 0.00 mOrd 0.44 money 115 (6.0%) star3% 91 trips/drink 1.75
+eager, never watches the tab                   served 14.6 mReq 0.73 mOrd 0.75 money 108 (-0.3%) star3% 52 trips/drink 1.61
+batch, never watches the tab                   served 15.0 mReq 5.88 mOrd 0.21 money 116 (7.0%) star3% 0 trips/drink 0.91

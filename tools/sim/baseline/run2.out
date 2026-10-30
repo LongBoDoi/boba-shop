@@ -1,0 +1,85 @@
+=== A. WHERE A SHIFT GOES (share of the whole shift) ===
+skilled day 3 hands 60.4% read 8.8% travel 12.0% lid-wait 16.8% idle 2.0% | per drink s: hands 6.1 read 0.9 travel 1.2 lid 1.7 idle 0.2 | cycle 10.1s | trips/drink 1.95 pans/drink 2.08
+skilled day 30 hands 61.4% read 9.1% travel 11.9% lid-wait 16.8% idle 0.7% | per drink s: hands 6.2 read 0.9 travel 1.2 lid 1.7 idle 0.1 | cycle 10.1s | trips/drink 1.94 pans/drink 2.08
+sloppy day 30 hands 68.5% read 13.3% travel 8.6% lid-wait 9.0% idle 0.5% | per drink s: hands 13.2 read 2.6 travel 1.7 lid 1.7 idle 0.1 | cycle 19.2s | trips/drink 1.80 pans/drink 2.95
+
+=== B. WHAT AN ORDER IS (100k orders straight from generateOrder) ===
+day 1: tiles mean 5.25 sd 1.02 p10-p90 4-7 | taps mean 10.3 sd 1.6 p10-p90 8-12 max 14 | price mean 6.63 sd 1.25 p10-p90 5-8 | corr(price,taps) 0.42
+  tile histogram %: 2:0.4 3:4.2 4:17.9 5:35.3 6:32.0 7:10.2
+  distinct exact orders in 100k: 18527
+day 7: tiles mean 5.57 sd 1.18 p10-p90 4-7 | taps mean 10.6 sd 1.7 p10-p90 8-13 max 15 | price mean 6.95 sd 1.38 p10-p90 5-9 | corr(price,taps) 0.51
+  tile histogram %: 2:0.4 3:3.7 4:14.1 5:28.6 6:31.4 7:17.9 8:4.0
+  distinct exact orders in 100k: 44451
+order space: days1-4 19440  days5+ 89424
+
+=== C. SHAPE OF A SHIFT: customers at the counter by 30 s bucket, and drinks served per 30 s ===
+skilled day 3 occupancy 1.02 1.21 1.31 1.41 1.50 1.58 1.64 1.70 | served 2.2 3.0 3.0 3.0 3.0 3.0 3.0 3.0
+skilled day 30 occupancy 1.71 2.72 2.80 2.80 2.80 2.80 2.80 2.80 | served 2.2 3.0 3.0 3.0 3.0 3.0 3.0 3.0
+sloppy day 30 occupancy 2.15 2.90 2.89 2.89 2.88 2.89 2.89 2.89 | served 0.9 1.6 1.5 1.6 1.6 1.6 1.5 1.5
+
+=== D. FAIR TEST OF SCHEDULING: hybrids and triage, day 30, skilled timing x speed, no slips, n=200 ===
+speed	queue	build	served	missed	money	star3%
+1	fifo	9.0	27.1	0.00	252	100
+1	smartprice	9.0	27.0	0.00	251	100
+1	smartshort	9.0	27.0	0.00	251	100
+1	lifo	9.0	26.8	0.00	250	100
+1	triage	9.0	27.1	0.00	252	100
+2	fifo	15.5	17.0	0.00	141	100
+2	smartprice	15.5	16.8	0.00	141	100
+2	smartshort	15.5	16.8	0.01	141	100
+2	lifo	15.4	15.6	2.42	135	10
+2	triage	15.5	17.0	0.00	141	100
+3	fifo	22.6	12.2	0.64	94	89
+3	smartprice	22.6	12.2	0.64	94	89
+3	smartshort	22.6	12.2	0.64	94	89
+3	lifo	23.6	11.5	3.32	94	0
+3	triage	22.6	12.2	0.64	94	89
+4	fifo	29.2	4.8	7.33	31	0
+4	smartprice	29.2	4.8	7.33	31	0
+4	smartshort	29.2	4.8	7.33	31	0
+4	lifo	30.7	8.2	4.33	63	0
+4	triage	29.5	5.1	7.02	35	0
+5	fifo	33.1	2.5	9.49	15	0
+5	smartprice	33.1	2.5	9.49	15	0
+5	smartshort	33.1	2.5	9.49	15	0
+5	lifo	34.4	4.8	7.80	36	0
+5	triage	32.7	2.7	9.38	17	0
+
+=== E. ORDER-TAKING PATIENCE WITH NO PANIC: only ever looks up between drinks, n=300 ===
+skilled x1 eager mReq 0.00 mOrd 0.00 served 26.0 minTakeLeft 0.04
+skilled x1 batch mReq 0.69 mOrd 0.00 served 27.4 minTakeLeft 0.00
+skilled x1.5 eager mReq 0.03 mOrd 0.00 served 20.2 minTakeLeft 0.00
+skilled x1.5 batch mReq 5.42 mOrd 0.00 served 20.5 minTakeLeft 0.00
+skilled x2 eager mReq 0.23 mOrd 0.04 served 16.7 minTakeLeft 0.00
+skilled x2 batch mReq 6.33 mOrd 0.00 served 16.9 minTakeLeft 0.01
+sloppy x1 eager mReq 0.73 mOrd 0.75 served 14.6 minTakeLeft 0.00
+sloppy x1 batch mReq 5.88 mOrd 0.21 served 15.0 minTakeLeft 0.00
+sloppy x1.5 eager mReq 4.30 mOrd 3.27 served 9.0 minTakeLeft 0.00
+sloppy x1.5 batch mReq 7.68 mOrd 1.76 served 9.7 minTakeLeft 0.00
+sloppy x2 eager mReq 5.69 mOrd 5.07 served 5.9 minTakeLeft 0.00
+sloppy x2 batch mReq 9.24 mOrd 2.76 served 7.3 minTakeLeft 0.00
+
+=== F. NOVELTY: which drink shows you the last ingredient you have not seen? (day 1 order stream) ===
+askable ingredients: 24. 50% seen by drink 4.2, 80% by 11.7, 90% by 16.8, all by 32.8 (p90 50)
+
+=== G. HOW MANY SLIPS BEFORE THE THIRD STAR GOES? skilled tempo, ship the mistake, day 7, n=200 ===
+slip/step 0 perfect% 100 star3% 100 money 240
+slip/step 0.01 perfect% 95 star3% 100 money 232
+slip/step 0.03 perfect% 85 star3% 100 money 217
+slip/step 0.05 perfect% 77 star3% 99 money 203
+slip/step 0.08 perfect% 64 star3% 69 money 182
+slip/step 0.1 perfect% 58 star3% 42 money 170
+slip/step 0.15 perfect% 44 star3% 3 money 140
+slip/step 0.2 perfect% 32 star3% 0 money 114
+same with remake:
+slip/step 0.01 perfect% 100 served 25.9 star3% 100 money 236 remakes 1.9
+slip/step 0.05 perfect% 100 served 24.2 star3% 100 money 220 remakes 10.2
+slip/step 0.1 perfect% 100 served 21.7 star3% 100 money 196 remakes 23.3
+slip/step 0.15 perfect% 100 served 19.4 star3% 100 money 173 remakes 39.0
+
+=== H. STAYS TRUE WHEN THE TIMING GUESSES MOVE? day 30 default play, tap time varied ===
+tap 300 build 7.4 served 29.0 missed 0.00 money 263 star3% 100
+tap 400 build 8.2 served 26.4 missed 0.00 money 238 star3% 100
+tap 600 build 10.0 served 22.5 missed 0.00 money 197 star3% 100
+tap 800 build 11.7 served 19.8 missed 0.00 money 171 star3% 100
+tap 1000 build 13.4 served 17.7 missed 0.00 money 148 star3% 100

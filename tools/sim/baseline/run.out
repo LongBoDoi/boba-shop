@@ -1,0 +1,152 @@
+
+=== 1. FULL SHIFTS, standard mode, upright phone, n=300 per cell ===
+prof	day	orders	served	miss	mReq	mOrd	any%	perf%	close	wrong	star3%	busy%	idle%	lid%	trav%	left	p5	min	tip	tip$%	takeL	tkMin	money	sd	dist	shape	build	wait	wMax	full%
+skilled	1	22.4	22.4	0.00	0.00	0.00	0	100	0.00	0.00	100	91	8.6	15.5	11.3	0.92	0.91	0.82	3.00	31	0.95	0.41	215	9	22.3	13.3	8.2	10.2	28.4	5
+skilled	3	25.0	25.0	0.00	0.00	0.00	0	100	0.00	0.00	100	98	2.0	16.8	12.0	0.90	0.82	0.68	2.87	30	0.87	0.39	238	9	25.0	14.1	8.2	14.2	38.5	5
+skilled	7	26.0	26.0	0.00	0.00	0.00	0	100	0.00	0.00	100	99	0.7	16.8	11.9	0.77	0.66	0.49	2.15	24	0.74	0.27	235	7	25.9	17.9	8.4	25.3	43.9	62
+skilled	14	26.0	26.0	0.00	0.00	0.00	0	100	0.00	0.00	100	99	0.7	16.8	11.9	0.68	0.53	0.30	2.08	23	0.68	0.19	234	8	26.0	18.0	8.4	25.9	43.6	66
+skilled	30	26.0	26.0	0.00	0.00	0.00	0	100	0.00	0.00	100	99	0.7	16.8	11.9	0.68	0.53	0.30	2.08	23	0.68	0.19	234	8	26.0	18.0	8.4	25.9	43.6	66
+sloppy	1	14.5	14.5	0.00	0.00	0.00	0	86	1.23	0.04	99	99	0.6	9.3	8.8	0.79	0.66	0.42	2.09	25	0.71	0.13	119	11	14.4	10.0	15.8	32.6	68.5	78
+sloppy	3	15.4	15.4	0.00	0.00	0.00	0	85	1.46	0.04	100	99	0.5	9.3	8.4	0.63	0.44	0.16	1.65	21	0.69	0.13	120	11	15.4	10.5	15.8	47.0	89.5	69
+sloppy	7	15.2	15.2	0.01	0.00	0.01	1	85	1.54	0.06	100	99	0.5	9.2	8.1	0.52	0.29	0.00	1.33	17	0.63	0.14	117	10	15.2	12.2	16.3	48.8	90.8	73
+sloppy	14	15.3	14.7	0.59	0.00	0.59	46	85	1.40	0.11	89	99	0.5	9.0	8.6	0.36	0.08	0.00	1.00	14	0.52	0.17	108	11	15.3	12.3	16.8	48.1	76.2	74
+sloppy	30	15.3	14.7	0.59	0.00	0.59	46	85	1.40	0.11	89	99	0.5	9.0	8.6	0.36	0.08	0.00	1.00	14	0.52	0.17	108	11	15.3	12.3	16.8	48.1	76.2	74
+
+Skilled, landscape (no panning):
+1 served 22.4 build 7.5 money 216 idle% 14.3
+30 served 27.8 build 7.7 money 252 idle% 0.7
+
+=== 2. THE DAY DIAL ===
+maxToppings      day1 1 day30 2 last changes on day 5
+slots            day1 2 day30 3 last changes on day 2
+durationMs       day1 240000 day30 240000 last changes on day 1
+orderPatienceMs  day1 30000 day30 20000 last changes on day 11
+patienceMs       day1 114000 day30 60000 last changes on day 12
+spawnMinMs       day1 8400 day30 4000 last changes on day 9
+spawnMaxMs       day1 13400 day30 9000 last changes on day 9
+config 12 === 30 ? true ; 12 === 999 ? true
+identical shift, same seed, day 12 vs day 30: 100 /100
+Days 2..30 with anything to announce: 2,5
+
+=== 3. HOW SLOW MUST YOU BE? all human timing x speed, no slips, FIFO, n=200 ===
+day	speed	build_s	served	missed	mReq	mOrd	happy%	money	star3%	idle%
+1	1	8.1	22.4	0.00	0.00	0.00	100	216	100	9.5
+1	1.5	10.7	19.9	0.00	0.00	0.00	100	188	100	0.7
+1	2	13.4	16.4	0.00	0.00	0.00	100	151	100	0.6
+1	2.5	16.1	14.1	0.00	0.00	0.00	100	127	100	0.5
+1	3	18.9	12.4	0.00	0.00	0.00	100	109	100	0.5
+1	4	28.0	9.7	0.00	0.00	0.00	100	83	100	0.4
+1	5	34.4	8.0	0.00	0.00	0.00	100	68	100	0.4
+1	6	40.5	7.0	0.00	0.00	0.00	100	55	100	0.4
+1	8	52.7	5.9	0.01	0.00	0.01	100	45	100	0.4
+7	1	8.2	26.4	0.00	0.00	0.00	100	240	100	0.7
+7	1.5	11.0	20.5	0.00	0.00	0.00	100	186	100	0.6
+7	2	13.7	17.1	0.00	0.00	0.00	100	147	100	0.6
+7	2.5	17.0	14.7	0.00	0.00	0.00	100	126	100	0.5
+7	3	21.9	12.7	0.00	0.00	0.00	100	103	100	0.4
+7	4	28.8	10.2	0.12	0.00	0.12	99	81	99	0.4
+7	5	34.1	5.0	4.89	0.00	4.89	51	35	0	0.4
+7	6	39.3	4.2	5.33	0.00	5.33	44	28	0	0.4
+7	8	48.1	2.1	6.91	0.00	6.91	23	14	0	0.4
+30	1	8.2	26.4	0.00	0.00	0.00	100	238	100	0.7
+30	1.5	11.0	20.6	0.00	0.00	0.00	100	177	100	0.6
+30	2	14.1	17.1	0.00	0.00	0.00	100	140	100	0.6
+30	2.5	18.8	14.2	0.15	0.00	0.15	99	114	100	0.5
+30	3	22.5	12.1	0.76	0.00	0.76	94	93	83	0.4
+30	4	28.6	4.9	7.32	0.00	7.32	40	33	0	0.4
+30	5	33.1	2.6	9.47	0.00	9.47	21	15	0	0.4
+30	6	38.2	2.1	9.85	0.00	9.85	18	13	0	0.4
+30	8	44.6	1.6	10.38	0.00	10.38	13	8	0	0.4
+
+=== 4. COUNTERFACTUAL KNOBS, day 30 config, n=200 ===
+patch	profile	served	missed	mReq	mOrd	money	star3%	left	leftP5	full%	idle%
+as shipped	skilled	26.0	0.00	0.00	0.00	234	100	0.68	0.53	66	0.7
+as shipped	sloppy	14.7	0.61	0.00	0.61	108	86	0.36	0.08	74	0.5
+spawn x0.5 (2-4.5s)	skilled	26.0	0.00	0.00	0.00	233	100	0.66	0.52	72	0.7
+spawn x0.5 (2-4.5s)	sloppy	14.5	0.66	0.00	0.66	107	88	0.36	0.08	77	0.5
+spawn x0.25 (1-2.25s)	skilled	26.0	0.00	0.00	0.00	233	100	0.66	0.52	74	0.7
+spawn x0.25 (1-2.25s)	sloppy	14.6	0.64	0.00	0.64	108	88	0.33	0.07	78	0.5
+patience 45s	skilled	26.0	0.00	0.00	0.00	227	100	0.57	0.37	66	0.7
+patience 45s	sloppy	11.6	4.88	0.00	4.88	84	1	0.29	0.03	73	0.5
+patience 30s	skilled	25.6	0.52	0.00	0.52	205	98	0.36	0.07	66	0.7
+patience 30s	sloppy	7.4	12.51	0.00	12.51	50	0	0.28	0.02	67	0.5
+patience 20s	skilled	21.6	7.29	0.00	7.29	164	2	0.24	0.02	56	0.7
+patience 20s	sloppy	6.7	17.55	0.00	17.55	42	0	0.17	0.02	58	0.5
+orderPatience 10s	skilled	25.7	0.00	0.00	0.00	231	100	0.67	0.57	67	0.7
+orderPatience 10s	sloppy	14.2	0.84	0.00	0.84	102	74	0.26	0.06	74	0.5
+slots 4	skilled	26.9	0.00	0.00	0.00	234	100	0.55	0.36	59	0.7
+slots 4	sloppy	12.6	4.80	0.00	4.80	90	1	0.27	0.03	66	0.5
+slots 5	skilled	27.8	0.00	0.00	0.00	231	100	0.43	0.20	52	0.7
+slots 5	sloppy	10.9	9.47	0.00	9.47	77	0	0.25	0.02	58	0.5
+slots 6	skilled	28.5	0.40	0.00	0.40	236	99	0.34	0.06	46	0.6
+slots 6	sloppy	9.9	13.20	0.00	13.20	68	0	0.24	0.01	51	0.5
+slots 5 + patience 30s	skilled	19.6	13.44	0.00	13.44	146	0	0.23	0.01	33	0.6
+slots 5 + patience 30s	sloppy	4.7	24.80	0.00	24.80	29	0	0.22	0.01	39	0.5
+
+=== 5. DECISIONS, one at a time against the do-nothing default (fifo, eager, normal pour, remake), n=300 ===
+decision	profile	day	served	missed	perf%	money	delta%	tip	star3%	build
+default	skilled	3	25.0	0.00	100	238	0.0	2.87	100	8.2
+queue: lifo	skilled	3	24.8	0.23	100	238	-0.2	2.96	100	8.2
+queue: price-first	skilled	3	24.9	0.06	100	238	0.0	2.93	100	8.2
+queue: shortest-first	skilled	3	24.9	0.07	100	239	0.2	2.93	100	8.2
+queue: longest-first	skilled	3	24.9	0.07	100	238	-0.1	2.93	100	8.2
+queue: random	skilled	3	25.0	0.00	100	239	0.2	2.90	100	8.2
+take: batch	skilled	3	25.1	0.00	100	241	1.3	2.98	100	8.2
+take: lazy one-at-a-time	skilled	3	25.1	0.00	100	241	1.3	3.00	100	8.2
+pour: 3% tap	skilled	3	25.1	0.00	100	242	1.5	3.00	100	7.3
+mistake: ship it	skilled	3	25.1	0.00	95	233	-2.4	2.79	100	8.1
+default	skilled	30	26.0	0.00	100	234	0.0	2.08	100	8.4
+queue: lifo	skilled	30	24.6	3.23	100	233	-0.4	2.52	0	8.4
+queue: price-first	skilled	30	24.7	1.94	100	231	-1.2	2.27	82	8.4
+queue: shortest-first	skilled	30	25.1	2.02	100	230	-1.5	2.36	78	8.3
+queue: longest-first	skilled	30	24.6	2.01	100	228	-2.7	2.25	80	8.5
+queue: random	skilled	30	25.3	0.74	100	229	-2.1	2.15	100	8.4
+take: batch	skilled	30	26.6	0.00	100	247	5.5	2.34	100	9.2
+take: lazy one-at-a-time	skilled	30	25.9	0.00	100	240	2.6	2.33	100	9.5
+pour: 3% tap	skilled	30	28.4	0.00	100	257	9.7	2.12	100	7.5
+mistake: ship it	skilled	30	26.4	0.00	95	230	-1.4	1.98	100	8.2
+default	sloppy	3	15.4	0.00	85	120	0.0	1.65	100	15.8
+queue: lifo	sloppy	3	14.3	2.00	85	116	-3.5	2.00	0	15.9
+queue: price-first	sloppy	3	14.6	1.05	86	118	-2.0	1.79	81	15.9
+queue: shortest-first	sloppy	3	14.8	1.24	86	118	-1.6	1.89	66	15.5
+queue: longest-first	sloppy	3	14.4	1.18	84	113	-5.6	1.72	73	16.0
+queue: random	sloppy	3	14.9	0.64	85	118	-2.1	1.73	91	15.7
+take: batch	sloppy	3	15.4	0.00	84	121	0.9	1.77	100	17.8
+take: lazy one-at-a-time	sloppy	3	15.2	0.00	85	120	-0.2	1.78	99	17.9
+pour: 3% tap	sloppy	3	16.4	0.00	90	134	11.4	1.84	100	14.5
+mistake: ship it	sloppy	3	16.3	0.00	72	116	-3.0	1.49	84	14.6
+default	sloppy	30	14.7	0.59	85	108	0.0	1.00	89	16.8
+queue: lifo	sloppy	30	13.7	3.59	85	108	-0.4	1.43	0	17.2
+queue: price-first	sloppy	30	13.5	3.05	85	109	0.4	1.36	1	17.4
+queue: shortest-first	sloppy	30	13.9	3.18	85	106	-2.1	1.40	0	16.6
+queue: longest-first	sloppy	30	13.3	3.07	85	105	-2.6	1.34	1	17.7
+queue: random	sloppy	30	13.6	2.80	85	104	-3.6	1.30	9	17.0
+take: batch	sloppy	30	14.8	0.25	86	111	2.2	1.03	94	17.9
+take: lazy one-at-a-time	sloppy	30	14.8	0.16	85	110	1.4	1.04	97	18.2
+pour: 3% tap	sloppy	30	15.8	0.32	90	122	12.4	1.13	94	15.3
+mistake: ship it	sloppy	30	15.9	0.00	72	108	-0.5	0.85	83	15.7
+
+=== 6. GARBAGE BOT: never reads an order, always hands over a plain S Hong tra, n=300 ===
+day 1 served 22.4 missed 0.00 perfect% 0.0 wrong 22.3 money 0 stars[0..3]% 0/0/100/0
+day 7 served 33.2 missed 0.00 perfect% 0.0 wrong 33.1 money 0 stars[0..3]% 0/0/100/0
+day 30 served 37.1 missed 0.00 perfect% 0.0 wrong 36.9 money 0 stars[0..3]% 0/0/100/0
+
+=== 7. WHAT MOVES THE MONEY? main-effect share of variance, balanced factorial ===
+day 3 coins   tempo 81.1%  accuracy 5.0%  queue 0.0%  take 0.7%  pour 1.3%  fix 1.8%  rest 10.2%  (n=5184, mean 185.1)
+day 3 stars   tempo 2.3%  accuracy 0.2%  queue 0.5%  take 1.9%  pour 0.0%  fix 0.1%  rest 95.1%  (n=5184, mean 3.0)
+day 3 served  tempo 89.7%  accuracy 0.5%  queue 0.1%  take 0.6%  pour 1.5%  fix 0.9%  rest 6.6%  (n=5184, mean 21.1)
+day 3 best decisions at top execution: fifo/batch/tiny/remake = 239; default = 236; worst fifo/eager/normal/ship = 229
+   excluding the 3%-pour rule abuse: best fifo/lazy/normal/remake = 239, +1.0% vs default
+   same default decisions, tempo x1/1.5/2: 1: 236  1.5: 178  2: 148
+day 30 coins   tempo 84.9%  accuracy 4.2%  queue 0.1%  take 0.8%  pour 3.0%  fix 0.3%  rest 6.9%  (n=5184, mean 182.9)
+day 30 stars   tempo 12.2%  accuracy 0.3%  queue 9.2%  take 13.7%  pour 0.7%  fix 0.0%  rest 63.9%  (n=5184, mean 2.8)
+day 30 served  tempo 88.6%  accuracy 0.7%  queue 0.4%  take 0.6%  pour 3.1%  fix 1.4%  rest 5.1%  (n=5184, mean 21.2)
+day 30 best decisions at top execution: fifo/batch/tiny/ship = 283; default = 235; worst price/eager/normal/ship = 228
+   excluding the 3%-pour rule abuse: best fifo/batch/normal/remake = 250, +6.3% vs default
+   same default decisions, tempo x1/1.5/2: 1: 235  1.5: 176  2: 139
+
+=== 8. A THIRTY-DAY RUN, day after day, carrying the shop, 40 runs ===
+skilled day 1: money 215 stars 3.00 | day 2: money 226 stars 3.00 | day 3: money 240 stars 3.00 | day 5: money 237 stars 3.00 | day 7: money 236 stars 3.00 | day 9: money 236 stars 3.00 | day 12: money 233 stars 3.00 | day 14: money 234 stars 3.00 | day 20: money 236 stars 3.00 | day 30: money 234 stars 3.00
+skilled till after 30 days 7031 (units; 1 unit = 10.000d) | orders 773 distinct 758
+sloppy day 1: money 117 stars 3.00 | day 2: money 120 stars 3.00 | day 3: money 121 stars 3.00 | day 5: money 123 stars 3.00 | day 7: money 116 stars 2.98 | day 9: money 114 stars 2.98 | day 12: money 103 stars 2.77 | day 14: money 109 stars 2.90 | day 20: money 107 stars 2.85 | day 30: money 109 stars 2.88
+sloppy till after 30 days 3343 (units; 1 unit = 10.000d) | orders 457 distinct 451
