@@ -1,0 +1,759 @@
+Stage 3 of the mechanics proposal: kinds and overtime together, then Dot khach, then tuning.
+Everything below is the output of tools/sim, kept as printed. Newest and final is PART 4; read that first.
+
+Final constants, all in src/game/rules.ts:
+  FIRST_WAVE 3, MAX_WAVE 6, WAVE_GROWTH_DAYS 5 (group 3 on days 1-5, 4 on 6-10, 5 on 11-15, 6 from 16)
+  LULL 6-10 s, WAVE_GAP 1.2-2.2 s
+  LINE_MS 35 s                 (brief's start: about 25 s)
+  DAY_PATIENCE_FLOOR_MS 65 s   (was a literal 60 s in levels.ts)
+  OVERTIME_PATIENCE 0.7        (brief's start: 0.8)
+  OVERTIME_BONUS_PER_ROUND 0.1 (brief's start: 0.15)
+  OVERTIME_BURN_KEEPS 0.5      (unmoved: decision 2)
+  Kind rules and the two floors under them: unmoved. A round's group: config.waveSize, as the brief says.
+
+Which part was run on what:
+  PART 1  before any wave code, on the brief's starting overtime constants, n=300.
+  PART 2  sweeps, in the order they were run. These predate two fixes and two later constants, so read them
+          for direction and not for level: the wave and overtime sweeps ran with a bug that gave the day's
+          first group a quiet of its own, and on a day floor of 60 s; OVERTIME_GROUP_EXTRA existed for them,
+          was shown to add nothing, and is gone. The day-floor sweep ran on the 30 s line.
+  PART 3  the line-wait sweep, on the final day floor, which is what chose 35 s.
+  PART 4  the final pass on the final constants, n=300, then the sensitivity sweep around them, n=120.
+  PART 5  the day floor and the line wait again on the bot that PART 4 uses, which is what kept 65 s and 35 s.
+
+PARTS 1 TO 3 ran on a bot that read every customer's exact deadline from any page. PARTS 4 AND 5 ran on the
+bot that decides from what is on screen (tools/sim/README.md), so compare them for direction only. PART 4's
+section F is new with that change.
+
+
+################ PART 1. KINDS AND OVERTIME TOGETHER, BEFORE WAVES
+
+=== A. AGAINST THE BASELINE: standard mode, upright, no overtime, n=300 per cell ===
+base = baseline/run.out as printed; day 12 there is day 14, whose config it shares.
+prof	day	queue	orders	served	miss	mReq	mOrd	ship	line	wrong	star3%	star2%	money	idle%	| base:	served	miss	star3%	money	money%
+skilled	1	fifo	22.4	22.4	0.00	0.00	0.00	0.00	0.00	0.00	100	0	232	8.5	|	22.4	0.00	100	215	7.8
+skilled	1	kinds	22.4	22.4	0.00	0.00	0.00	0.00	0.00	0.00	100	0	232	8.5	|	22.4	0.00	100	215	7.8
+skilled	3	fifo	25.0	25.0	0.00	0.00	0.00	0.00	0.00	0.00	100	0	252	2.0	|	25.0	0.00	100	238	5.8
+skilled	3	kinds	25.0	25.0	0.01	0.00	0.01	0.00	0.00	0.00	100	0	254	2.0	|	25.0	0.00	100	238	6.5
+skilled	7	fifo	26.0	26.0	0.00	0.00	0.00	0.00	0.00	0.00	100	0	249	0.7	|	26.0	0.00	100	235	5.8
+skilled	7	kinds	25.4	25.3	0.09	0.00	0.08	0.01	0.00	0.01	100	0	254	0.7	|	26.0	0.00	100	235	8.2
+skilled	12	fifo	26.0	25.9	0.01	0.00	0.00	0.09	0.00	0.01	100	0	239	0.7	|	26.0	0.00	100	234	2.1
+skilled	12	kinds	25.6	25.2	0.32	0.00	0.30	0.12	0.00	0.02	100	0	244	0.7	|	26.0	0.00	100	234	4.5
+skilled	30	fifo	26.0	25.9	0.01	0.00	0.00	0.09	0.00	0.01	100	0	239	0.7	|	26.0	0.00	100	234	2.1
+skilled	30	kinds	25.6	25.2	0.32	0.00	0.30	0.12	0.00	0.02	100	0	244	0.7	|	26.0	0.00	100	234	4.5
+sloppy	1	fifo	14.5	14.4	0.05	0.00	0.00	0.00	0.00	0.05	100	0	122	0.6	|	14.5	0.00	99	119	2.3
+sloppy	1	kinds	14.3	14.3	0.07	0.00	0.00	0.00	0.00	0.07	99	1	123	0.6	|	14.5	0.00	99	119	3.6
+sloppy	3	fifo	15.5	15.1	0.10	0.00	0.00	0.34	0.00	0.10	100	0	121	0.5	|	15.4	0.00	100	120	0.5
+sloppy	3	kinds	15.3	14.8	0.26	0.00	0.18	0.25	0.00	0.08	97	3	124	0.5	|	15.4	0.00	100	120	3.1
+sloppy	7	fifo	15.6	14.1	0.13	0.00	0.01	1.34	0.00	0.12	98	2	112	0.5	|	15.2	0.01	100	117	-4.5
+sloppy	7	kinds	15.5	14.0	0.41	0.00	0.28	1.04	0.00	0.13	95	5	115	0.5	|	15.2	0.01	100	117	-1.8
+sloppy	12	fifo	16.3	13.4	0.93	0.00	0.75	1.91	0.00	0.18	77	23	102	0.5	|	14.7	0.59	89	108	-5.8
+sloppy	12	kinds	16.1	13.3	0.84	0.00	0.66	1.91	0.00	0.17	78	21	104	0.5	|	14.7	0.59	89	108	-3.4
+sloppy	30	fifo	16.3	13.4	0.93	0.00	0.75	1.91	0.00	0.18	77	23	102	0.5	|	14.7	0.59	89	108	-5.8
+sloppy	30	kinds	16.1	13.3	0.84	0.00	0.66	1.91	0.00	0.17	78	21	104	0.5	|	14.7	0.59	89	108	-3.4
+
+=== B. OVERTIME: what each way of pressing is worth, n=300 per cell ===
+hearts.x presses only while every heart on the counter is above x. d$ is against never on the same seeds.
+prof	day	queue	policy	money	d$	d$%	rounds	press%	burn%	jar	paid	lateGone	star3%	miss
+skilled	3	fifo	never	251.8	0.0	0.0	0.00	0	-	0.0	0.0	0.00	100	0.00
+skilled	3	fifo	once	287.2	35.4	14.1	1.00	100	0	46.4	52.8	0.00	100	0.00
+skilled	3	fifo	twice	331.6	79.8	31.7	2.00	100	0	75.1	97.2	0.00	100	0.00
+skilled	3	fifo	always	382.9	131.1	52.0	3.00	100	0	102.7	148.5	0.00	100	0.00
+skilled	3	fifo	hearts.4	382.9	131.1	52.0	3.00	100	0	102.7	148.5	0.00	100	0.00
+skilled	3	fifo	hearts.6	383.0	131.1	52.1	3.00	100	0	102.8	148.6	0.00	100	0.00
+skilled	3	fifo	hearts.8	379.4	127.5	50.6	2.93	100	0	100.8	144.9	0.00	100	0.00
+skilled	3	kinds	never	253.5	0.0	0.0	0.00	0	-	0.0	0.0	0.00	100	0.01
+skilled	3	kinds	once	289.4	35.9	14.1	1.00	100	1	46.8	53.4	0.00	100	0.01
+skilled	3	kinds	twice	334.4	80.9	31.9	1.99	100	2	75.8	98.1	0.01	100	0.02
+skilled	3	kinds	always	384.2	130.6	51.5	2.98	100	2	102.3	147.7	0.03	100	0.02
+skilled	3	kinds	hearts.4	376.6	123.0	48.5	2.80	97	1	97.6	139.9	0.02	100	0.01
+skilled	3	kinds	hearts.6	367.9	114.4	45.1	2.60	92	0	91.4	130.4	0.01	100	0.01
+skilled	3	kinds	hearts.8	347.4	93.9	37.0	2.14	83	0	76.9	107.7	0.01	100	0.01
+skilled	7	fifo	never	248.7	0.0	0.0	0.00	0	-	0.0	0.0	0.00	100	0.00
+skilled	7	fifo	once	282.1	33.4	13.4	1.00	100	0	53.3	60.8	0.01	100	0.00
+skilled	7	fifo	twice	324.8	76.1	30.6	2.00	100	0	79.9	103.5	0.01	100	0.00
+skilled	7	fifo	always	373.5	124.8	50.2	3.00	100	0	105.3	152.2	0.03	100	0.00
+skilled	7	fifo	hearts.4	373.4	124.7	50.1	3.00	100	0	105.2	152.1	0.03	100	0.00
+skilled	7	fifo	hearts.6	372.5	123.8	49.8	2.98	100	0	104.7	151.2	0.03	100	0.00
+skilled	7	fifo	hearts.8	325.5	76.8	30.9	1.95	90	0	75.2	101.4	0.03	100	0.00
+skilled	7	kinds	never	254.4	0.0	0.0	0.00	0	-	0.0	0.0	0.00	100	0.09
+skilled	7	kinds	once	288.9	34.5	13.6	1.00	100	4	51.7	59.0	0.01	100	0.12
+skilled	7	kinds	twice	329.0	74.6	29.3	1.98	100	7	75.9	97.9	0.02	100	0.14
+skilled	7	kinds	always	373.5	119.1	46.8	2.95	100	10	98.6	141.4	0.05	100	0.15
+skilled	7	kinds	hearts.4	342.9	88.5	34.8	2.17	85	4	78.7	110.0	0.02	100	0.12
+skilled	7	kinds	hearts.6	311.4	57.1	22.4	1.41	65	2	54.7	73.6	0.01	100	0.10
+skilled	7	kinds	hearts.8	275.0	20.6	8.1	0.55	43	0	26.3	31.7	0.00	100	0.09
+skilled	12	fifo	never	238.8	0.0	0.0	0.00	0	-	0.0	0.0	0.00	100	0.01
+skilled	12	fifo	once	271.8	33.0	13.8	1.00	100	0	51.8	59.0	0.01	100	0.00
+skilled	12	fifo	twice	311.5	72.7	30.4	2.00	100	0	76.3	98.6	0.04	100	0.00
+skilled	12	fifo	always	352.1	113.3	47.4	3.00	100	6	96.2	138.2	0.12	100	0.00
+skilled	12	fifo	hearts.4	352.0	113.2	47.4	3.00	100	6	96.1	137.9	0.12	100	0.00
+skilled	12	fifo	hearts.6	347.9	109.1	45.7	2.89	99	5	94.0	134.3	0.12	100	0.01
+skilled	12	fifo	hearts.8	271.3	32.5	13.6	0.95	73	0	42.7	51.3	0.02	100	0.01
+skilled	12	kinds	never	244.4	0.0	0.0	0.00	0	-	0.0	0.0	0.00	100	0.32
+skilled	12	kinds	once	275.8	31.3	12.8	1.00	100	13	45.5	51.8	0.04	100	0.37
+skilled	12	kinds	twice	309.4	65.0	26.6	1.92	100	20	65.1	83.4	0.13	100	0.38
+skilled	12	kinds	always	334.8	90.3	36.9	2.80	100	36	73.9	102.8	0.34	100	0.40
+skilled	12	kinds	hearts.4	317.2	72.7	29.8	2.16	87	22	66.6	90.6	0.22	100	0.37
+skilled	12	kinds	hearts.6	289.4	45.0	18.4	1.29	69	9	47.7	61.5	0.08	100	0.34
+skilled	12	kinds	hearts.8	256.8	12.4	5.1	0.38	33	4	17.8	20.8	0.00	100	0.33
+skilled	30	fifo	never	238.8	0.0	0.0	0.00	0	-	0.0	0.0	0.00	100	0.01
+skilled	30	fifo	once	271.8	33.0	13.8	1.00	100	0	51.8	59.0	0.01	100	0.00
+skilled	30	fifo	twice	311.5	72.7	30.4	2.00	100	0	76.3	98.6	0.04	100	0.00
+skilled	30	fifo	always	352.1	113.3	47.4	3.00	100	6	96.2	138.2	0.12	100	0.00
+skilled	30	fifo	hearts.4	352.0	113.2	47.4	3.00	100	6	96.1	137.9	0.12	100	0.00
+skilled	30	fifo	hearts.6	347.9	109.1	45.7	2.89	99	5	94.0	134.3	0.12	100	0.01
+skilled	30	fifo	hearts.8	271.3	32.5	13.6	0.95	73	0	42.7	51.3	0.02	100	0.01
+skilled	30	kinds	never	244.4	0.0	0.0	0.00	0	-	0.0	0.0	0.00	100	0.32
+skilled	30	kinds	once	275.8	31.3	12.8	1.00	100	13	45.5	51.8	0.04	100	0.37
+skilled	30	kinds	twice	309.4	65.0	26.6	1.92	100	20	65.1	83.4	0.13	100	0.38
+skilled	30	kinds	always	334.8	90.3	36.9	2.80	100	36	73.9	102.8	0.34	100	0.40
+skilled	30	kinds	hearts.4	317.2	72.7	29.8	2.16	87	22	66.6	90.6	0.22	100	0.37
+skilled	30	kinds	hearts.6	289.4	45.0	18.4	1.29	69	9	47.7	61.5	0.08	100	0.34
+skilled	30	kinds	hearts.8	256.8	12.4	5.1	0.38	33	4	17.8	20.8	0.00	100	0.33
+sloppy	3	fifo	never	120.6	0.0	0.0	0.00	0	-	0.0	0.0	0.00	100	0.10
+sloppy	3	fifo	once	134.3	13.7	11.4	1.00	100	0	32.3	36.6	0.22	100	0.10
+sloppy	3	fifo	twice	150.6	30.0	24.9	2.00	100	3	41.1	52.8	0.49	100	0.09
+sloppy	3	fifo	always	163.1	42.5	35.3	3.00	100	19	45.9	64.6	0.92	100	0.09
+sloppy	3	fifo	hearts.4	158.7	38.1	31.6	2.74	96	18	42.7	59.4	0.81	100	0.09
+sloppy	3	fifo	hearts.6	143.9	23.3	19.4	1.77	80	12	31.5	41.6	0.52	100	0.10
+sloppy	3	fifo	hearts.8	124.9	4.3	3.6	0.31	29	0	9.5	10.9	0.06	100	0.10
+sloppy	3	kinds	never	123.7	0.0	0.0	0.00	0	-	0.0	0.0	0.00	97	0.26
+sloppy	3	kinds	once	138.3	14.6	11.8	1.00	100	8	31.1	35.3	0.15	95	0.30
+sloppy	3	kinds	twice	154.6	30.9	25.0	1.96	100	11	39.4	50.6	0.40	95	0.31
+sloppy	3	kinds	always	169.4	45.7	36.9	2.90	100	20	45.4	64.4	0.70	95	0.32
+sloppy	3	kinds	hearts.4	151.2	27.5	22.2	1.72	75	8	32.8	44.1	0.39	95	0.29
+sloppy	3	kinds	hearts.6	136.7	13.0	10.5	0.80	48	3	18.9	23.8	0.15	97	0.27
+sloppy	3	kinds	hearts.8	125.2	1.5	1.2	0.11	10	3	3.3	3.8	0.02	97	0.27
+sloppy	7	fifo	never	111.7	0.0	0.0	0.00	0	-	0.0	0.0	0.00	98	0.13
+sloppy	7	fifo	once	124.7	12.9	11.6	1.00	100	3	30.0	34.0	0.40	99	0.12
+sloppy	7	fifo	twice	135.0	23.2	20.8	2.00	100	25	33.9	42.8	0.85	98	0.14
+sloppy	7	fifo	always	126.6	14.9	13.3	2.99	100	74	24.5	29.9	1.89	98	0.14
+sloppy	7	fifo	hearts.4	125.0	13.2	11.8	2.60	95	66	23.8	28.8	1.56	98	0.13
+sloppy	7	fifo	hearts.6	121.9	10.1	9.1	1.32	71	34	20.4	24.0	0.68	99	0.12
+sloppy	7	fifo	hearts.8	113.5	1.7	1.6	0.12	11	6	3.7	4.1	0.03	99	0.12
+sloppy	7	kinds	never	114.9	0.0	0.0	0.00	0	-	0.0	0.0	0.00	95	0.41
+sloppy	7	kinds	once	128.7	13.9	12.1	1.00	100	11	28.4	32.1	0.30	94	0.41
+sloppy	7	kinds	twice	141.4	26.6	23.1	1.95	100	23	34.2	43.5	0.67	93	0.45
+sloppy	7	kinds	always	142.7	27.9	24.3	2.86	100	53	32.1	42.7	1.29	93	0.48
+sloppy	7	kinds	hearts.4	134.8	19.9	17.4	1.80	77	30	26.8	34.8	0.73	93	0.44
+sloppy	7	kinds	hearts.6	123.7	8.8	7.7	0.74	47	16	15.0	18.2	0.25	93	0.43
+sloppy	7	kinds	hearts.8	116.7	1.8	1.6	0.12	11	6	3.5	4.0	0.03	95	0.41
+sloppy	12	fifo	never	101.8	0.0	0.0	0.00	0	-	0.0	0.0	0.00	77	0.93
+sloppy	12	fifo	once	107.8	6.0	5.9	1.00	100	47	18.0	20.1	0.77	74	0.96
+sloppy	12	fifo	twice	104.3	2.5	2.4	1.89	100	91	10.8	11.6	1.91	73	0.99
+sloppy	12	fifo	always	103.7	2.0	1.9	2.58	100	98	9.1	9.4	3.21	73	0.99
+sloppy	12	fifo	hearts.4	103.5	1.7	1.7	1.92	89	90	10.4	10.9	2.16	76	0.93
+sloppy	12	fifo	hearts.6	104.3	2.6	2.5	0.83	58	59	10.3	11.3	0.70	76	0.92
+sloppy	12	fifo	hearts.8	102.8	1.0	1.0	0.12	12	29	2.8	3.2	0.06	77	0.93
+sloppy	12	kinds	never	104.3	0.0	0.0	0.00	0	-	0.0	0.0	0.00	78	0.84
+sloppy	12	kinds	once	112.8	8.5	8.2	1.00	100	33	21.3	23.9	0.57	75	0.89
+sloppy	12	kinds	twice	112.7	8.4	8.0	1.94	100	73	17.4	20.4	1.53	74	0.94
+sloppy	12	kinds	always	109.6	5.3	5.1	2.74	100	94	13.3	14.5	2.83	72	0.98
+sloppy	12	kinds	hearts.4	108.6	4.3	4.2	1.84	85	79	13.6	15.2	1.64	74	0.96
+sloppy	12	kinds	hearts.6	108.0	3.7	3.5	0.72	53	43	11.4	12.8	0.45	77	0.91
+sloppy	12	kinds	hearts.8	104.9	0.6	0.6	0.13	12	29	2.5	2.8	0.07	78	0.85
+sloppy	30	fifo	never	101.8	0.0	0.0	0.00	0	-	0.0	0.0	0.00	77	0.93
+sloppy	30	fifo	once	107.8	6.0	5.9	1.00	100	47	18.0	20.1	0.77	74	0.96
+sloppy	30	fifo	twice	104.3	2.5	2.4	1.89	100	91	10.8	11.6	1.91	73	0.99
+sloppy	30	fifo	always	103.7	2.0	1.9	2.58	100	98	9.1	9.4	3.21	73	0.99
+sloppy	30	fifo	hearts.4	103.5	1.7	1.7	1.92	89	90	10.4	10.9	2.16	76	0.93
+sloppy	30	fifo	hearts.6	104.3	2.6	2.5	0.83	58	59	10.3	11.3	0.70	76	0.92
+sloppy	30	fifo	hearts.8	102.8	1.0	1.0	0.12	12	29	2.8	3.2	0.06	77	0.93
+sloppy	30	kinds	never	104.3	0.0	0.0	0.00	0	-	0.0	0.0	0.00	78	0.84
+sloppy	30	kinds	once	112.8	8.5	8.2	1.00	100	33	21.3	23.9	0.57	75	0.89
+sloppy	30	kinds	twice	112.7	8.4	8.0	1.94	100	73	17.4	20.4	1.53	74	0.94
+sloppy	30	kinds	always	109.6	5.3	5.1	2.74	100	94	13.3	14.5	2.83	72	0.98
+sloppy	30	kinds	hearts.4	108.6	4.3	4.2	1.84	85	79	13.6	15.2	1.64	74	0.96
+sloppy	30	kinds	hearts.6	108.0	3.7	3.5	0.72	53	43	11.4	12.8	0.45	77	0.91
+sloppy	30	kinds	hearts.8	104.9	0.6	0.6	0.13	12	29	2.5	2.8	0.07	78	0.85
+
+=== C. SHAPE OF A SHIFT, n=300 ===
+mean30: drinks per 30 s bucket across shifts (averaging across shifts smears waves, which do not line up).
+within: inside each shift, 10 s buckets of the day proper summed over a sliding 30 s, averaged: busiest quarter vs quietest quarter, and the CV.
+skilled day 1 mean30 2.1 2.9 2.7 2.7 2.8 2.7 2.8 2.7 | within: quietest 2.07 busiest 3.06 cv 0.17
+skilled day 3 mean30 2.2 3.0 3.1 3.0 3.0 3.0 3.0 3.0 | within: quietest 2.54 busiest 3.40 cv 0.14
+skilled day 7 mean30 2.2 3.0 3.0 3.0 3.0 2.9 3.0 3.0 | within: quietest 2.48 busiest 3.36 cv 0.14
+skilled day 12 mean30 2.2 3.0 3.0 3.0 3.0 3.0 3.0 3.0 | within: quietest 2.45 busiest 3.37 cv 0.14
+skilled day 30 mean30 2.2 3.0 3.0 3.0 3.0 3.0 3.0 3.0 | within: quietest 2.45 busiest 3.37 cv 0.14
+sloppy day 1 mean30 1.0 1.7 1.6 1.7 1.7 1.7 1.6 1.7 | within: quietest 0.99 busiest 2.01 cv 0.31
+sloppy day 3 mean30 1.0 1.7 1.6 1.6 1.6 1.6 1.6 1.7 | within: quietest 0.95 busiest 2.01 cv 0.33
+sloppy day 7 mean30 0.9 1.7 1.4 1.5 1.5 1.5 1.5 1.5 | within: quietest 0.89 busiest 2.00 cv 0.36
+sloppy day 12 mean30 0.9 1.5 1.4 1.5 1.5 1.5 1.5 1.5 | within: quietest 0.82 busiest 2.01 cv 0.39
+sloppy day 30 mean30 0.9 1.5 1.4 1.5 1.5 1.5 1.5 1.5 | within: quietest 0.82 busiest 2.01 cv 0.39
+
+=== D. HOW SLOW MAY YOU BE? sloppy timing x speed, n=300 ===
+day	speed	served	miss	line	star3%	star2%	money
+3	1	15.1	0.10	0.00	100	0	121
+3	1.25	12.6	0.09	0.00	99	1	98
+3	1.5	10.9	0.13	0.00	96	4	83
+3	2	8.5	0.60	0.00	67	30	62
+12	1	13.4	0.93	0.00	77	23	102
+12	1.25	10.5	2.30	0.00	32	53	78
+12	1.5	8.0	3.77	0.00	6	36	58
+12	2	4.6	6.28	0.00	0	3	32
+30	1	13.4	0.93	0.00	77	23	102
+30	1.25	10.5	2.30	0.00	32	53	78
+30	1.5	8.0	3.77	0.00	6	36	58
+30	2	4.6	6.28	0.00	0	3	32
+
+################ PART 2a. WAVE SWEEP (n=100)
+
+constants	sl.star3 d3/7/12/30	sl.line	sl.miss12/30	sl.money3/30	sk.star3 d30	sk.line	sk.money3/30	sk.idle30
+MAX_WAVE=4 GROWTH_DAYS=6 LINE_MS=25000	96/99/85/85	0.0/0.2/0.2/0.2	0.61/0.61	99/98	100	0.0	207/213	17
+MAX_WAVE=4 GROWTH_DAYS=6 LINE_MS=35000	96/98/85/85	0.0/0.0/0.0/0.0	0.61/0.61	99/98	100	0.0	207/213	17
+MAX_WAVE=4 GROWTH_DAYS=9 LINE_MS=25000	96/96/85/85	0.0/0.0/0.2/0.2	0.61/0.61	99/98	100	0.0	207/213	17
+MAX_WAVE=4 GROWTH_DAYS=9 LINE_MS=35000	96/96/85/85	0.0/0.0/0.0/0.0	0.61/0.61	99/98	100	0.0	207/213	17
+MAX_WAVE=4 GROWTH_DAYS=12 LINE_MS=25000	96/96/90/85	0.0/0.0/0.0/0.2	0.45/0.61	99/98	100	0.0	207/213	17
+MAX_WAVE=4 GROWTH_DAYS=12 LINE_MS=35000	96/96/90/85	0.0/0.0/0.0/0.0	0.45/0.61	99/98	100	0.0	207/213	17
+MAX_WAVE=5 GROWTH_DAYS=6 LINE_MS=25000	96/99/85/87	0.0/0.2/0.2/3.7	0.61/0.55	99/94	100	0.0	207/225	14
+MAX_WAVE=5 GROWTH_DAYS=6 LINE_MS=35000	96/98/85/86	0.0/0.0/0.0/0.9	0.61/0.68	99/91	100	0.0	207/224	14
+MAX_WAVE=5 GROWTH_DAYS=9 LINE_MS=25000	96/96/85/87	0.0/0.0/0.2/3.7	0.61/0.55	99/94	100	0.0	207/225	14
+MAX_WAVE=5 GROWTH_DAYS=9 LINE_MS=35000	96/96/85/86	0.0/0.0/0.0/0.9	0.61/0.68	99/91	100	0.0	207/224	14
+MAX_WAVE=5 GROWTH_DAYS=12 LINE_MS=25000	96/96/90/87	0.0/0.0/0.0/3.7	0.45/0.55	99/94	100	0.0	207/225	14
+MAX_WAVE=5 GROWTH_DAYS=12 LINE_MS=35000	96/96/90/86	0.0/0.0/0.0/0.9	0.45/0.68	99/91	100	0.0	207/224	14
+MAX_WAVE=6 GROWTH_DAYS=6 LINE_MS=25000	96/99/85/86	0.0/0.2/0.2/6.9	0.61/0.58	99/95	100	0.7	207/217	12
+MAX_WAVE=6 GROWTH_DAYS=6 LINE_MS=35000	96/98/85/86	0.0/0.0/0.0/3.4	0.61/0.60	99/96	100	0.0	207/223	12
+MAX_WAVE=6 GROWTH_DAYS=9 LINE_MS=25000	96/96/85/86	0.0/0.0/0.2/6.9	0.61/0.58	99/95	100	0.7	207/217	12
+MAX_WAVE=6 GROWTH_DAYS=9 LINE_MS=35000	96/96/85/86	0.0/0.0/0.0/3.4	0.61/0.60	99/96	100	0.0	207/223	12
+MAX_WAVE=6 GROWTH_DAYS=12 LINE_MS=25000	96/96/90/87	0.0/0.0/0.0/3.7	0.45/0.55	99/94	100	0.0	207/225	14
+MAX_WAVE=6 GROWTH_DAYS=12 LINE_MS=35000	96/96/90/86	0.0/0.0/0.0/0.9	0.45/0.68	99/91	100	0.0	207/224	14
+MAX_WAVE=5 GROWTH_DAYS=9 LINE_MS=35000 LULL_MIN_MS=6000 LULL_MAX_MS=10000	96/96/85/86	0.0/0.0/0.0/0.9	0.61/0.68	99/91	100	0.0	207/224	14
+MAX_WAVE=5 GROWTH_DAYS=9 LINE_MS=35000 LULL_MIN_MS=4000 LULL_MAX_MS=7000	98/96/84/86	0.0/0.0/0.0/1.0	0.63/0.69	109/92	100	0.0	215/233	10
+
+################ PART 2b. WAVE SWEEP, REFINED (n=200)
+
+constants	sl.star3 d3/7/12/30	sl.line	sl.miss12/30	sl.money3/30	sk.star3 d30	sk.line	sk.money3/30	sk.idle30
+MAX_WAVE=5 GROWTH_DAYS=6 LINE_MS=30000	97/98/84/89	0.0/0.1/0.0/2.1	0.65/0.55	99/91	100	0.0	207/225	14
+MAX_WAVE=6 GROWTH_DAYS=8 LINE_MS=30000	97/97/84/87	0.0/0.0/0.0/4.5	0.65/0.61	99/91	100	0.1	207/223	12
+MAX_WAVE=6 GROWTH_DAYS=6 LINE_MS=35000	97/98/84/83	0.0/0.0/0.0/3.3	0.65/0.69	99/95	100	0.0	207/223	12
+MAX_WAVE=5 GROWTH_DAYS=6 LINE_MS=28000	97/98/83/85	0.0/0.1/0.1/2.9	0.66/0.59	99/93	100	0.0	207/225	14
+MAX_WAVE=5 GROWTH_DAYS=4 LINE_MS=30000	97/98/89/89	0.0/0.1/2.1/2.1	0.55/0.55	99/91	100	0.0	207/225	14
+
+################ PART 2c. OVERTIME SWEEP (n=100): the multiplier, the half jar, patience and group size
+
+Each row: d$ against never on the same seeds, then burn% of shifts that pressed. Columns are policies.
+constants	prof	day	queue	never	once	twice	always	hearts.5	hearts.7
+as set	skilled	7	fifo	0/-%	21/0%	69/0%	120/0%	122/0%	114/0%
+as set	skilled	30	fifo	0/-%	23/0%	64/0%	100/10%	104/8%	65/1%
+as set	skilled	30	kinds	0/-%	20/3%	57/9%	95/16%	72/6%	38/3%
+as set	sloppy	3	fifo	0/-%	21/0%	39/1%	51/19%	48/9%	27/4%
+as set	sloppy	7	fifo	0/-%	16/5%	28/21%	23/68%	22/50%	17/15%
+as set	sloppy	30	fifo	0/-%	10/58%	9/90%	8/100%	8/81%	5/57%
+PATIENCE=0.7	skilled	7	fifo	0/-%	20/0%	67/0%	105/13%	109/13%	95/6%
+PATIENCE=0.7	skilled	30	fifo	0/-%	23/0%	58/6%	83/31%	87/25%	47/7%
+PATIENCE=0.7	skilled	30	kinds	0/-%	20/3%	56/10%	75/37%	59/20%	33/5%
+PATIENCE=0.7	sloppy	3	fifo	0/-%	20/0%	31/22%	17/88%	20/67%	17/20%
+PATIENCE=0.7	sloppy	7	fifo	0/-%	14/13%	11/72%	6/99%	7/88%	9/32%
+PATIENCE=0.7	sloppy	30	fifo	0/-%	5/76%	4/95%	5/100%	4/87%	3/81%
+PATIENCE=0.6	skilled	7	fifo	0/-%	19/0%	56/14%	91/29%	88/30%	69/11%
+PATIENCE=0.6	skilled	30	fifo	0/-%	22/0%	56/9%	81/31%	85/26%	35/9%
+PATIENCE=0.6	skilled	30	kinds	0/-%	18/6%	54/11%	70/43%	57/19%	31/8%
+PATIENCE=0.6	sloppy	3	fifo	0/-%	19/2%	13/75%	9/98%	10/89%	12/20%
+PATIENCE=0.6	sloppy	7	fifo	0/-%	8/38%	2/94%	4/99%	3/87%	7/46%
+PATIENCE=0.6	sloppy	30	fifo	0/-%	3/84%	2/100%	2/100%	3/94%	3/84%
+GROUP_EXTRA=1	skilled	7	fifo	0/-%	28/0%	77/0%	126/0%	127/0%	118/0%
+GROUP_EXTRA=1	skilled	30	fifo	0/-%	25/0%	68/0%	110/6%	114/6%	70/2%
+GROUP_EXTRA=1	skilled	30	kinds	0/-%	21/3%	61/8%	101/16%	72/12%	40/7%
+GROUP_EXTRA=1	sloppy	3	fifo	0/-%	25/1%	42/0%	54/19%	50/13%	28/7%
+GROUP_EXTRA=1	sloppy	7	fifo	0/-%	17/5%	29/26%	25/69%	23/54%	17/20%
+GROUP_EXTRA=1	sloppy	30	fifo	0/-%	10/60%	9/92%	9/99%	9/83%	5/59%
+GROUP_EXTRA=1 PATIENCE=0.7	skilled	7	fifo	0/-%	27/0%	75/0%	113/10%	115/10%	95/2%
+GROUP_EXTRA=1 PATIENCE=0.7	skilled	30	fifo	0/-%	24/0%	60/10%	90/30%	93/27%	51/8%
+GROUP_EXTRA=1 PATIENCE=0.7	skilled	30	kinds	0/-%	21/3%	57/14%	79/38%	62/21%	35/8%
+GROUP_EXTRA=1 PATIENCE=0.7	sloppy	3	fifo	0/-%	23/2%	35/17%	18/88%	22/68%	17/22%
+GROUP_EXTRA=1 PATIENCE=0.7	sloppy	7	fifo	0/-%	15/13%	12/70%	6/98%	7/88%	10/33%
+GROUP_EXTRA=1 PATIENCE=0.7	sloppy	30	fifo	0/-%	6/78%	4/99%	5/100%	5/88%	3/81%
+GROUP_EXTRA=1 PATIENCE=0.6	skilled	7	fifo	0/-%	26/0%	66/11%	92/33%	93/29%	64/16%
+GROUP_EXTRA=1 PATIENCE=0.6	skilled	30	fifo	0/-%	24/0%	61/8%	87/32%	90/29%	42/4%
+GROUP_EXTRA=1 PATIENCE=0.6	skilled	30	kinds	0/-%	19/6%	56/13%	71/48%	57/23%	35/6%
+GROUP_EXTRA=1 PATIENCE=0.6	sloppy	3	fifo	0/-%	21/4%	12/80%	9/100%	10/91%	12/24%
+GROUP_EXTRA=1 PATIENCE=0.6	sloppy	7	fifo	0/-%	9/39%	4/92%	4/100%	4/86%	6/53%
+GROUP_EXTRA=1 PATIENCE=0.6	sloppy	30	fifo	0/-%	3/85%	3/100%	3/100%	3/94%	3/84%
+GROUP_EXTRA=1 PATIENCE=0.7 BONUS_PER_ROUND=0.1	skilled	7	fifo	0/-%	25/0%	68/0%	99/10%	101/10%	85/2%
+GROUP_EXTRA=1 PATIENCE=0.7 BONUS_PER_ROUND=0.1	skilled	30	fifo	0/-%	22/0%	53/10%	79/30%	82/27%	45/8%
+GROUP_EXTRA=1 PATIENCE=0.7 BONUS_PER_ROUND=0.1	skilled	30	kinds	0/-%	19/3%	50/14%	70/38%	55/21%	31/8%
+GROUP_EXTRA=1 PATIENCE=0.7 BONUS_PER_ROUND=0.1	sloppy	3	fifo	0/-%	21/2%	32/17%	17/88%	21/68%	16/22%
+GROUP_EXTRA=1 PATIENCE=0.7 BONUS_PER_ROUND=0.1	sloppy	7	fifo	0/-%	14/13%	11/70%	6/98%	7/88%	9/33%
+GROUP_EXTRA=1 PATIENCE=0.7 BONUS_PER_ROUND=0.1	sloppy	30	fifo	0/-%	5/78%	4/99%	5/100%	5/88%	3/81%
+GROUP_EXTRA=1 PATIENCE=0.7 BONUS_PER_ROUND=0.05	skilled	7	fifo	0/-%	23/0%	60/0%	86/10%	88/10%	74/2%
+GROUP_EXTRA=1 PATIENCE=0.7 BONUS_PER_ROUND=0.05	skilled	30	fifo	0/-%	20/0%	47/10%	68/30%	71/27%	40/8%
+GROUP_EXTRA=1 PATIENCE=0.7 BONUS_PER_ROUND=0.05	skilled	30	kinds	0/-%	16/3%	44/14%	61/38%	47/21%	27/8%
+GROUP_EXTRA=1 PATIENCE=0.7 BONUS_PER_ROUND=0.05	sloppy	3	fifo	0/-%	20/2%	29/17%	16/88%	19/68%	15/22%
+GROUP_EXTRA=1 PATIENCE=0.7 BONUS_PER_ROUND=0.05	sloppy	7	fifo	0/-%	13/13%	10/70%	6/98%	7/88%	8/33%
+GROUP_EXTRA=1 PATIENCE=0.7 BONUS_PER_ROUND=0.05	sloppy	30	fifo	0/-%	5/78%	4/99%	5/100%	5/88%	3/81%
+GROUP_EXTRA=2 PATIENCE=0.7	skilled	7	fifo	0/-%	32/0%	77/0%	117/12%	122/6%	91/6%
+GROUP_EXTRA=2 PATIENCE=0.7	skilled	30	fifo	0/-%	27/0%	57/20%	82/43%	91/35%	49/18%
+GROUP_EXTRA=2 PATIENCE=0.7	skilled	30	kinds	0/-%	23/3%	63/13%	80/43%	62/24%	37/8%
+GROUP_EXTRA=2 PATIENCE=0.7	sloppy	3	fifo	0/-%	23/2%	35/20%	20/86%	22/70%	18/22%
+GROUP_EXTRA=2 PATIENCE=0.7	sloppy	7	fifo	0/-%	16/13%	11/79%	7/100%	10/87%	8/41%
+GROUP_EXTRA=2 PATIENCE=0.7	sloppy	30	fifo	0/-%	6/78%	6/98%	6/100%	5/88%	3/78%
+GROUP_EXTRA=2 PATIENCE=0.6	skilled	7	fifo	0/-%	31/0%	68/12%	100/30%	97/32%	63/21%
+GROUP_EXTRA=2 PATIENCE=0.6	skilled	30	fifo	0/-%	27/0%	57/20%	83/41%	85/38%	41/12%
+GROUP_EXTRA=2 PATIENCE=0.6	skilled	30	kinds	0/-%	22/6%	59/18%	80/44%	54/33%	36/8%
+GROUP_EXTRA=2 PATIENCE=0.6	sloppy	3	fifo	0/-%	21/4%	14/77%	11/99%	13/87%	13/24%
+GROUP_EXTRA=2 PATIENCE=0.6	sloppy	7	fifo	0/-%	9/40%	4/96%	5/100%	4/86%	6/54%
+GROUP_EXTRA=2 PATIENCE=0.6	sloppy	30	fifo	0/-%	4/86%	4/98%	4/100%	4/92%	3/81%
+BONUS_PER_ROUND=0.3	skilled	7	fifo	0/-%	26/0%	90/0%	164/0%	166/0%	154/0%
+BONUS_PER_ROUND=0.3	skilled	30	fifo	0/-%	30/0%	85/0%	139/10%	144/8%	89/1%
+BONUS_PER_ROUND=0.3	skilled	30	kinds	0/-%	27/3%	77/9%	133/16%	100/6%	52/3%
+BONUS_PER_ROUND=0.3	sloppy	3	fifo	0/-%	25/0%	51/1%	68/19%	64/9%	34/4%
+BONUS_PER_ROUND=0.3	sloppy	7	fifo	0/-%	20/5%	38/21%	30/68%	29/50%	22/15%
+BONUS_PER_ROUND=0.3	sloppy	30	fifo	0/-%	12/58%	10/90%	8/100%	9/81%	6/57%
+BONUS_PER_ROUND=0.05	skilled	7	fifo	0/-%	17/0%	55/0%	91/0%	92/0%	87/0%
+BONUS_PER_ROUND=0.05	skilled	30	fifo	0/-%	18/0%	49/0%	74/10%	77/8%	49/1%
+BONUS_PER_ROUND=0.05	skilled	30	kinds	0/-%	15/3%	44/9%	71/16%	53/6%	29/3%
+BONUS_PER_ROUND=0.05	sloppy	3	fifo	0/-%	19/0%	32/1%	39/19%	38/9%	22/4%
+BONUS_PER_ROUND=0.05	sloppy	7	fifo	0/-%	14/5%	22/21%	18/68%	18/50%	14/15%
+BONUS_PER_ROUND=0.05	sloppy	30	fifo	0/-%	9/58%	8/90%	8/100%	8/81%	4/57%
+BURN_KEEPS=0.25	skilled	7	fifo	0/-%	21/0%	69/0%	120/0%	122/0%	114/0%
+BURN_KEEPS=0.25	skilled	30	fifo	0/-%	23/0%	64/0%	98/10%	102/8%	65/1%
+BURN_KEEPS=0.25	skilled	30	kinds	0/-%	20/3%	56/9%	93/16%	71/6%	38/3%
+BURN_KEEPS=0.25	sloppy	3	fifo	0/-%	21/0%	39/1%	49/19%	47/9%	26/4%
+BURN_KEEPS=0.25	sloppy	7	fifo	0/-%	16/5%	27/21%	17/68%	18/50%	16/15%
+BURN_KEEPS=0.25	sloppy	30	fifo	0/-%	8/58%	5/90%	3/100%	5/81%	4/57%
+BURN_KEEPS=0	skilled	7	fifo	0/-%	21/0%	69/0%	120/0%	122/0%	114/0%
+BURN_KEEPS=0	skilled	30	fifo	0/-%	23/0%	64/0%	96/10%	101/8%	65/1%
+BURN_KEEPS=0	skilled	30	kinds	0/-%	19/3%	55/9%	90/16%	70/6%	37/3%
+BURN_KEEPS=0	sloppy	3	fifo	0/-%	21/0%	39/1%	47/19%	47/9%	26/4%
+BURN_KEEPS=0	sloppy	7	fifo	0/-%	16/5%	26/21%	12/68%	14/50%	15/15%
+BURN_KEEPS=0	sloppy	30	fifo	0/-%	7/58%	2/90%	-1/100%	2/81%	3/57%
+GROUP_EXTRA=1 PATIENCE=0.7 BURN_KEEPS=0.25	skilled	7	fifo	0/-%	27/0%	75/0%	111/10%	113/10%	95/2%
+GROUP_EXTRA=1 PATIENCE=0.7 BURN_KEEPS=0.25	skilled	30	fifo	0/-%	24/0%	59/10%	85/30%	88/27%	50/8%
+GROUP_EXTRA=1 PATIENCE=0.7 BURN_KEEPS=0.25	skilled	30	kinds	0/-%	21/3%	55/14%	73/38%	58/21%	34/8%
+GROUP_EXTRA=1 PATIENCE=0.7 BURN_KEEPS=0.25	sloppy	3	fifo	0/-%	23/2%	34/17%	10/88%	16/68%	16/22%
+GROUP_EXTRA=1 PATIENCE=0.7 BURN_KEEPS=0.25	sloppy	7	fifo	0/-%	15/13%	8/70%	-0/98%	1/88%	9/33%
+GROUP_EXTRA=1 PATIENCE=0.7 BURN_KEEPS=0.25	sloppy	30	fifo	0/-%	3/78%	1/99%	2/100%	3/88%	2/81%
+GROUP_EXTRA=1 PATIENCE=0.6 BURN_KEEPS=0.25	skilled	7	fifo	0/-%	26/0%	65/11%	88/33%	89/29%	62/16%
+GROUP_EXTRA=1 PATIENCE=0.6 BURN_KEEPS=0.25	skilled	30	fifo	0/-%	24/0%	60/8%	82/32%	85/29%	42/4%
+GROUP_EXTRA=1 PATIENCE=0.6 BURN_KEEPS=0.25	skilled	30	kinds	0/-%	19/6%	55/13%	63/48%	53/23%	34/6%
+GROUP_EXTRA=1 PATIENCE=0.6 BURN_KEEPS=0.25	sloppy	3	fifo	0/-%	21/4%	7/80%	2/100%	3/91%	11/24%
+GROUP_EXTRA=1 PATIENCE=0.6 BURN_KEEPS=0.25	sloppy	7	fifo	0/-%	7/39%	-0/92%	-1/100%	-0/86%	4/53%
+GROUP_EXTRA=1 PATIENCE=0.6 BURN_KEEPS=0.25	sloppy	30	fifo	0/-%	1/85%	-0/100%	0/100%	1/94%	2/84%
+
+real	5m26.538s
+user	0m0.000s
+sys	0m0.000s
+
+################ PART 2d. OVERTIME SWEEP, REFINED, WITH THE RULE-AWARE POLICIES (n=120)
+
+Each row: d$ against never on the same seeds, then burn% of shifts that pressed. Columns are policies.
+constants	prof	day	queue	never	once	twice	always	hearts.5	hearts.7	calm	calm1	calm2x
+PATIENCE=0.7 BONUS_PER_ROUND=0.1	skilled	7	fifo	0/-%	18/0%	60/0%	93/12%	95/13%	83/7%	89/14%	79/1%	61/0%
+PATIENCE=0.7 BONUS_PER_ROUND=0.1	skilled	30	fifo	0/-%	21/0%	52/6%	72/32%	75/27%	42/8%	7/0%	2/0%	7/0%
+PATIENCE=0.7 BONUS_PER_ROUND=0.1	skilled	7	kinds	0/-%	26/0%	66/7%	95/22%	89/13%	55/9%	81/9%	60/10%	65/6%
+PATIENCE=0.7 BONUS_PER_ROUND=0.1	skilled	30	kinds	0/-%	17/4%	48/12%	66/38%	51/20%	29/6%	4/11%	0/0%	4/11%
+PATIENCE=0.7 BONUS_PER_ROUND=0.1	sloppy	3	fifo	0/-%	19/0%	28/23%	17/87%	19/64%	16/22%	24/41%	20/9%	26/24%
+PATIENCE=0.7 BONUS_PER_ROUND=0.1	sloppy	7	fifo	0/-%	13/15%	10/71%	6/98%	7/86%	8/32%	12/54%	14/22%	14/46%
+PATIENCE=0.7 BONUS_PER_ROUND=0.1	sloppy	7	kinds	0/-%	17/9%	21/46%	15/82%	11/65%	10/22%	15/33%	13/15%	16/29%
+PATIENCE=0.7 BONUS_PER_ROUND=0.1	sloppy	30	fifo	0/-%	5/74%	4/95%	4/100%	4/89%	2/83%	4/86%	4/74%	4/86%
+PATIENCE=0.65 BONUS_PER_ROUND=0.1	skilled	7	fifo	0/-%	18/0%	58/2%	90/15%	91/15%	71/4%	87/14%	75/4%	59/0%
+PATIENCE=0.65 BONUS_PER_ROUND=0.1	skilled	30	fifo	0/-%	20/0%	52/5%	71/33%	74/28%	37/9%	7/0%	2/0%	7/0%
+PATIENCE=0.65 BONUS_PER_ROUND=0.1	skilled	7	kinds	0/-%	25/0%	65/6%	94/21%	84/15%	53/8%	72/13%	59/6%	64/5%
+PATIENCE=0.65 BONUS_PER_ROUND=0.1	skilled	30	kinds	0/-%	17/5%	47/12%	60/45%	49/21%	27/9%	5/11%	0/33%	5/11%
+PATIENCE=0.65 BONUS_PER_ROUND=0.1	sloppy	3	fifo	0/-%	18/0%	20/48%	12/94%	14/75%	13/19%	17/55%	16/19%	19/41%
+PATIENCE=0.65 BONUS_PER_ROUND=0.1	sloppy	7	fifo	0/-%	11/23%	7/82%	5/98%	4/91%	7/34%	9/60%	11/33%	10/55%
+PATIENCE=0.65 BONUS_PER_ROUND=0.1	sloppy	7	kinds	0/-%	16/11%	14/66%	10/94%	9/66%	9/21%	12/42%	10/26%	13/37%
+PATIENCE=0.65 BONUS_PER_ROUND=0.1	sloppy	30	fifo	0/-%	3/84%	3/98%	4/100%	3/92%	2/87%	2/92%	2/87%	2/92%
+PATIENCE=0.65 BONUS_PER_ROUND=0.08	skilled	7	fifo	0/-%	17/0%	55/2%	85/15%	86/15%	68/4%	83/14%	71/4%	57/0%
+PATIENCE=0.65 BONUS_PER_ROUND=0.08	skilled	30	fifo	0/-%	19/0%	49/5%	67/33%	70/28%	35/9%	7/0%	2/0%	7/0%
+PATIENCE=0.65 BONUS_PER_ROUND=0.08	skilled	7	kinds	0/-%	24/0%	62/6%	90/21%	80/15%	51/8%	69/13%	56/6%	61/5%
+PATIENCE=0.65 BONUS_PER_ROUND=0.08	skilled	30	kinds	0/-%	16/5%	45/12%	57/45%	46/21%	25/9%	4/11%	-0/33%	4/11%
+PATIENCE=0.65 BONUS_PER_ROUND=0.08	sloppy	3	fifo	0/-%	18/0%	19/48%	11/94%	14/75%	13/19%	17/55%	16/19%	19/41%
+PATIENCE=0.65 BONUS_PER_ROUND=0.08	sloppy	7	fifo	0/-%	10/23%	6/82%	5/98%	4/91%	7/34%	9/60%	10/33%	10/55%
+PATIENCE=0.65 BONUS_PER_ROUND=0.08	sloppy	7	kinds	0/-%	16/11%	13/66%	9/94%	9/66%	9/21%	11/42%	10/26%	12/37%
+PATIENCE=0.65 BONUS_PER_ROUND=0.08	sloppy	30	fifo	0/-%	3/84%	3/98%	4/100%	3/92%	2/87%	2/92%	2/87%	2/92%
+PATIENCE=0.75 BONUS_PER_ROUND=0.1	skilled	7	fifo	0/-%	19/0%	61/0%	101/3%	104/2%	96/2%	99/3%	82/1%	62/0%
+PATIENCE=0.75 BONUS_PER_ROUND=0.1	skilled	30	fifo	0/-%	21/0%	53/3%	81/18%	80/19%	46/4%	8/0%	2/0%	8/0%
+PATIENCE=0.75 BONUS_PER_ROUND=0.1	skilled	7	kinds	0/-%	26/0%	66/8%	106/11%	95/11%	67/1%	90/7%	70/5%	67/7%
+PATIENCE=0.75 BONUS_PER_ROUND=0.1	skilled	30	kinds	0/-%	17/4%	51/8%	75/26%	54/17%	30/6%	4/6%	0/0%	4/6%
+PATIENCE=0.75 BONUS_PER_ROUND=0.1	sloppy	3	fifo	0/-%	20/0%	34/7%	29/57%	31/36%	19/13%	31/30%	21/7%	31/10%
+PATIENCE=0.75 BONUS_PER_ROUND=0.1	sloppy	7	fifo	0/-%	14/10%	16/53%	11/89%	12/72%	11/25%	14/48%	16/13%	15/38%
+PATIENCE=0.75 BONUS_PER_ROUND=0.1	sloppy	7	kinds	0/-%	18/8%	27/24%	24/63%	17/45%	12/12%	17/27%	14/11%	18/21%
+PATIENCE=0.75 BONUS_PER_ROUND=0.1	sloppy	30	fifo	0/-%	7/64%	5/95%	5/100%	5/89%	3/76%	4/77%	4/66%	4/77%
+
+################ PART 2e. THE DAY FLOOR (n=400)
+
+patienceMs	day	queue	star3%	miss	mOrd	wrong	ship	line	money | skilled money, always d$, burn%
+60000	12	fifo	83	0.67	0.53	0.14	1.58	2.07	96	|	235	63	33
+60000	12	kinds	89	0.51	0.39	0.13	1.51	2.15	95	|	239	55	49
+60000	30	fifo	86	0.59	0.50	0.10	1.51	4.64	95	|	222	82	28
+60000	30	kinds	89	0.48	0.38	0.10	1.52	4.66	94	|	229	74	41
+63000	12	fifo	89	0.47	0.35	0.12	1.47	2.51	99	|	237	67	27
+63000	12	kinds	94	0.35	0.27	0.09	1.42	2.40	97	|	241	60	41
+63000	30	fifo	87	0.47	0.34	0.13	1.42	4.76	95	|	225	85	23
+63000	30	kinds	92	0.40	0.27	0.13	1.51	4.85	96	|	231	76	37
+66000	12	fifo	94	0.31	0.19	0.12	1.40	2.75	100	|	238	71	20
+66000	12	kinds	94	0.31	0.20	0.10	1.37	2.55	97	|	242	68	28
+66000	30	fifo	92	0.33	0.22	0.11	1.38	5.24	97	|	227	89	18
+66000	30	kinds	94	0.27	0.19	0.08	1.45	5.08	96	|	232	84	25
+70000	12	fifo	96	0.23	0.12	0.11	1.25	2.78	101	|	240	73	18
+70000	12	kinds	94	0.28	0.14	0.15	1.23	2.94	100	|	244	67	30
+70000	30	fifo	95	0.23	0.11	0.12	1.31	5.62	100	|	228	92	14
+70000	30	kinds	95	0.26	0.14	0.12	1.27	5.44	98	|	233	88	20
+
+################ PART 3. THE LINE WAIT, ON THE FINAL FLOOR (n=300)
+
+constants	sl.star3 d3/7/12/30	sl.line	sl.miss12/30	sl.money3/30	sk.star3 d30	sk.line	sk.money3/30	sk.idle30
+LINE_MS=30000	98/99/92/92	0.0/0.1/2.7/5.1	0.39/0.38	103/97	100	0.0	209/226	9
+LINE_MS=33000	98/99/91/91	0.0/0.0/1.3/3.7	0.38/0.32	103/98	100	0.0	209/227	9
+LINE_MS=35000	98/99/92/91	0.0/0.0/0.9/3.2	0.39/0.35	103/99	100	0.0	209/227	9
+LINE_MS=38000	98/99/90/90	0.0/0.0/0.5/2.9	0.45/0.43	103/101	100	0.0	209/227	9
+MAX_WAVE=5 GROWTH_DAYS=6 LINE_MS=30000	98/99/91/92	0.0/0.1/0.1/2.7	0.39/0.39	103/99	100	0.0	209/238	11
+MAX_WAVE=5 GROWTH_DAYS=6 LINE_MS=35000	98/99/91/92	0.0/0.0/0.0/0.9	0.40/0.39	103/96	100	0.0	209/238	11
+
+################ PART 4a. FINAL PASS (n=300)
+
+=== A. AGAINST THE BASELINE: standard mode, upright, no overtime, n=300 per cell ===
+base = baseline/run.out as printed; day 12 there is day 14, whose config it shares.
+queue: fifo never touches the ticket; kinds triages by deadline and tip; line is kinds, taking the shortest drink while anyone is outside.
+prof	day	queue	orders	served	miss	mReq	mOrd	ship	line	wrong	star3%	star2%	money	idle%	| base:	served	miss	star3%	money	money%
+skilled	1	fifo	21.0	21.0	0.00	0.00	0.00	0.00	0.00	0.00	100	0	211	18.2	|	22.4	0.00	100	215	-1.6
+skilled	1	kinds	21.0	21.0	0.00	0.00	0.00	0.00	0.00	0.00	100	0	214	18.2	|	22.4	0.00	100	215	-0.7
+skilled	1	line	21.0	21.0	0.00	0.00	0.00	0.00	0.00	0.00	100	0	213	18.1	|	22.4	0.00	100	215	-0.8
+skilled	3	fifo	21.0	21.0	0.00	0.00	0.00	0.00	0.00	0.00	100	0	208	18.8	|	25.0	0.00	100	238	-12.4
+skilled	3	kinds	21.0	21.0	0.00	0.00	0.00	0.00	0.00	0.00	100	0	209	18.7	|	25.0	0.00	100	238	-12.0
+skilled	3	line	21.0	21.0	0.00	0.00	0.00	0.00	0.00	0.00	100	0	209	18.7	|	25.0	0.00	100	238	-12.0
+skilled	7	fifo	23.7	23.7	0.00	0.00	0.00	0.03	0.00	0.00	100	0	232	14.7	|	26.0	0.00	100	235	-1.2
+skilled	7	kinds	23.7	23.6	0.00	0.00	0.00	0.02	0.00	0.00	100	0	235	14.5	|	26.0	0.00	100	235	-0.1
+skilled	7	line	23.7	23.6	0.00	0.00	0.00	0.02	0.00	0.00	100	0	234	14.5	|	26.0	0.00	100	235	-0.3
+skilled	12	fifo	25.0	24.9	0.01	0.00	0.00	0.09	0.00	0.01	100	0	238	11.6	|	26.0	0.00	100	234	1.8
+skilled	12	kinds	24.9	24.8	0.00	0.00	0.00	0.09	0.00	0.00	100	0	242	11.4	|	26.0	0.00	100	234	3.5
+skilled	12	line	24.9	24.4	0.00	0.00	0.00	0.57	0.00	0.00	100	0	235	11.4	|	26.0	0.00	100	234	0.5
+skilled	30	fifo	24.0	23.9	0.01	0.00	0.00	0.04	0.00	0.01	100	0	227	9.3	|	26.0	0.00	100	234	-3.1
+skilled	30	kinds	24.0	23.9	0.00	0.00	0.00	0.08	0.01	0.00	100	0	232	9.2	|	26.0	0.00	100	234	-0.9
+skilled	30	line	24.0	23.5	0.02	0.00	0.01	0.52	0.00	0.01	100	0	225	9.2	|	26.0	0.00	100	234	-4.0
+sloppy	1	fifo	13.1	12.7	0.06	0.00	0.00	0.37	0.02	0.06	98	2	106	10.2	|	14.5	0.00	99	119	-10.5
+sloppy	1	kinds	13.1	12.7	0.06	0.00	0.00	0.38	0.02	0.05	99	1	107	10.1	|	14.5	0.00	99	119	-9.9
+sloppy	1	line	13.2	12.7	0.07	0.01	0.00	0.46	0.01	0.06	97	3	106	10.1	|	14.5	0.00	99	119	-10.7
+sloppy	3	fifo	13.1	12.9	0.07	0.00	0.00	0.20	0.00	0.07	98	2	103	10.2	|	15.4	0.00	100	120	-14.4
+sloppy	3	kinds	12.8	12.7	0.05	0.00	0.00	0.08	0.00	0.05	98	2	104	9.9	|	15.4	0.00	100	120	-13.6
+sloppy	3	line	12.8	12.7	0.05	0.00	0.00	0.08	0.00	0.05	98	2	104	9.9	|	15.4	0.00	100	120	-13.6
+sloppy	7	fifo	14.5	13.3	0.07	0.00	0.01	1.15	0.03	0.06	99	1	107	7.6	|	15.2	0.01	100	117	-8.1
+sloppy	7	kinds	14.3	13.3	0.08	0.00	0.03	0.89	0.03	0.05	97	3	110	7.4	|	15.2	0.01	100	117	-6.2
+sloppy	7	line	14.7	13.1	0.14	0.00	0.07	1.49	0.01	0.08	96	4	106	7.5	|	15.2	0.01	100	117	-9.8
+sloppy	12	fifo	14.7	12.8	0.35	0.00	0.22	1.55	0.80	0.12	94	6	99	6.2	|	14.7	0.59	89	108	-8.4
+sloppy	12	kinds	14.4	12.5	0.42	0.00	0.31	1.50	0.90	0.11	90	10	98	6.0	|	14.7	0.59	89	108	-9.5
+sloppy	12	line	14.8	12.5	0.50	0.00	0.37	1.77	0.67	0.13	89	11	97	6.2	|	14.7	0.59	89	108	-10.0
+sloppy	30	fifo	15.2	13.2	0.36	0.00	0.24	1.65	2.82	0.12	94	6	102	5.8	|	14.7	0.59	89	108	-5.7
+sloppy	30	kinds	14.9	13.0	0.44	0.00	0.26	1.51	3.14	0.17	89	11	102	5.8	|	14.7	0.59	89	108	-5.7
+sloppy	30	line	15.4	13.1	0.52	0.00	0.41	1.80	2.62	0.12	88	12	102	5.7	|	14.7	0.59	89	108	-5.9
+
+=== B. OVERTIME: what each way of pressing is worth, n=300 per cell ===
+hearts.x presses only while every heart on the counter is above x. stake leaves shippers out of that, who cannot burn the jar.
+calm is stake with nobody outside and at most two others at the counter; calm-2 stops after two rounds. d$ is against never, same seeds. sd is the spread of a shift.
+prof	day	queue	policy	money	d$	d$%	sd	rounds	press%	burn%	jar	paid	lateGone	star3%	miss
+skilled	3	fifo	never	208.5	0.0	0.0	10	0.00	0	-	0.0	0.0	0.00	100	0.00
+skilled	3	fifo	once	234.8	26.3	12.6	15	1.00	100	0	37.4	40.7	0.00	100	0.00
+skilled	3	fifo	twice	269.6	61.1	29.3	15	2.00	100	0	63.3	75.5	0.01	100	0.00
+skilled	3	fifo	always	307.4	98.9	47.4	16	3.00	100	1	87.5	113.3	0.04	100	0.00
+skilled	3	fifo	hearts.5	308.0	99.5	47.7	16	3.00	100	0	88.0	113.9	0.04	100	0.00
+skilled	3	fifo	hearts.7	301.3	92.8	44.5	22	2.80	100	0	83.8	107.3	0.02	100	0.00
+skilled	3	fifo	stake	307.5	99.0	47.5	16	3.00	100	0	87.6	113.4	0.03	100	0.00
+skilled	3	fifo	calm	306.3	97.8	46.9	18	2.99	100	1	86.7	112.1	0.05	100	0.00
+skilled	3	fifo	calm-2	269.2	60.7	29.1	15	2.00	100	0	62.9	75.1	0.01	100	0.00
+skilled	3	kinds	never	209.4	0.0	0.0	10	0.00	0	-	0.0	0.0	0.00	100	0.00
+skilled	3	kinds	once	236.1	26.7	12.7	16	1.00	100	0	37.8	41.1	0.02	100	0.00
+skilled	3	kinds	twice	272.7	63.3	30.2	17	2.00	100	0	65.1	77.7	0.03	100	0.00
+skilled	3	kinds	always	311.8	102.4	48.9	20	3.00	100	3	89.9	116.2	0.06	100	0.00
+skilled	3	kinds	hearts.5	308.0	98.6	47.1	22	2.87	100	1	88.0	113.0	0.03	100	0.00
+skilled	3	kinds	hearts.7	288.5	79.1	37.8	29	2.37	100	1	75.1	93.5	0.02	100	0.00
+skilled	3	kinds	stake	308.4	99.0	47.3	22	2.88	100	2	88.1	113.2	0.05	100	0.00
+skilled	3	kinds	calm	303.3	93.9	44.8	23	2.75	100	1	84.9	108.3	0.04	100	0.00
+skilled	3	kinds	calm-2	271.3	61.9	29.6	17	1.97	100	0	64.1	76.3	0.02	100	0.00
+skilled	7	fifo	never	232.1	0.0	0.0	13	0.00	0	-	0.0	0.0	0.00	100	0.00
+skilled	7	fifo	once	241.9	9.9	4.2	15	1.00	100	0	34.6	37.6	0.03	100	0.00
+skilled	7	fifo	twice	284.3	52.3	22.5	13	2.00	100	0	67.0	80.0	0.07	100	0.00
+skilled	7	fifo	always	320.7	88.7	38.2	29	3.00	100	12	89.7	114.9	0.27	100	0.00
+skilled	7	fifo	hearts.5	324.5	92.4	39.8	25	2.99	100	9	92.6	119.0	0.20	100	0.00
+skilled	7	fifo	hearts.7	311.0	78.9	34.0	32	2.63	100	8	83.9	105.5	0.15	100	0.00
+skilled	7	fifo	stake	314.6	82.5	35.6	31	2.69	100	8	86.4	109.1	0.21	100	0.00
+skilled	7	fifo	calm	309.6	77.5	33.4	35	2.58	98	9	82.1	103.4	0.20	100	0.00
+skilled	7	fifo	calm-2	278.4	46.3	20.0	16	1.81	98	0	62.2	73.5	0.07	100	0.00
+skilled	7	kinds	never	234.8	0.0	0.0	15	0.00	0	-	0.0	0.0	0.00	100	0.00
+skilled	7	kinds	once	243.7	8.9	3.8	14	1.00	100	0	34.5	37.5	0.02	100	0.00
+skilled	7	kinds	twice	286.1	51.3	21.9	16	2.00	100	6	66.4	79.0	0.09	100	0.00
+skilled	7	kinds	always	319.4	84.6	36.0	33	3.00	100	24	85.0	107.5	0.33	100	0.00
+skilled	7	kinds	hearts.5	312.7	77.9	33.2	35	2.73	100	18	82.6	103.6	0.23	100	0.00
+skilled	7	kinds	hearts.7	297.8	63.0	26.8	34	2.31	100	11	74.0	90.4	0.17	100	0.00
+skilled	7	kinds	stake	306.5	71.7	30.6	36	2.53	100	18	78.8	97.6	0.23	100	0.00
+skilled	7	kinds	calm	305.0	70.2	29.9	37	2.43	98	15	77.5	96.1	0.19	100	0.00
+skilled	7	kinds	calm-2	281.1	46.3	19.7	18	1.84	98	6	62.4	73.5	0.09	100	0.00
+skilled	12	fifo	never	238.2	0.0	0.0	11	0.00	0	-	0.0	0.0	0.00	100	0.01
+skilled	12	fifo	once	253.2	14.9	6.3	14	1.00	100	0	46.8	51.0	0.03	100	0.00
+skilled	12	fifo	twice	287.3	49.1	20.6	19	2.00	100	7	70.6	84.0	0.17	100	0.00
+skilled	12	fifo	always	312.3	74.1	31.1	34	3.00	100	24	82.5	104.6	0.41	100	0.00
+skilled	12	fifo	hearts.5	314.9	76.6	32.2	36	2.95	100	22	85.4	108.2	0.37	100	0.00
+skilled	12	fifo	hearts.7	291.4	53.2	22.3	32	2.04	100	9	73.2	87.9	0.15	100	0.00
+skilled	12	fifo	stake	276.3	38.1	16.0	35	1.48	87	8	58.3	68.3	0.14	100	0.00
+skilled	12	fifo	calm	268.6	30.4	12.7	32	1.22	74	6	49.1	57.3	0.10	100	0.00
+skilled	12	fifo	calm-2	264.6	26.3	11.0	25	1.13	74	5	46.5	53.5	0.08	100	0.00
+skilled	12	kinds	never	242.1	0.0	0.0	13	0.00	0	-	0.0	0.0	0.00	100	0.00
+skilled	12	kinds	once	253.5	11.4	4.7	14	1.00	100	3	44.3	48.2	0.05	100	0.01
+skilled	12	kinds	twice	289.8	47.7	19.7	21	2.00	100	15	69.0	81.7	0.22	100	0.01
+skilled	12	kinds	always	310.0	67.9	28.0	37	2.95	100	37	76.1	94.9	0.53	100	0.02
+skilled	12	kinds	hearts.5	303.4	61.3	25.3	38	2.57	100	30	75.3	92.4	0.41	100	0.01
+skilled	12	kinds	hearts.7	272.8	30.7	12.7	28	1.49	100	8	58.2	67.0	0.10	100	0.01
+skilled	12	kinds	stake	279.7	37.6	15.5	34	1.62	90	20	58.5	68.3	0.26	100	0.01
+skilled	12	kinds	calm	275.4	33.3	13.8	32	1.43	83	16	53.9	62.8	0.18	100	0.01
+skilled	12	kinds	calm-2	272.5	30.5	12.6	27	1.34	83	12	52.4	60.6	0.15	100	0.01
+skilled	30	fifo	never	226.8	0.0	0.0	10	0.00	0	-	0.0	0.0	0.00	100	0.01
+skilled	30	fifo	once	260.9	34.1	15.0	12	1.00	100	0	51.1	55.8	0.03	100	0.00
+skilled	30	fifo	twice	290.3	63.5	28.0	19	2.00	100	8	71.1	84.5	0.17	100	0.00
+skilled	30	fifo	always	319.0	92.2	40.6	33	3.00	100	22	85.7	108.9	0.34	100	0.00
+skilled	30	fifo	hearts.5	318.1	91.3	40.2	36	2.93	99	22	85.2	108.1	0.36	100	0.01
+skilled	30	fifo	hearts.7	284.3	57.5	25.4	37	1.74	89	12	63.1	75.0	0.18	100	0.01
+skilled	30	fifo	stake	266.5	39.6	17.5	18	1.01	95	0	54.2	59.7	0.03	100	0.00
+skilled	30	fifo	calm	257.3	30.5	13.5	23	0.70	68	0	39.6	43.4	0.02	100	0.00
+skilled	30	fifo	calm-2	257.3	30.5	13.5	23	0.70	68	0	39.6	43.4	0.02	100	0.00
+skilled	30	kinds	never	232.0	0.0	0.0	10	0.00	0	-	0.0	0.0	0.00	100	0.00
+skilled	30	kinds	once	264.2	32.2	13.9	12	1.00	100	4	51.3	56.0	0.03	100	0.03
+skilled	30	kinds	twice	298.4	66.4	28.6	16	2.00	100	6	74.5	88.8	0.08	100	0.04
+skilled	30	kinds	always	319.7	87.8	37.8	35	2.97	100	28	83.7	105.5	0.33	100	0.07
+skilled	30	kinds	hearts.5	300.1	68.1	29.4	36	2.11	99	13	74.4	90.0	0.14	100	0.04
+skilled	30	kinds	hearts.7	272.7	40.7	17.6	29	1.21	87	4	54.2	61.9	0.04	100	0.03
+skilled	30	kinds	stake	269.0	37.1	16.0	19	0.92	88	2	52.1	57.2	0.03	100	0.02
+skilled	30	kinds	calm	251.1	19.1	8.2	24	0.43	43	2	25.1	27.4	0.01	100	0.01
+skilled	30	kinds	calm-2	251.1	19.1	8.2	24	0.43	43	2	25.1	27.4	0.01	100	0.01
+sloppy	3	fifo	never	102.7	0.0	0.0	16	0.00	0	-	0.0	0.0	0.00	98	0.07
+sloppy	3	fifo	once	116.8	14.1	13.7	12	1.00	100	1	24.4	26.4	0.25	96	0.05
+sloppy	3	fifo	twice	129.8	27.1	26.4	18	2.00	100	24	32.7	38.3	0.89	96	0.05
+sloppy	3	fifo	always	117.6	14.9	14.5	19	3.00	100	88	20.0	21.7	2.30	96	0.05
+sloppy	3	fifo	hearts.5	118.9	16.2	15.8	19	2.55	98	70	21.7	23.8	1.76	97	0.05
+sloppy	3	fifo	hearts.7	117.8	15.1	14.7	19	1.28	82	17	22.1	24.8	0.50	97	0.05
+sloppy	3	fifo	stake	123.6	20.9	20.4	19	2.49	100	61	25.7	29.0	1.71	96	0.05
+sloppy	3	fifo	calm	125.7	23.0	22.4	19	2.09	100	45	28.4	32.2	1.24	96	0.05
+sloppy	3	fifo	calm-2	128.6	25.9	25.2	19	1.85	100	25	31.8	36.7	0.84	96	0.05
+sloppy	3	kinds	never	103.7	0.0	0.0	15	0.00	0	-	0.0	0.0	0.00	98	0.05
+sloppy	3	kinds	once	119.8	16.1	15.5	13	1.00	100	1	25.0	27.1	0.28	99	0.05
+sloppy	3	kinds	twice	136.0	32.3	31.2	17	2.00	100	14	36.0	42.4	0.73	99	0.06
+sloppy	3	kinds	always	132.3	28.6	27.6	24	3.00	100	58	30.7	36.7	1.69	99	0.07
+sloppy	3	kinds	hearts.5	130.6	26.9	26.0	21	2.27	99	37	31.2	36.5	1.15	99	0.06
+sloppy	3	kinds	hearts.7	122.3	18.6	17.9	20	1.31	83	9	24.5	28.0	0.50	99	0.04
+sloppy	3	kinds	stake	132.8	29.1	28.1	19	2.19	100	31	33.2	38.6	1.17	99	0.04
+sloppy	3	kinds	calm	131.3	27.6	26.6	19	1.89	99	25	32.2	37.0	0.99	99	0.04
+sloppy	3	kinds	calm-2	132.0	28.3	27.2	18	1.70	99	14	33.2	38.2	0.73	99	0.04
+sloppy	7	fifo	never	107.5	0.0	0.0	16	0.00	0	-	0.0	0.0	0.00	99	0.07
+sloppy	7	fifo	once	117.6	10.1	9.4	15	1.00	100	15	26.5	28.6	0.53	99	0.06
+sloppy	7	fifo	twice	116.1	8.6	8.0	17	1.99	100	67	21.1	23.5	1.57	99	0.05
+sloppy	7	fifo	always	111.1	3.6	3.3	14	2.88	100	96	15.1	15.7	3.04	99	0.05
+sloppy	7	fifo	hearts.5	112.1	4.6	4.3	16	2.27	96	78	17.6	18.8	2.23	99	0.05
+sloppy	7	fifo	hearts.7	115.6	8.1	7.5	17	1.18	90	30	22.8	24.9	0.79	99	0.05
+sloppy	7	fifo	stake	114.7	7.2	6.7	16	1.40	89	55	19.4	20.9	1.18	99	0.05
+sloppy	7	fifo	calm	115.0	7.5	7.0	15	0.99	78	38	18.5	19.9	0.74	99	0.05
+sloppy	7	fifo	calm-2	115.3	7.8	7.2	15	0.98	78	36	18.7	20.2	0.71	99	0.05
+sloppy	7	kinds	never	109.7	0.0	0.0	16	0.00	0	-	0.0	0.0	0.00	97	0.08
+sloppy	7	kinds	once	120.9	11.1	10.1	14	1.00	100	12	27.1	29.3	0.57	97	0.10
+sloppy	7	kinds	twice	124.8	15.1	13.7	19	1.99	100	48	27.0	30.9	1.33	96	0.13
+sloppy	7	kinds	always	119.7	9.9	9.1	20	2.97	100	84	20.6	22.9	2.68	96	0.15
+sloppy	7	kinds	hearts.5	119.1	9.4	8.6	19	1.91	90	55	21.7	24.3	1.49	97	0.11
+sloppy	7	kinds	hearts.7	117.1	7.4	6.8	20	0.97	77	19	21.0	23.1	0.56	97	0.09
+sloppy	7	kinds	stake	120.0	10.2	9.3	18	1.34	83	42	21.6	23.9	1.02	97	0.08
+sloppy	7	kinds	calm	118.2	8.5	7.7	16	0.98	72	30	19.1	20.9	0.74	96	0.09
+sloppy	7	kinds	calm-2	118.3	8.5	7.8	16	0.97	72	30	19.1	21.0	0.73	96	0.09
+sloppy	12	fifo	never	99.0	0.0	0.0	14	0.00	0	-	0.0	0.0	0.00	94	0.35
+sloppy	12	fifo	once	104.3	5.4	5.4	15	1.00	100	68	13.9	14.7	1.12	91	0.44
+sloppy	12	fifo	twice	103.0	4.0	4.1	14	1.91	100	93	9.9	10.4	2.42	90	0.46
+sloppy	12	fifo	always	103.3	4.3	4.3	14	2.41	100	99	8.6	8.7	3.34	90	0.46
+sloppy	12	fifo	hearts.5	102.6	3.6	3.7	14	1.32	78	89	8.6	8.8	1.67	93	0.38
+sloppy	12	fifo	hearts.7	101.7	2.7	2.8	14	0.48	42	72	5.9	6.3	0.59	93	0.35
+sloppy	12	fifo	stake	103.5	4.5	4.6	15	0.76	71	72	9.8	10.3	0.98	93	0.36
+sloppy	12	fifo	calm	103.5	4.5	4.6	15	0.68	67	72	9.3	9.8	0.89	93	0.36
+sloppy	12	fifo	calm-2	103.5	4.5	4.6	15	0.68	67	72	9.3	9.8	0.89	93	0.36
+sloppy	12	kinds	never	97.8	0.0	0.0	14	0.00	0	-	0.0	0.0	0.00	90	0.42
+sloppy	12	kinds	once	108.9	11.1	11.3	17	1.00	100	42	20.8	22.3	0.71	89	0.53
+sloppy	12	kinds	twice	104.7	6.9	7.1	17	1.95	100	84	14.3	15.4	1.95	87	0.61
+sloppy	12	kinds	always	103.2	5.4	5.5	14	2.66	100	97	11.6	11.9	3.29	86	0.63
+sloppy	12	kinds	hearts.5	103.6	5.8	5.9	15	1.26	79	70	13.2	14.0	1.33	90	0.53
+sloppy	12	kinds	hearts.7	101.3	3.5	3.5	14	0.35	31	49	6.3	6.8	0.36	89	0.43
+sloppy	12	kinds	stake	105.0	7.3	7.4	17	0.75	68	48	14.0	15.0	0.77	91	0.47
+sloppy	12	kinds	calm	104.7	6.9	7.1	16	0.61	57	47	11.7	12.6	0.63	90	0.48
+sloppy	12	kinds	calm-2	104.7	6.9	7.1	16	0.61	57	47	11.7	12.6	0.63	90	0.48
+sloppy	30	fifo	never	101.9	0.0	0.0	13	0.00	0	-	0.0	0.0	0.00	94	0.36
+sloppy	30	fifo	once	108.1	6.3	6.1	16	1.00	100	51	19.1	20.5	0.82	92	0.41
+sloppy	30	fifo	twice	102.9	1.0	1.0	14	1.96	100	96	11.1	11.4	2.31	91	0.46
+sloppy	30	fifo	always	103.6	1.7	1.7	13	2.66	100	100	10.1	10.2	3.70	91	0.45
+sloppy	30	fifo	hearts.5	104.3	2.5	2.4	14	1.46	79	86	10.4	10.7	1.70	92	0.38
+sloppy	30	fifo	hearts.7	104.2	2.3	2.3	14	0.45	37	63	6.8	7.2	0.39	93	0.36
+sloppy	30	fifo	stake	105.9	4.1	4.0	14	0.55	54	64	8.9	9.4	0.61	93	0.37
+sloppy	30	fifo	calm	105.4	3.5	3.5	13	0.45	45	70	6.4	6.7	0.57	94	0.36
+sloppy	30	fifo	calm-2	105.4	3.5	3.5	13	0.45	45	70	6.4	6.7	0.57	94	0.36
+sloppy	30	kinds	never	101.9	0.0	0.0	14	0.00	0	-	0.0	0.0	0.00	89	0.44
+sloppy	30	kinds	once	111.9	10.1	9.9	16	1.00	100	30	23.8	25.6	0.49	89	0.48
+sloppy	30	kinds	twice	108.1	6.3	6.1	18	1.94	100	76	17.3	19.0	1.59	84	0.61
+sloppy	30	kinds	always	104.9	3.0	3.0	15	2.76	100	96	12.8	13.3	3.05	84	0.63
+sloppy	30	kinds	hearts.5	107.0	5.2	5.1	17	1.30	78	59	15.4	16.6	1.07	86	0.55
+sloppy	30	kinds	hearts.7	104.8	3.0	2.9	15	0.36	31	41	7.2	7.8	0.24	88	0.45
+sloppy	30	kinds	stake	107.2	5.3	5.2	16	0.50	50	40	11.3	12.1	0.37	88	0.49
+sloppy	30	kinds	calm	106.1	4.3	4.2	15	0.36	36	43	7.7	8.2	0.30	88	0.47
+sloppy	30	kinds	calm-2	106.1	4.3	4.2	15	0.36	36	43	7.7	8.2	0.30	88	0.47
+
+=== C. SHAPE OF A SHIFT, n=300 ===
+mean30: drinks per 30 s bucket across shifts (averaging across shifts smears waves, which do not line up).
+within: inside each shift, 10 s buckets of the day proper summed over a sliding 30 s, averaged: busiest quarter vs quietest quarter, and the CV.
+skilled day 1 mean30 2.4 2.3 2.2 2.3 2.7 2.5 2.2 2.2 | within: quietest 1.96 busiest 3.00 cv 0.21 | quiets 6.0 idle% 18.2
+skilled day 3 mean30 2.7 2.2 2.2 2.4 2.5 2.8 2.5 2.3 | within: quietest 1.97 busiest 3.00 cv 0.20 | quiets 6.1 idle% 18.8
+skilled day 7 mean30 2.4 2.4 3.1 2.3 2.4 3.1 2.3 2.5 | within: quietest 1.94 busiest 3.33 cv 0.24 | quiets 5.0 idle% 14.7
+skilled day 12 mean30 2.4 2.6 2.9 2.4 3.0 2.4 3.1 2.3 | within: quietest 1.96 busiest 3.43 cv 0.24 | quiets 4.0 idle% 11.6
+skilled day 30 mean30 2.4 3.2 2.1 3.1 2.2 3.1 2.4 2.9 | within: quietest 1.98 busiest 3.32 cv 0.21 | quiets 3.0 idle% 9.3
+sloppy day 1 mean30 1.0 1.7 1.2 1.6 1.3 1.6 1.3 1.6 | within: quietest 0.93 busiest 2.02 cv 0.36 | quiets 3.6 idle% 10.2
+sloppy day 3 mean30 0.9 1.9 1.0 1.8 1.1 1.8 1.2 1.7 | within: quietest 0.89 busiest 2.08 cv 0.38 | quiets 3.7 idle% 10.2
+sloppy day 7 mean30 0.9 1.6 1.2 1.5 1.6 1.2 1.6 1.3 | within: quietest 0.89 busiest 2.02 cv 0.38 | quiets 2.8 idle% 7.6
+sloppy day 12 mean30 0.9 1.6 1.5 1.2 1.5 1.5 1.2 1.6 | within: quietest 0.85 busiest 2.03 cv 0.39 | quiets 2.2 idle% 6.2
+sloppy day 30 mean30 0.9 1.5 1.6 1.1 1.6 1.6 1.2 1.5 | within: quietest 0.86 busiest 2.02 cv 0.39 | quiets 2.0 idle% 5.8
+
+=== E. THE BENCH: line patience x1.5, sloppy, n=300 ===
+day	gear	served	miss	line	star3%	money
+7	-	13.3	0.07	0.03	99	107
+7	bench	13.3	0.06	0.00	99	108
+12	-	12.8	0.35	0.80	94	99
+12	bench	13.0	0.46	0.02	91	100
+30	-	13.2	0.36	2.82	94	102
+30	bench	14.7	0.50	0.63	90	113
+
+=== F. WHAT THE THIRD STAR RESTS ON: noticing someone waiting, from the kitchen, sloppy, n=300 ===
+From the kitchen a customer not yet asked is a count on the tab, with no ring. As set, the bot knows to the second when the badge rose, and the kinds of faces it has seen.
+look N goes over once the badge is N seconds old, whoever it is. never does not go over for that at all, and only comes when its hands are free.
+day	queue	noticing	mReq	miss	ship	line	star3%	star2%	money
+7	fifo	as set	0.00	0.07	1.15	0.03	99	1	107
+7	fifo	look 8	0.00	0.17	0.91	0.10	98	2	91
+7	fifo	look 12	0.00	0.12	1.19	0.05	98	2	101
+7	fifo	look 16	0.00	0.07	1.15	0.03	99	1	107
+7	fifo	never	0.20	0.27	1.15	0.03	96	4	107
+7	kinds	as set	0.00	0.08	0.89	0.03	97	3	110
+7	kinds	look 8	0.00	0.13	0.68	0.06	98	2	93
+7	kinds	look 12	0.00	0.12	0.97	0.05	97	3	103
+7	kinds	look 16	0.00	0.09	0.89	0.03	97	3	109
+7	kinds	never	0.20	0.29	0.89	0.03	95	5	111
+12	fifo	as set	0.00	0.35	1.55	0.80	94	6	99
+12	fifo	look 8	0.00	0.68	1.37	1.58	84	16	88
+12	fifo	look 12	0.00	0.44	1.54	0.95	92	8	97
+12	fifo	look 16	0.20	0.63	1.54	0.52	83	17	99
+12	fifo	never	0.41	0.81	1.64	0.46	78	20	100
+12	kinds	as set	0.00	0.42	1.50	0.90	90	10	98
+12	kinds	look 8	0.00	0.64	1.41	1.64	85	14	89
+12	kinds	look 12	0.00	0.49	1.47	1.01	88	11	97
+12	kinds	look 16	0.17	0.60	1.46	0.62	86	14	100
+12	kinds	never	0.34	0.74	1.48	0.56	83	17	100
+30	fifo	as set	0.00	0.36	1.65	2.82	94	6	102
+30	fifo	look 8	0.00	0.82	1.51	4.04	79	20	89
+30	fifo	look 12	0.00	0.51	1.62	2.99	88	12	100
+30	fifo	look 16	0.19	0.71	1.53	2.63	81	19	102
+30	fifo	never	0.37	0.86	1.56	2.55	76	23	102
+30	kinds	as set	0.00	0.44	1.51	3.14	89	11	102
+30	kinds	look 8	0.00	0.72	1.45	4.21	83	17	91
+30	kinds	look 12	0.00	0.57	1.54	3.28	83	17	100
+30	kinds	look 16	0.18	0.65	1.39	2.90	85	15	102
+30	kinds	never	0.36	0.81	1.42	2.78	79	21	102
+
+=== D. HOW SLOW MAY YOU BE? sloppy timing x speed, n=300 ===
+day	speed	served	miss	line	star3%	star2%	money
+3	1	12.9	0.07	0.00	98	2	103
+3	1.25	11.4	0.06	0.00	97	3	89
+3	1.5	10.1	0.05	0.00	93	7	78
+3	2	7.9	0.46	0.00	62	37	59
+12	1	12.8	0.35	0.80	94	6	99
+12	1.25	10.5	1.21	1.96	64	34	80
+12	1.5	9.0	2.45	2.24	19	67	67
+12	2	6.3	4.33	2.62	1	19	45
+30	1	13.2	0.36	2.82	94	6	102
+30	1.25	10.8	1.26	4.33	66	30	83
+30	1.5	8.9	2.58	5.02	20	58	67
+30	2	6.2	4.43	5.39	0	18	45
+
+################ PART 4b. SENSITIVITY AROUND THE FINAL CONSTANTS (n=120)
+
+Each row: d$ against never on the same seeds, then burn% of shifts that pressed. Columns are policies.
+constants	prof	day	queue	never	once	twice	always	hearts.5	hearts.7	calm	calm1	calm2x
+as set	skilled	7	fifo	0/-%	10/0%	52/0%	85/15%	90/10%	77/11%	79/8%	69/4%	47/0%
+as set	skilled	30	fifo	0/-%	34/0%	64/7%	94/20%	94/18%	54/8%	30/0%	11/0%	30/0%
+as set	skilled	7	kinds	0/-%	8/1%	49/8%	85/23%	77/19%	62/13%	68/18%	63/5%	45/9%
+as set	skilled	30	kinds	0/-%	32/3%	67/6%	88/28%	69/10%	40/4%	21/4%	2/0%	21/4%
+as set	sloppy	3	fifo	0/-%	14/0%	27/24%	15/88%	16/67%	15/19%	23/50%	22/13%	26/25%
+as set	sloppy	7	fifo	0/-%	9/13%	6/71%	1/98%	4/77%	9/25%	6/37%	7/22%	6/36%
+as set	sloppy	7	kinds	0/-%	10/13%	14/53%	10/83%	8/62%	7/21%	8/28%	6/19%	8/27%
+as set	sloppy	30	fifo	0/-%	6/54%	1/94%	1/99%	3/82%	3/61%	4/66%	3/71%	4/66%
+PATIENCE=0.8	skilled	7	fifo	0/-%	10/0%	54/0%	101/0%	101/0%	97/0%	89/0%	82/0%	49/0%
+PATIENCE=0.8	skilled	30	fifo	0/-%	34/0%	69/0%	106/5%	107/4%	68/1%	31/0%	11/0%	31/0%
+PATIENCE=0.8	skilled	7	kinds	0/-%	9/0%	54/2%	99/8%	94/6%	75/0%	84/3%	70/3%	50/1%
+PATIENCE=0.8	skilled	30	kinds	0/-%	32/3%	66/9%	100/16%	73/8%	42/5%	21/2%	2/0%	21/2%
+PATIENCE=0.8	sloppy	3	fifo	0/-%	14/0%	35/4%	47/17%	41/14%	22/3%	41/12%	27/4%	36/3%
+PATIENCE=0.8	sloppy	7	fifo	0/-%	11/5%	24/18%	22/61%	21/50%	15/15%	12/15%	10/8%	12/13%
+PATIENCE=0.8	sloppy	7	kinds	0/-%	12/9%	27/15%	28/47%	22/31%	12/12%	12/19%	9/8%	12/16%
+PATIENCE=0.8	sloppy	30	fifo	0/-%	11/33%	11/73%	5/98%	8/74%	6/41%	8/36%	4/43%	8/36%
+PATIENCE=0.6	skilled	7	fifo	0/-%	9/0%	45/10%	74/31%	78/23%	62/8%	68/19%	60/11%	43/8%
+PATIENCE=0.6	skilled	30	fifo	0/-%	33/0%	61/13%	89/26%	87/29%	48/9%	30/0%	11/0%	30/0%
+PATIENCE=0.6	skilled	7	kinds	0/-%	7/0%	43/18%	52/65%	54/44%	53/11%	47/38%	52/16%	40/13%
+PATIENCE=0.6	skilled	30	kinds	0/-%	31/3%	62/13%	76/44%	59/19%	37/8%	21/5%	2/0%	21/5%
+PATIENCE=0.6	sloppy	3	fifo	0/-%	12/3%	9/78%	7/99%	8/77%	7/31%	10/78%	11/38%	10/73%
+PATIENCE=0.6	sloppy	7	fifo	0/-%	4/38%	-2/96%	-1/100%	-2/94%	3/49%	2/64%	2/56%	2/64%
+PATIENCE=0.6	sloppy	7	kinds	0/-%	7/26%	6/72%	2/96%	3/71%	4/39%	4/52%	5/35%	4/51%
+PATIENCE=0.6	sloppy	30	fifo	0/-%	-1/83%	-1/98%	1/100%	-0/93%	1/86%	2/92%	2/95%	2/92%
+BONUS_PER_ROUND=0.05	skilled	7	fifo	0/-%	8/0%	45/0%	73/15%	77/10%	66/11%	68/8%	59/4%	42/0%
+BONUS_PER_ROUND=0.05	skilled	30	fifo	0/-%	31/0%	57/7%	82/20%	81/18%	48/8%	28/0%	10/0%	28/0%
+BONUS_PER_ROUND=0.05	skilled	7	kinds	0/-%	6/1%	43/8%	73/23%	66/19%	54/13%	59/18%	54/5%	39/9%
+BONUS_PER_ROUND=0.05	skilled	30	kinds	0/-%	29/3%	59/6%	77/28%	60/10%	36/4%	19/4%	2/0%	19/4%
+BONUS_PER_ROUND=0.05	sloppy	3	fifo	0/-%	13/0%	24/24%	14/88%	15/67%	13/19%	21/50%	20/13%	23/25%
+BONUS_PER_ROUND=0.05	sloppy	7	fifo	0/-%	8/13%	5/71%	1/98%	3/77%	8/25%	5/37%	6/22%	5/36%
+BONUS_PER_ROUND=0.05	sloppy	7	kinds	0/-%	9/13%	12/53%	9/83%	6/62%	6/21%	7/28%	5/19%	7/27%
+BONUS_PER_ROUND=0.05	sloppy	30	fifo	0/-%	5/54%	1/94%	1/99%	2/82%	3/61%	4/66%	2/71%	4/66%
+BONUS_PER_ROUND=0.15	skilled	7	fifo	0/-%	11/0%	59/0%	98/15%	104/10%	87/11%	90/8%	78/4%	53/0%
+BONUS_PER_ROUND=0.15	skilled	30	fifo	0/-%	36/0%	71/7%	106/20%	106/18%	60/8%	33/0%	11/0%	33/0%
+BONUS_PER_ROUND=0.15	skilled	7	kinds	0/-%	9/1%	55/8%	96/23%	87/19%	70/13%	77/18%	72/5%	50/9%
+BONUS_PER_ROUND=0.15	skilled	30	kinds	0/-%	35/3%	74/6%	99/28%	77/10%	44/4%	22/4%	2/0%	22/4%
+BONUS_PER_ROUND=0.15	sloppy	3	fifo	0/-%	15/0%	30/24%	16/88%	17/67%	16/19%	25/50%	24/13%	28/25%
+BONUS_PER_ROUND=0.15	sloppy	7	fifo	0/-%	10/13%	7/71%	1/98%	5/77%	10/25%	6/37%	8/22%	7/36%
+BONUS_PER_ROUND=0.15	sloppy	7	kinds	0/-%	11/13%	16/53%	11/83%	9/62%	9/21%	9/28%	7/19%	9/27%
+BONUS_PER_ROUND=0.15	sloppy	30	fifo	0/-%	6/54%	1/94%	1/99%	3/82%	3/61%	5/66%	3/71%	5/66%
+BONUS_PER_ROUND=0.3	skilled	7	fifo	0/-%	17/0%	79/0%	134/15%	143/10%	119/11%	123/8%	107/4%	71/0%
+BONUS_PER_ROUND=0.3	skilled	30	fifo	0/-%	44/0%	92/7%	142/20%	143/18%	78/8%	39/0%	14/0%	39/0%
+BONUS_PER_ROUND=0.3	skilled	7	kinds	0/-%	14/1%	74/8%	130/23%	119/19%	95/13%	105/18%	97/5%	67/9%
+BONUS_PER_ROUND=0.3	skilled	30	kinds	0/-%	42/3%	96/6%	132/28%	101/10%	56/4%	26/4%	3/0%	26/4%
+BONUS_PER_ROUND=0.3	sloppy	3	fifo	0/-%	19/0%	39/24%	18/88%	21/67%	21/19%	31/50%	31/13%	37/25%
+BONUS_PER_ROUND=0.3	sloppy	7	fifo	0/-%	14/13%	11/71%	2/98%	7/77%	14/25%	9/37%	10/22%	9/36%
+BONUS_PER_ROUND=0.3	sloppy	7	kinds	0/-%	15/13%	22/53%	15/83%	13/62%	12/21%	12/28%	9/19%	12/27%
+BONUS_PER_ROUND=0.3	sloppy	30	fifo	0/-%	8/54%	2/94%	2/99%	4/82%	4/61%	5/66%	3/71%	5/66%
+BURN_KEEPS=0.25	skilled	7	fifo	0/-%	10/0%	52/0%	83/15%	89/10%	75/11%	77/8%	68/4%	47/0%
+BURN_KEEPS=0.25	skilled	30	fifo	0/-%	34/0%	63/7%	90/20%	90/18%	53/8%	30/0%	11/0%	30/0%
+BURN_KEEPS=0.25	skilled	7	kinds	0/-%	8/1%	48/8%	81/23%	73/19%	59/13%	65/18%	62/5%	44/9%
+BURN_KEEPS=0.25	skilled	30	kinds	0/-%	32/3%	66/6%	83/28%	67/10%	40/4%	20/4%	2/0%	20/4%
+BURN_KEEPS=0.25	sloppy	3	fifo	0/-%	14/0%	25/24%	7/88%	11/67%	14/19%	19/50%	21/13%	24/25%
+BURN_KEEPS=0.25	sloppy	7	fifo	0/-%	9/13%	2/71%	-6/98%	-1/77%	8/25%	4/37%	6/22%	4/36%
+BURN_KEEPS=0.25	sloppy	7	kinds	0/-%	9/13%	10/53%	4/83%	3/62%	6/21%	7/28%	6/19%	7/27%
+BURN_KEEPS=0.25	sloppy	30	fifo	0/-%	3/54%	-4/94%	-4/99%	-1/82%	2/61%	3/66%	2/71%	3/66%
+BURN_KEEPS=0	skilled	7	fifo	0/-%	10/0%	52/0%	80/15%	87/10%	73/11%	76/8%	68/4%	47/0%
+BURN_KEEPS=0	skilled	30	fifo	0/-%	34/0%	62/7%	87/20%	87/18%	52/8%	30/0%	11/0%	30/0%
+BURN_KEEPS=0	skilled	7	kinds	0/-%	7/1%	47/8%	77/23%	70/19%	57/13%	63/18%	61/5%	43/9%
+BURN_KEEPS=0	skilled	30	kinds	0/-%	31/3%	66/6%	78/28%	66/10%	39/4%	20/4%	2/0%	20/4%
+BURN_KEEPS=0	sloppy	3	fifo	0/-%	14/0%	24/24%	1/88%	6/67%	13/19%	16/50%	20/13%	23/25%
+BURN_KEEPS=0	sloppy	7	fifo	0/-%	8/13%	-3/71%	-13/98%	-7/77%	6/25%	3/37%	6/22%	3/36%
+BURN_KEEPS=0	sloppy	7	kinds	0/-%	9/13%	7/53%	-2/83%	-1/62%	5/21%	6/28%	5/19%	6/27%
+BURN_KEEPS=0	sloppy	30	fifo	0/-%	1/54%	-9/94%	-9/99%	-5/82%	0/61%	2/66%	1/71%	2/66%
+
+################ PART 5a. THE DAY FLOOR AGAIN (n=400)
+
+patienceMs	day	queue	star3%	miss	mOrd	wrong	ship	line	money
+60000	12	fifo	78	0.76	0.59	0.16	1.62	0.80	94
+60000	12	kinds	87	0.51	0.38	0.13	1.64	0.87	96
+60000	30	fifo	82	0.71	0.56	0.15	1.74	2.87	97
+60000	30	kinds	86	0.57	0.43	0.14	1.72	3.11	98
+63000	12	fifo	89	0.53	0.35	0.18	1.57	0.82	98
+63000	12	kinds	90	0.47	0.33	0.14	1.55	0.92	97
+63000	30	fifo	87	0.52	0.37	0.15	1.67	2.85	100
+63000	30	kinds	91	0.45	0.30	0.15	1.64	3.11	101
+65000	12	fifo	94	0.33	0.21	0.12	1.52	0.80	99
+65000	12	kinds	91	0.41	0.29	0.12	1.52	0.90	98
+65000	30	fifo	93	0.38	0.24	0.14	1.65	2.83	102
+65000	30	kinds	89	0.41	0.25	0.17	1.56	3.10	102
+70000	12	fifo	96	0.23	0.11	0.12	1.38	0.87	100
+70000	12	kinds	95	0.31	0.19	0.12	1.33	0.95	101
+70000	30	fifo	95	0.23	0.13	0.11	1.53	2.82	105
+70000	30	kinds	94	0.32	0.20	0.12	1.43	3.01	105
+
+################ PART 5b. THE LINE WAIT AGAIN (n=300)
+
+constants	sl.star3 d3/7/12/30	sl.line	sl.miss12/30	sl.money3/30	sk.star3 d30	sk.line	sk.money3/30	sk.idle30
+LINE_MS=30000	98/99/93/92	0.0/0.1/2.3/4.4	0.37/0.38	103/99	100	0.0	208/226	9
+LINE_MS=33000	98/99/93/93	0.0/0.0/1.2/3.1	0.34/0.38	103/100	100	0.0	208/227	9
+LINE_MS=35000	98/99/94/94	0.0/0.0/0.8/2.8	0.35/0.36	103/102	100	0.0	208/227	9
+LINE_MS=38000	98/99/91/92	0.0/0.0/0.4/2.6	0.43/0.46	103/104	100	0.0	208/227	9

@@ -90,7 +90,9 @@ export class Stage {
       }
       const patience = patienceLeft(customer, state.clock);
       const selected = slot === state.selectedSlot;
-      if (view && view.customer.id === customer.id) {
+      // The owner and not the id: a restored shop can put another face on an id, and the old face's
+      // textures are about to be swept out from under a figure that is still showing them.
+      if (view && ownerOf(view.customer) === ownerOf(customer)) {
         view.update(customer, patience, selected);
         continue;
       }

@@ -1,4 +1,5 @@
-import { Accessory, ACCESSORIES, CustomerLook, HAIR_STYLES, HairStyle } from './customers';
+import { Accessory, ACCESSORIES, CustomerKind, CustomerLook, HAIR_STYLES, HairStyle } from './customers';
+import { GEAR_IDS } from './gear';
 import {
   CategoryId,
   Drink,
@@ -10,7 +11,7 @@ import {
   SUGAR_STEPS,
   sweetnessForPumps,
 } from './ingredients';
-import { getDayConfig } from './levels';
+import { DayConfig, getDayConfig } from './levels';
 import {
   AudioSettings,
   clampAudio,
@@ -20,8 +21,12 @@ import {
   DEFAULT_AUDIO,
   GameMode,
   GameState,
+  NO_OVERTIME,
+  Overtime,
   Phase,
 } from './reducer';
+import { fitsUsual, Recall, REGULAR_IDS, RegularMemory } from './regulars';
+import { NEWS_IDS, OVERTIME_MAX_ROUNDS, WAVE_GAP_MAX_MS } from './rules';
 
 /**
  * The shop, written down between sessions.
@@ -38,10 +43,10 @@ import {
  * Everything read back is validated, because on the web the save sits in `localStorage` where it
  * can be edited, and a save written by an older build can name an ingredient that no longer
  * exists. A save that doesn't check out is thrown away rather than patched: a fresh shop is a
- * better failure than a half-restored one. Ingredient *names* are checked against the catalogue;
- * whether the day in question still offers them is not, so a retuned unlock schedule leaves a
- * customer asking for a tea that isn't on the shelf today rather than wiping the save — they time
- * out, and the shop carries on.
+ * better failure than a half-restored one. Ingredient *names* are checked against the catalogue, so
+ * a cup or a customer naming one since taken out of it refuses the save. Whether the day in question
+ * still offers a name is not checked, so a retuned menu leaves a customer asking for a tea that isn't
+ * on the shelf today rather than wiping the save — they time out, and the shop carries on.
  */
 export const SAVE_VERSION = 1;
 
@@ -57,6 +62,12 @@ interface SavedGame {
   mode: GameMode;
   /** Added after launch, like `money`: a save without it opens at the defaults. */
   audio?: AudioSettings;
+  /** Added after launch, like `money`: a save without it has been told nothing yet. */
+  seen?: string[];
+  /** Added after launch, like `money`: a save without it has bought nothing. */
+  gear?: string[];
+  /** Added after launch, like `money`: a save without it has met nobody yet. */
+  regulars?: Record<string, RegularMemory>;
   day: number;
   clock: number;
   coins: number;
@@ -70,8 +81,18 @@ interface SavedGame {
   nextSpawnAt: number;
   nextId: number;
   stats: DayStats;
+  /** Added after launch, like `money`: a save without it has not stayed open today. */
+  overtime?: Overtime;
+  /** The rest are all added after launch, like `money`: a save without them has no group on the way. */
+  waveLeft?: number;
+  lullUntil?: number;
+  incoming?: CustomerKind[];
+  line?: Customer[];
+  lost?: number;
   seed: number;
 }
+
+const KINDS: readonly unknown[] = ['plain', 'shipper', 'elder', 'office'] satisfies CustomerKind[];
 
 /** The ids a cup holds one of, as opposed to the list of toppings. */
 const SINGLE: Exclude<CategoryId, 'toppings'>[] = ['sweetness', 'ice', 'tea', 'milk', 'foam'];
@@ -82,6 +103,9 @@ export function serializeGame(state: GameState): string {
     phase: state.phase,
     mode: state.mode,
     audio: state.audio,
+    seen: state.seen,
+    gear: state.gear,
+    regulars: state.regulars,
     day: state.day,
     clock: state.clock,
     coins: state.coins,
@@ -94,6 +118,12 @@ export function serializeGame(state: GameState): string {
     nextSpawnAt: state.nextSpawnAt,
     nextId: state.nextId,
     stats: state.stats,
+    overtime: state.overtime,
+    waveLeft: state.waveLeft,
+    lullUntil: state.lullUntil,
+    incoming: state.incoming,
+    line: state.line,
+    lost: state.lost,
     seed: state.seed,
   };
   return JSON.stringify(save);
@@ -122,6 +152,8 @@ export function parseGame(json: string | null | undefined): GameState | null {
   const phase = pick<Phase>(save.phase, ['title', 'playing', 'dayEnd']);
   const mode = pick<GameMode>(save.mode, ['standard', 'relaxed']);
   const audio = parseAudio(save.audio);
+  const seen = parseSeen(save.seen);
+  const gear = parseGear(save.gear);
   const day = int(save.day, 1, 9_999);
   const clock = num(save.clock, 0);
   const coins = int(save.coins, 0);
@@ -142,11 +174,24 @@ export function parseGame(json: string | null | undefined): GameState | null {
   if (cupId === null || nextId === null || nextSpawnAt === null || seed === null) return null;
 
   const config = getDayConfig(day);
-  const slots = parseSlots(save.slots, config.slots);
+  const regulars = parseRegulars(save.regulars, config);
+  const slots = parseSlots(save.slots, config.slots, regulars);
   const build = parseBuild(save.build);
   const cup = parseDrink(save.cup);
   const stats = parseStats(save.stats);
-  if (!slots || !build || !cup || !stats) return null;
+  const overtime = parseOvertime(save.overtime);
+  const line = parseLine(save.line, regulars);
+  const waveLeft = save.waveLeft === undefined ? 0 : int(save.waveLeft, 0);
+  const lullUntil = save.lullUntil === undefined ? 0 : num(save.lullUntil, 0);
+  const lost = save.lost === undefined ? 0 : int(save.lost, 0);
+  if (!slots || !build || !cup || !stats || !overtime) return null;
+  if (!line || waveLeft === null || lullUntil === null || lost === null) return null;
+  // Whoever is still to come holds the day open, and only the next arrival can let go of it, so these
+  // are held to what a shop can really be in: a relaxed one has no group, one is never further off than
+  // the stagger, and the largest there can be is a group with every round's on top. Tidied rather than
+  // refused, like the rounds: both limits are numbers tuning will move. Unchecked, a code could carry a
+  // day that never ends, and the menu's only button goes straight back to it.
+  const coming = mode === 'relaxed' ? 0 : Math.min(waveLeft, config.waveSize * (OVERTIME_MAX_ROUNDS + 1));
   // Older saves had an automatically supplied medium cup. Keep a drink in progress, but let
   // an untouched bench adopt the new pick-a-cup flow. An explicit null is the new empty bench.
   const contents = cup.toppings.length > 0 || SINGLE.some((category) => cup[category] !== null)
@@ -170,6 +215,9 @@ export function parseGame(json: string | null | undefined): GameState | null {
     paused: phase === 'playing' && clock > 0,
     mode,
     audio,
+    seen,
+    gear,
+    regulars,
     day,
     config,
     clock,
@@ -187,11 +235,17 @@ export function parseGame(json: string | null | undefined): GameState | null {
     build,
     cupId,
     discarded: null,
-    nextSpawnAt,
+    nextSpawnAt: Math.min(nextSpawnAt, clock + WAVE_GAP_MAX_MS),
     nextId,
     stats,
     feedback: [],
     departures: [],
+    overtime,
+    waveLeft: coming,
+    lullUntil,
+    incoming: parseIncoming(save.incoming, coming),
+    line,
+    lost,
     seed,
   };
 }
@@ -211,6 +265,107 @@ function parseAudio(raw: unknown): AudioSettings {
     music: level(value.music, DEFAULT_AUDIO.music),
     sfx: level(value.sfx, DEFAULT_AUDIO.sfx),
   });
+}
+
+/**
+ * Which introductions this shop has had. Like the volumes, a bad one is tidied and not refused: the
+ * worst it can cost is a line on a sign read twice, which is not worth a week of the shop. An id
+ * this build does not know is dropped, so a code from a newer page simply has that told again.
+ */
+function parseSeen(raw: unknown): string[] {
+  return knownIds(raw, NEWS_IDS);
+}
+
+/**
+ * What the shop owns. Tidied the way `seen` is: an id this build does not know is dropped, so a code
+ * from a newer page opens here without that item rather than not at all.
+ */
+function parseGear(raw: unknown): string[] {
+  return knownIds(raw, GEAR_IDS);
+}
+
+/**
+ * Those of a list's entries this build knows, each once. They stay in the order they came, which is
+ * the order they happened: a backup code is the very bytes of the save, so a reload must not sort them.
+ */
+function knownIds(raw: unknown, known: readonly string[]): string[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.filter((id, at) => known.includes(id) && raw.indexOf(id) === at);
+}
+
+/**
+ * Who the shop knows. Tidied the way `gear` is, one regular at a time: a memory that does not check
+ * out, or a usual that names a tea since taken off the shelf or could never be served, costs that
+ * regular's acquaintance and not the shop, and they are simply met again. That is the memory only: a
+ * regular standing at the counter holds a copy of the usual as their order, and an order naming a
+ * lost ingredient refuses the save, exactly as a stranger's does. An id this build does not know is
+ * dropped. The keys stay in the order they came, which is the order they were met: a backup code is
+ * the very bytes of the save.
+ */
+function parseRegulars(raw: unknown, config: DayConfig): Record<string, RegularMemory> {
+  const regulars: Record<string, RegularMemory> = {};
+  for (const [id, entry] of Object.entries(asObject(raw) ?? {})) {
+    const memory = REGULAR_IDS.includes(id) ? parseMemory(entry, config) : null;
+    if (memory) regulars[id] = memory;
+  }
+  return regulars;
+}
+
+function parseMemory(raw: unknown, config: DayConfig): RegularMemory | null {
+  const value = asObject(raw);
+  const usual = value && parseDrink(value.usual);
+  if (!value || !usual || !fitsUsual(usual, config)) return null;
+  const visits = int(value.visits, 0);
+  const streak = int(value.streak, 0);
+  const lastDay = int(value.lastDay, 1);
+  return visits === null || streak === null || lastDay === null ? null : { usual, visits, streak, lastDay };
+}
+
+/**
+ * Today's overtime. It holds money, so like the till a bad one is refused rather than guessed at —
+ * all but the count of rounds, which is held to today's limit instead. That limit is a number tuning
+ * will move, and a shift saved under a higher one is not worth a shop.
+ */
+function parseOvertime(raw: unknown): Overtime | null {
+  if (raw === undefined) return NO_OVERTIME;
+  const value = asObject(raw);
+  if (!value || typeof value.lost !== 'boolean') return null;
+  const rounds = int(value.rounds, 0);
+  const jar = int(value.jar, 0);
+  const paid = int(value.paid, 0);
+  if (rounds === null || jar === null || paid === null) return null;
+  // Only ever true: a shop that has not gone relaxed mid-round is simply without it.
+  if (value.forfeited !== undefined && value.forfeited !== true) return null;
+  return {
+    rounds: Math.min(rounds, OVERTIME_MAX_ROUNDS),
+    jar,
+    lost: value.lost,
+    paid,
+    ...(value.forfeited ? { forfeited: true as const } : {}),
+  };
+}
+
+/** Whoever was outside. They are customers like any other, and the same gate decides whether they are. */
+function parseLine(raw: unknown, regulars: GameState['regulars']): Customer[] | null {
+  if (raw === undefined) return [];
+  if (!Array.isArray(raw)) return null;
+  const line: Customer[] = [];
+  for (const entry of raw) {
+    const customer = parseCustomer(entry, regulars);
+    if (!customer) return null;
+    line.push(customer);
+  }
+  return line;
+}
+
+/**
+ * Who was announced. Tidied the way `seen` is, because all it can cost is a preview: a kind this build
+ * does not know is dropped, and the one who comes in place of it is whoever comes. Never longer than
+ * the group, whose number is the one that decides how many arrive.
+ */
+function parseIncoming(raw: unknown, waveLeft: number): CustomerKind[] {
+  if (!Array.isArray(raw)) return [];
+  return raw.filter((kind): kind is CustomerKind => KINDS.includes(kind)).slice(0, waveLeft);
 }
 
 function asObject(value: unknown): Record<string, unknown> | null {
@@ -240,19 +395,19 @@ function pick<T extends string>(value: unknown, allowed: readonly T[]): T | null
  * The day's counter, with whoever was standing at it. A save from a day that had more spots than
  * today's (the level's `slots` was retuned down) keeps the customers that still fit.
  */
-function parseSlots(raw: unknown, length: number): (Customer | null)[] | null {
+function parseSlots(raw: unknown, length: number, regulars: GameState['regulars']): (Customer | null)[] | null {
   if (!Array.isArray(raw)) return null;
   const slots: (Customer | null)[] = Array.from({ length }, () => null);
   for (let slot = 0; slot < Math.min(length, raw.length); slot++) {
     if (raw[slot] === null || raw[slot] === undefined) continue;
-    const customer = parseCustomer(raw[slot]);
+    const customer = parseCustomer(raw[slot], regulars);
     if (!customer) return null;
     slots[slot] = customer;
   }
   return slots;
 }
 
-function parseCustomer(raw: unknown): Customer | null {
+function parseCustomer(raw: unknown, regulars: GameState['regulars']): Customer | null {
   const value = asObject(raw);
   if (!value) return null;
   const id = int(value.id, 1);
@@ -265,6 +420,18 @@ function parseCustomer(raw: unknown): Customer | null {
   // Null until the order is taken, so an absent one is correct rather than missing.
   const orderedAt = value.orderedAt === null || value.orderedAt === undefined ? null : num(value.orderedAt, 0);
   if (value.orderedAt !== null && value.orderedAt !== undefined && orderedAt === null) return null;
+  // Only there once a change of mode has moved `orderedAt`.
+  const queuedAt = value.queuedAt === undefined ? undefined : num(value.queuedAt, 0);
+  if (queuedAt === null) return null;
+  // Only there for a late customer, and a round that happened: the first one is 1.
+  const lateRound = value.lateRound === undefined ? undefined : int(value.lateRound, 1);
+  if (lateRound === null) return null;
+  if (value.regularId !== undefined && typeof value.regularId !== 'string') return null;
+  const recall = value.recall === undefined ? undefined : pick<Recall>(value.recall, ['blank', 'asked']);
+  if (recall === null) return null;
+  // Someone the shop has no memory of, from a newer build or a memory that did not check out, is
+  // just someone at the counter. Their hidden card goes too: nothing could settle up for it.
+  const regularId = typeof value.regularId === 'string' && Object.hasOwn(regulars, value.regularId) ? value.regularId : undefined;
   if (id === null || arrivedAt === null || orderPatienceMs === null || patienceMs === null) return null;
   if (!status || !look || !order || typeof value.name !== 'string' || value.name === '') return null;
   // A cup nobody ordered can't be served, so an order has to name a tea.
@@ -279,6 +446,10 @@ function parseCustomer(raw: unknown): Customer | null {
     orderPatienceMs,
     orderedAt,
     patienceMs,
+    ...(lateRound === undefined ? {} : { lateRound }),
+    ...(regularId === undefined ? {} : { regularId, ...(recall === undefined ? {} : { recall }) }),
+    // Last, because a change of mode is what adds it: this is the order the reducer's copy has them in.
+    ...(queuedAt === undefined ? {} : { queuedAt }),
   };
 }
 

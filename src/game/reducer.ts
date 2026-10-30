@@ -1,4 +1,5 @@
-import { CustomerLook, generateLook, NAMES } from './customers';
+import { ARRIVAL_LINES, CustomerKind, CustomerLook, generateLook, generateLookOf, kindOf, NAMES } from './customers';
+import { BOARD_SLOT, gearItem } from './gear';
 import {
   Drink,
   CupSize,
@@ -10,19 +11,37 @@ import {
   sweetnessForPumps,
 } from './ingredients';
 import { DayConfig, getDayConfig } from './levels';
-import { formatMoney } from './money';
 import { drinkPrice, evaluateDrink, generateOrder } from './orders';
 import { createRng } from './random';
+import { Recall, Regular, RegularMemory, regularById, regularDue, rollUsual } from './regulars';
+import {
+  burnJar,
+  closesAt,
+  forfeitJar,
+  inOvertime,
+  jarPayout,
+  lineWaitMs,
+  OVERTIME_FROM_DAY,
+  OVERTIME_MAX_ROUNDS,
+  OVERTIME_WINDOW_MS,
+  patienceFor,
+  payoutFor,
+  SAY_MS,
+  walkoutFor,
+  WAVE_GAP_MAX_MS,
+  WAVE_GAP_MIN_MS,
+} from './rules';
 
 export type Phase = 'title' | 'playing' | 'dayEnd';
-export type Tone = 'good' | 'ok' | 'bad';
+/** `say` is a customer talking rather than the shop keeping score. */
+export type Tone = 'good' | 'ok' | 'bad' | 'say';
 export type Outcome = 'perfect' | 'close' | 'wrong' | 'timeout';
 /** `requesting` = waiting for the player to take the order; `ordered` = waiting for the drink. */
 export type CustomerStatus = 'requesting' | 'ordered';
 /**
  * How the shop is run. `standard` is the whole job: every order is taken by hand at the counter and
- * the next customer takes a while to walk in. `relaxed` takes the orders for you and keeps someone
- * standing in every free spot, so the day is nothing but preparation.
+ * customers come in groups, with a quiet between them. `relaxed` takes the orders for you and keeps
+ * someone standing in every free spot, so the day is nothing but preparation.
  */
 export type GameMode = 'standard' | 'relaxed';
 
@@ -58,14 +77,35 @@ export interface Customer {
   name: string;
   order: Drink;
   status: CustomerStatus;
-  /** When they walked up; drives the order-taking patience. */
+  /**
+   * When they walked up; drives the order-taking patience. For someone in the line outside it is when
+   * they joined it, and it starts again when they reach the counter, because that is when anyone there
+   * can see them.
+   */
   arrivedAt: number;
   /** How long they'll wait for their order to be taken. */
   orderPatienceMs: number;
   /** When the order was taken; null until then. Drives the serve patience. */
   orderedAt: number | null;
+  /**
+   * When the order was really taken, once a change of mode has moved `orderedAt` to keep their share
+   * of patience. `orderedAt` then measures how long they have left and no longer says who came first.
+   */
+  queuedAt?: number;
   /** How long they'll wait for the finished drink after ordering. */
   patienceMs: number;
+  /**
+   * Which round they came in on, if they came in after the player pressed to stay open. Nothing such
+   * a customer does reaches the day's stats, which is how the day proper keeps its stars whatever
+   * happens late; only the jar has a stake in them. It is also what their patience was worked out
+   * from, and it is theirs: a later press does not touch them, so a change of mode has to find it
+   * here and not on the shop.
+   */
+  lateRound?: number;
+  /** One of the shop's regulars. `id` starts again every day, so this is what finds their memory. */
+  regularId?: string;
+  /** Set when this customer's order is a usual the player has to remember. See `orderVisible`. */
+  recall?: Recall;
 }
 
 export interface Feedback {
@@ -86,6 +126,8 @@ export interface Departure {
   /** The cup they were handed, or null if they gave up waiting. */
   drink: Drink | null;
   at: number;
+  /** What they paid went into the overtime jar, so the coins fly there and not to the till. */
+  toJar?: true;
 }
 
 /**
@@ -114,12 +156,41 @@ export interface DayStats {
   tips: number;
 }
 
+/**
+ * Staying open past closing, one day's worth. The rules that read it are in `rules.ts`; this is what
+ * they keep. It is reset with the day, and it is saved, because a day can be put down in the middle.
+ */
+export interface Overtime {
+  /** How many times the player has pressed today. */
+  rounds: number;
+  /** What the late sales have made, held apart from the till until closing. */
+  jar: number;
+  /** A customer walked out on it: half of it and the bonus are gone, and there are no more rounds. */
+  lost: boolean;
+  /** What the jar put in the till at closing, bonus included. 0 until then, and it keeps `jar` as it was. */
+  paid: number;
+  /**
+   * The shop went relaxed with a round running. That was its way out of the risk, so it costs what the
+   * risk was for: the bonus and any further round, for the rest of the day, even if it switches back.
+   * Only ever true, and kept here rather than read off `mode`, because the mode can be changed back.
+   */
+  forfeited?: true;
+}
+
+export const NO_OVERTIME: Overtime = { rounds: 0, jar: 0, lost: false, paid: 0 };
+
 export interface GameState {
   phase: Phase;
   paused: boolean;
   mode: GameMode;
   /** How loud the shop is. Set from the settings card, carried across days, saved. */
   audio: AudioSettings;
+  /** Which introductions the opening sign has already given this shop. See `dayNews`. */
+  seen: string[];
+  /** What the shop has bought. See `gear.ts`: each item's effect reads this where it happens. */
+  gear: string[];
+  /** Everyone the shop has met that it will see again, by `Regular.id`. See `regulars.ts`. */
+  regulars: Record<string, RegularMemory>;
   day: number;
   config: DayConfig;
   /** Game time in ms since the day started; only advances while playing. */
@@ -129,7 +200,7 @@ export interface GameState {
   /**
    * Everything the shop has ever earned and not spent — see "The shop's money" in CLAUDE.md. It
    * carries across days and survives going back to the menu, because it is the player's, not the
-   * run's; `SPEND` is the only thing that takes any out.
+   * run's; `spend` is the only thing that takes any out.
    */
   money: number;
   slots: (Customer | null)[];
@@ -146,6 +217,17 @@ export interface GameState {
   stats: DayStats;
   feedback: Feedback[];
   departures: Departure[];
+  overtime: Overtime;
+  /** How many of the current group have yet to come in. */
+  waveLeft: number;
+  /** When the quiet ends and the next group comes in. Behind the clock while there is no quiet. */
+  lullUntil: number;
+  /** Who is on the way, as far as has been announced. A round's group comes unannounced, so `waveLeft` can be more. */
+  incoming: CustomerKind[];
+  /** Whoever came in with no spot free, oldest first. They reach the counter as spots come free. */
+  line: Customer[];
+  /** How many gave up in the line today. Nothing holds it against the shop: they never reached the counter. */
+  lost: number;
   seed: number;
 }
 
@@ -157,6 +239,8 @@ export type GameAction =
   | { type: 'SET_MODE'; mode: GameMode }
   /** Change one or both volumes. An out-of-range value is clamped, not refused. */
   | { type: 'SET_AUDIO'; audio: Partial<AudioSettings> }
+  /** The opening sign has been read: don't introduce these again. */
+  | { type: 'NOTE_NEWS'; ids: string[] }
   /**
    * Put a whole shop back, from a backup code the player pasted in. `state` has already been
    * through `parseGame`, which is the only thing that is allowed to build one out of text — so
@@ -165,6 +249,8 @@ export type GameAction =
   | { type: 'RESTORE'; state: GameState }
   | { type: 'TICK'; dt: number }
   | { type: 'TAKE_ORDER'; slot: number }
+  /** "Hỏi lại": show this usual after all, for the price of the tip. */
+  | { type: 'ASK_AGAIN'; slot: number }
   | { type: 'SELECT_SLOT'; slot: number }
   | { type: 'PICK_CUP'; size: CupSize }
   /** Held a spigot open over the cup: `amount` is the fraction of the cup that ran in. */
@@ -179,13 +265,13 @@ export type GameAction =
   | { type: 'ADD_STRAW' }
   | { type: 'CLEAR_CUP' }
   | { type: 'SERVE' }
-  /** Buy something: refused outright if the shop cannot afford it. */
-  | { type: 'SPEND'; amount: number };
+  /** Stay open another round. Refused unless `canExtend`. */
+  | { type: 'EXTEND_SHIFT' }
+  /** Buy something for the shop, off the day-end card: refused outright if it cannot afford it. */
+  | { type: 'BUY_GEAR'; id: string };
 
 const FIRST_CUSTOMER_AT_MS = 1_200;
-const RETRY_SPAWN_MS = 1_500;
 const FEEDBACK_MS = 1_400;
-const MAX_TIP = 3;
 /** How long a leaving customer keeps their spot while walking off. */
 const DEPARTURE_MS = 1_300;
 
@@ -201,21 +287,32 @@ export function suspendedShift(state: GameState): boolean {
 }
 
 export function createInitialState(seed: number): GameState {
-  return { ...buildDay(1, seed, 'standard', 0, DEFAULT_AUDIO), phase: 'title' };
+  return { ...buildDay(1, seed, { mode: 'standard', money: 0, audio: DEFAULT_AUDIO, seen: [], gear: [], regulars: {} }), phase: 'title' };
 }
 
-function buildDay(day: number, seed: number, mode: GameMode, money: number, audio: AudioSettings): GameState {
+/** What belongs to the shop rather than to one day, and so outlives `buildDay`. */
+type Carried = Pick<GameState, 'mode' | 'money' | 'audio' | 'seen' | 'gear' | 'regulars'>;
+
+/** The one reading of it, so that `START_DAY` and leaving a finished day cannot disagree. */
+function carried({ mode, money, audio, seen, gear, regulars }: GameState): Carried {
+  return { mode, money, audio, seen, gear, regulars };
+}
+
+/**
+ * A day, ready to open. **This does not run once a day**: leaving a finished day builds the next
+ * one for the menu, and the menu's button builds it again. So nothing in here may roll, charge or
+ * decay anything.
+ */
+function buildDay(day: number, seed: number, keep: Carried): GameState {
   const config = getDayConfig(day);
   return {
+    ...keep,
     phase: 'playing',
     paused: false,
-    mode,
-    audio,
     day,
     config,
     clock: 0,
     coins: 0,
-    money,
     slots: Array.from({ length: config.slots }, () => null),
     selectedSlot: null,
     cup: EMPTY_DRINK,
@@ -223,11 +320,17 @@ function buildDay(day: number, seed: number, mode: GameMode, money: number, audi
     cupId: 1,
     discarded: null,
     // In the relaxed mode nobody is kept waiting for a customer, not even at opening.
-    nextSpawnAt: mode === 'relaxed' ? 0 : FIRST_CUSTOMER_AT_MS,
+    nextSpawnAt: keep.mode === 'relaxed' ? 0 : FIRST_CUSTOMER_AT_MS,
     nextId: 1,
     stats: { served: 0, perfect: 0, missed: 0, tips: 0 },
     feedback: [],
     departures: [],
+    overtime: NO_OVERTIME,
+    waveLeft: 0,
+    lullUntil: 0,
+    incoming: [],
+    line: [],
+    lost: 0,
     seed,
   };
 }
@@ -235,14 +338,14 @@ function buildDay(day: number, seed: number, mode: GameMode, money: number, audi
 export function gameReducer(state: GameState, action: GameAction): GameState {
   switch (action.type) {
     case 'START_DAY':
-      return buildDay(action.day, state.seed, state.mode, state.money, state.audio);
+      return buildDay(action.day, state.seed, carried(state));
     case 'GO_TO_TITLE':
       // Going to the menu **puts the shift down, it does not end it**: the clock, the counter, the
       // cup and the day's takings all stay in the state, so `RESUME_DAY` can hand them back. A day
       // that is already *finished* has nothing to come back to, so leaving one builds the next day
       // instead — un-started, ready for the menu to open.
       return state.phase === 'dayEnd'
-        ? { ...buildDay(state.day + 1, state.seed, state.mode, state.money, state.audio), phase: 'title' }
+        ? { ...buildDay(state.day + 1, state.seed, carried(state)), phase: 'title' }
         : { ...state, phase: 'title', paused: false };
     case 'RESUME_DAY':
       // Straight back to the minute the player left, and running: the clock cannot tick at the
@@ -256,6 +359,8 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       return setMode(state, action.mode);
     case 'SET_AUDIO':
       return { ...state, audio: clampAudio({ ...state.audio, ...action.audio }) };
+    case 'NOTE_NEWS':
+      return noteNews(state, action.ids);
     case 'RESTORE':
       // Everything, including the phase: a code holding a half-built cup comes back to that cup.
       // `parseGame` has already made a restored shift paused, so this cannot drop the player into
@@ -265,6 +370,8 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       return tick(state, action.dt);
     case 'TAKE_ORDER':
       return isActive(state) ? takeOrder(state, action.slot) : state;
+    case 'ASK_AGAIN':
+      return isActive(state) ? askAgain(state, action.slot) : state;
     case 'SELECT_SLOT':
       return isActive(state) && state.slots[action.slot]?.status === 'ordered'
         ? { ...state, selectedSlot: action.slot }
@@ -298,8 +405,10 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       return isActive(state) ? clearCup(state) : state;
     case 'SERVE':
       return isActive(state) ? serve(state) : state;
-    case 'SPEND':
-      return spend(state, action.amount);
+    case 'EXTEND_SHIFT':
+      return canExtend(state) ? extendShift(state) : state;
+    case 'BUY_GEAR':
+      return buyGear(state, action.id);
   }
 }
 
@@ -313,13 +422,27 @@ export function canAfford(state: GameState, price: number): boolean {
 }
 
 /**
- * Take money out of the till. Nothing in the game spends yet — the shopping this pays for is still
- * to be built — but every future purchase goes through here, so that the balance has exactly one
- * way down and the refusal is in the game's logic rather than in whichever screen asked.
+ * Take money out of the till. Every purchase goes through here, so that the balance has exactly one
+ * way down. `canAfford` is the refusal, asked first, so that it is in the game's logic rather than
+ * in whichever screen asked.
  */
 function spend(state: GameState, amount: number): GameState {
-  if (!canAfford(state, amount) || amount === 0) return state;
   return { ...state, money: state.money - amount };
+}
+
+/**
+ * Buy something for the shop. Only on the day-end card, where it cannot be done with a customer
+ * waiting. Each item is bought once and kept: there is nothing to sell it back to.
+ */
+function buyGear(state: GameState, id: string): GameState {
+  const item = gearItem(id);
+  if (state.phase !== 'dayEnd' || !item || state.gear.includes(id) || !canAfford(state, item.price)) return state;
+  return { ...spend(state, item.price), gear: [...state.gear, id] };
+}
+
+function noteNews(state: GameState, ids: string[]): GameState {
+  const fresh = ids.filter((id) => !state.seen.includes(id));
+  return fresh.length > 0 ? { ...state, seen: [...state.seen, ...fresh] } : state;
 }
 
 function isActive(state: GameState) {
@@ -337,6 +460,35 @@ export function canServe(state: GameState): boolean {
     && state.build.lidded && state.build.straw && !state.build.inLidder);
 }
 
+/**
+ * Whether the player may keep the shop open another round: late in the day, late enough, and not
+ * after a walkout has cost them the jar or a trip through relaxed has cost them the bonus. The relaxed
+ * shop promised no pressure, so it is never asked.
+ * Shared by the pill and the reducer, like `canServe`.
+ */
+export function canExtend(state: GameState): boolean {
+  const { clock, day, mode, overtime } = state;
+  const closes = closesAt(state);
+  return isActive(state) && mode === 'standard' && day >= OVERTIME_FROM_DAY && !overtime.lost && !overtime.forfeited
+    && overtime.rounds < OVERTIME_MAX_ROUNDS && clock < closes && closes - clock <= OVERTIME_WINDOW_MS;
+}
+
+/**
+ * One more round, and one more group, at once. A group already waiting behind a quiet is that group:
+ * it comes now, rather than a second one coming over the top of it. No other wave starts after this,
+ * so what the player pressed for is all that is coming, and it can be judged.
+ */
+function extendShift(state: GameState): GameState {
+  const { clock, lullUntil, nextSpawnAt, overtime, waveLeft } = state;
+  return {
+    ...state,
+    overtime: { ...overtime, rounds: overtime.rounds + 1 },
+    waveLeft: clock < lullUntil ? waveLeft : waveLeft + state.config.waveSize,
+    lullUntil: 0,
+    nextSpawnAt: Math.min(nextSpawnAt, clock),
+  };
+}
+
 function tick(state: GameState, dt: number): GameState {
   if (!isActive(state)) return state;
   const { config } = state;
@@ -347,7 +499,7 @@ function tick(state: GameState, dt: number): GameState {
   const slots = [...state.slots];
   const feedback = state.feedback.filter((item) => item.expiresAt > clock);
   const departures = state.departures.filter((item) => clock - item.at < DEPARTURE_MS);
-  let { nextId, nextSpawnAt } = state;
+  let { incoming, lost, lullUntil, nextId, nextSpawnAt, overtime, regulars, waveLeft } = state;
   let missed = 0;
 
   slots.forEach((customer, slot) => {
@@ -359,43 +511,142 @@ function tick(state: GameState, dt: number): GameState {
     const limit = customer.status === 'requesting' ? customer.orderPatienceMs : customer.patienceMs;
     if (waited >= limit) {
       slots[slot] = null;
-      missed += 1;
-      const text = customer.status === 'requesting' ? 'Chưa kịp nhận! 😤' : 'Chậm quá! 😤';
-      feedback.push({ id: nextId++, slot, text, tone: 'bad', expiresAt: clock + FEEDBACK_MS });
+      const walkout = walkoutFor(customer.look, customer.status === 'requesting');
+      if (walkout.missed && customer.lateRound === undefined) missed += 1;
+      if (walkout.burns) overtime = burnJar(overtime);
+      feedback.push({ id: nextId++, slot, text: walkout.text, tone: walkout.tone, expiresAt: clock + FEEDBACK_MS });
       departures.push({ id: nextId++, customer, slot, outcome: 'timeout', earned: 0, drink: null, at: clock });
     }
   });
 
-  // After closing time no one new comes in, but waiting customers can still be served.
-  const isOpen = clock < config.durationMs;
-  if (isOpen && clock >= nextSpawnAt) {
-    const leaving = new Set(departures.map((item) => item.slot));
-    const free = slots.flatMap((customer, slot) => (customer || leaving.has(slot) ? [] : [slot]));
-    if (free.length > 0) {
-      slots[rng.pick(free)] = {
-        id: nextId++,
-        look: generateLook(rng),
-        name: rng.pick(NAMES),
-        order: generateOrder(config, rng),
-        status: auto ? 'ordered' : 'requesting',
-        arrivedAt: clock,
-        orderPatienceMs: config.orderPatienceMs,
-        orderedAt: auto ? clock : null,
-        patienceMs: config.patienceMs,
-      };
-      nextSpawnAt = auto ? clock : clock + rng.int(config.spawnMinMs, config.spawnMaxMs);
-    } else {
-      // Every spot is taken (or being vacated): look again next tick, or after a short beat.
-      nextSpawnAt = auto ? clock : clock + RETRY_SPAWN_MS;
+  // Whoever has waited outside long enough goes home, quietly: they never reached the counter, so
+  // nothing about it reaches the stars, the jar or the player's ears.
+  const patienceOutside = lineWaitMs(state);
+  const line = state.line.filter((customer) => clock - customer.arrivedAt < patienceOutside);
+  lost += state.line.length - line.length;
+
+  /**
+   * Someone new, not yet anywhere. Real patience, because the line is saved and a save checks it. The
+   * keys are in the order `parseCustomer` writes them: a backup code is the very bytes of the save.
+   */
+  const stranger = (look: CustomerLook, name = rng.pick(NAMES), order = generateOrder(config, rng)): Customer => {
+    const { orderPatienceMs, patienceMs } = patienceFor(state, look, { rounds: overtime.rounds });
+    return {
+      id: nextId++,
+      look,
+      name,
+      order,
+      status: 'requesting',
+      arrivedAt: clock,
+      orderPatienceMs,
+      orderedAt: null,
+      patienceMs,
+      ...(overtime.rounds > 0 ? { lateRound: overtime.rounds } : {}),
+    };
+  };
+
+  /**
+   * One of the regulars, in for the day. Only someone who has been handed a drink before has a usual
+   * to ask for: one who gave up before ever getting theirs is still ordering it for the first time.
+   */
+  const returning = ({ id, look, name }: Regular): Customer => {
+    const memory = regulars[id];
+    const usual = memory?.usual ?? rollUsual(config, rng);
+    regulars = { ...regulars, [id]: { usual, visits: memory?.visits ?? 0, streak: memory?.streak ?? 0, lastDay: state.day } };
+    return { ...stranger(look, name, usual), regularId: id, ...(memory?.visits ? { recall: 'blank' as const } : {}) };
+  };
+
+  /**
+   * Whoever comes through the door next. The day's regular takes the place if it can be theirs. A
+   * spot has to be free, because someone who gave up in the line would be a visit nobody saw, and the
+   * place cannot have been announced as anything else, because the quiet said who was coming.
+   */
+  const comingIn = (spotFree: boolean, kind?: CustomerKind): Customer => {
+    const regular = spotFree && (!kind || kind === 'plain') ? regularDue(state, clock) : null;
+    return regular ? returning(regular) : stranger(kind ? generateLookOf(rng, kind) : generateLook(rng));
+  };
+
+  /**
+   * Bring someone to a spot. This is where they start waiting and where they say hello, and their
+   * patience is worked out again because the shop may have changed how it runs while they were outside.
+   */
+  const toCounter = (customer: Customer, spot: number) => {
+    // Nobody has to come over for this one: the relaxed shop takes every order, the board one spot's.
+    const ordered = auto || (spot === BOARD_SLOT && state.gear.includes('board'));
+    slots[spot] = {
+      ...customer,
+      ...patienceFor(state, customer.look, { rounds: customer.lateRound ?? 0 }),
+      status: ordered ? 'ordered' : 'requesting',
+      arrivedAt: clock,
+      orderedAt: ordered ? clock : null,
+    };
+    const line = regularById(customer.regularId)?.line ?? rng.pick(ARRIVAL_LINES[kindOf(customer.look)]);
+    feedback.push({ id: nextId++, slot: spot, text: line, tone: 'say', expiresAt: clock + SAY_MS });
+  };
+
+  // A spot someone is walking away from is not free yet, for the line or for anyone else.
+  const leaving = new Set(departures.map((item) => item.slot));
+  const freeSpots = () => slots.flatMap((customer, slot) => (customer || leaving.has(slot) ? [] : [slot]));
+  for (let free = freeSpots(); line.length > 0 && free.length > 0; free = freeSpots()) {
+    toCounter(line.shift()!, rng.pick(free));
+  }
+
+  // After closing time no one new comes in, but waiting customers can still be served. A group that
+  // had not yet come through the door stays away; one already coming in finishes coming in. Read off
+  // the clock this tick started from, or one that steps over closing and the end of the quiet together
+  // would find the quiet already over and let the whole group in after closing.
+  const isOpen = clock < closesAt(state);
+  if (!isOpen && state.clock < lullUntil) {
+    waveLeft = 0;
+    lullUntil = 0;
+    incoming = [];
+  }
+
+  if (auto) {
+    const free = freeSpots();
+    // A press is the end of arrivals in this shop too. What the player pressed for is all that is coming
+    // in either mode, or going relaxed after a press would fill every spot until the extended closing.
+    if (isOpen && overtime.rounds === 0 && clock >= nextSpawnAt && free.length > 0) toCounter(comingIn(true), rng.pick(free));
+    if (clock >= nextSpawnAt) nextSpawnAt = clock;
+  } else if (clock >= nextSpawnAt) {
+    // **The counter clearing is the trigger**, and a clock is not: a slower player gets fewer groups
+    // rather than more pressure. Tried on a fixed clock, the shop's output stayed flat and a slow
+    // player lost thirteen customers.
+    const clear = waveLeft === 0 && line.length === 0 && slots.every((customer) => customer === null);
+    if (clear && overtime.rounds === 0 && clock < config.durationMs) {
+      waveLeft = config.waveSize;
+      // The day's first group is the shop opening, which is no quiet and has nothing to preview. An
+      // id is only ever spent on a customer or on something one of them caused.
+      if (state.nextId > 1) {
+        lullUntil = clock + rng.int(config.lullMinMs, config.lullMaxMs);
+        incoming = Array.from({ length: waveLeft }, () => kindOf(generateLook(rng)));
+        // A regular can only take a place announced as plain, so a group without one would turn a due
+        // visit away. It has to be one of those who will find a spot: this group has an empty counter.
+        if (regularDue(state, clock) && !incoming.slice(0, config.slots).includes('plain')) incoming[0] = 'plain';
+      }
+    }
+    if (waveLeft > 0 && clock >= lullUntil) {
+      const [kind, ...rest] = incoming;
+      const free = freeSpots();
+      const customer = comingIn(free.length > 0, kind);
+      if (free.length > 0) toCounter(customer, rng.pick(free));
+      else line.push(customer);
+      waveLeft -= 1;
+      incoming = rest;
+      nextSpawnAt = clock + rng.int(WAVE_GAP_MIN_MS, WAVE_GAP_MAX_MS);
     }
   }
 
-  const dayOver =
-    !isOpen && departures.length === 0 && slots.every((customer) => customer === null);
+  const dayOver = !isOpen && departures.length === 0 && waveLeft === 0 && line.length === 0
+    && slots.every((customer) => customer === null);
+  // This tick is the only one that ends the day, so the jar cannot be paid twice.
+  const paid = dayOver ? jarPayout(overtime) : 0;
   return {
     ...state,
     phase: dayOver ? 'dayEnd' : state.phase,
     clock,
+    coins: state.coins + paid,
+    money: state.money + paid,
     // Handed back as the very same arrays when nothing in them moved. A tick is ten times a
     // second and almost every one of them changes nothing but the clock, so a fresh copy each
     // time told every list on both screens that it had new contents to draw — and on a phone
@@ -404,8 +655,15 @@ function tick(state: GameState, dt: number): GameState {
     slots: unchanged(state.slots, slots),
     feedback: unchanged(state.feedback, feedback),
     departures: unchanged(state.departures, departures),
+    line: unchanged(state.line, line),
+    incoming,
+    lost,
+    lullUntil,
     nextId,
     nextSpawnAt,
+    overtime: paid > 0 ? { ...overtime, paid } : overtime,
+    regulars,
+    waveLeft,
     seed: rng.seed,
     selectedSlot: resolveSelection(slots, state.selectedSlot),
     stats: missed > 0 ? { ...state.stats, missed: state.stats.missed + missed } : state.stats,
@@ -446,34 +704,56 @@ function resolveSelection(slots: (Customer | null)[], current: number | null): n
   let bestOrderedAt = Infinity;
   for (let slot = 0; slot < slots.length; slot++) {
     const customer = slots[slot];
-    if (customer?.status === 'ordered' && (customer.orderedAt ?? 0) < bestOrderedAt) {
+    const orderedAt = customer?.queuedAt ?? customer?.orderedAt ?? 0;
+    if (customer?.status === 'ordered' && orderedAt < bestOrderedAt) {
       best = slot;
-      bestOrderedAt = customer.orderedAt ?? 0;
+      bestOrderedAt = orderedAt;
     }
   }
   return best;
 }
 
 /**
- * Change how the shop is run, mid-day if need be. Switching to `relaxed` also takes the order of
- * everyone still waiting at the counter — nobody is coming to take it by hand any more — and brings
- * the next arrival forward to now.
+ * Change how the shop is run, mid-day if need be. Everyone at the counter takes the patience the
+ * new shop gives them, in both directions: going relaxed leaves no half-patience shipper in a shop
+ * that promised no pressure, and coming back leaves no relaxed customer in a standard one, or a trip
+ * through the settings would take the pressure off a whole counter for nothing. Switching to
+ * `relaxed` also takes the order of everyone still waiting — nobody is coming to take it by hand any
+ * more — and brings the next arrival forward to now, in place of any group still to come. Whoever is
+ * already outside comes in as spots free up, and that shop takes their order as they do.
  */
 function setMode(state: GameState, mode: GameMode): GameState {
   if (mode === state.mode) return state;
-  if (mode !== 'relaxed') return { ...state, mode };
-  const slots = state.slots.map((customer) =>
-    customer?.status === 'requesting'
-      ? { ...customer, status: 'ordered' as const, orderedAt: state.clock }
-      : customer,
-  );
+  const slots = state.slots.map((customer) => customer && changeShop(state, customer, mode));
   return {
     ...state,
     mode,
     slots,
-    nextSpawnAt: Math.min(state.nextSpawnAt, state.clock),
+    overtime: mode === 'relaxed' ? forfeitJar(state.overtime) : state.overtime,
+    ...(mode === 'relaxed' ? { waveLeft: 0, lullUntil: 0, incoming: [] } : {}),
+    nextSpawnAt: mode === 'relaxed' ? Math.min(state.nextSpawnAt, state.clock) : state.nextSpawnAt,
     selectedSlot: resolveSelection(slots, state.selectedSlot),
   };
+}
+
+/**
+ * Someone at the counter as the shop changes how it runs. One whose wait gets *shorter* and who has
+ * already waited past the new limit must not walk out on the spot because the player opened the
+ * settings. So the time already waited is scaled with the limit, which holds their share of patience
+ * where it was, ring and face and tip included. That moves `orderedAt`, so `queuedAt` keeps their
+ * place in the queue: going relaxed must not bring the most urgent ticket to the front, which is
+ * the choice kinds exist to leave to the player. The clamp is not tidiness: a wait that grows moves
+ * its start back, and a time before opening is a save `parseCustomer` refuses.
+ */
+function changeShop(state: GameState, customer: Customer, mode: GameMode): Customer {
+  const { clock } = state;
+  const patience = patienceFor(state, customer.look, { mode, rounds: customer.lateRound ?? 0 });
+  // Only going relaxed finds anyone here: a relaxed shop has nobody waiting to order.
+  if (customer.status === 'requesting') return { ...customer, ...patience, status: 'ordered', orderedAt: clock };
+  if (patience.patienceMs === customer.patienceMs) return { ...customer, ...patience };
+  const since = customer.orderedAt ?? customer.arrivedAt;
+  const orderedAt = Math.max(0, since + (clock - since) * (1 - patience.patienceMs / customer.patienceMs));
+  return { ...customer, ...patience, orderedAt, queuedAt: customer.queuedAt ?? since };
 }
 
 /** Take a waiting customer's order: reveal the recipe as a ticket and start the serve timer. */
@@ -488,10 +768,31 @@ function takeOrder(state: GameState, slot: number): GameState {
     selectedSlot: state.selectedSlot ?? slot,
     nextId: state.nextId + 1,
     feedback: [
-      ...state.feedback,
+      ...hushed(state.feedback, slot),
       { id: state.nextId, slot, text: 'Đã nhận order ✓', tone: 'good', expiresAt: state.clock + FEEDBACK_MS },
     ],
   };
+}
+
+/**
+ * Give up on remembering. What that costs is settled when the cup is handed over, in `payoutFor`. The
+ * order has to have been taken: it is a thing the player asks at the ticket, not at the door.
+ */
+function askAgain(state: GameState, slot: number): GameState {
+  const customer = state.slots[slot];
+  if (customer?.status !== 'ordered' || customer.recall !== 'blank') return state;
+  const slots = [...state.slots];
+  slots[slot] = { ...customer, recall: 'asked' };
+  return { ...state, slots };
+}
+
+/**
+ * A customer's arrival line gives way to whatever the shop has to say at that spot. The two share
+ * the space over the customer, and the line lasts long enough to still be up when a quick player
+ * takes the order.
+ */
+function hushed(feedback: Feedback[], slot: number): Feedback[] {
+  return feedback.filter((item) => item.tone !== 'say' || item.slot !== slot);
 }
 
 /**
@@ -549,8 +850,7 @@ function clearCup(state: GameState): GameState {
     cup: EMPTY_DRINK,
     build: EMPTY_BUILD,
     cupId: state.cupId + 1,
-    discarded: { id: state.nextId, drink: state.cup },
-    nextId: state.nextId + 1,
+    discarded: { id: state.cupId + 1, drink: state.cup },
   };
 }
 
@@ -564,55 +864,52 @@ function serve(state: GameState): GameState {
   const orderedAt = customer.orderedAt ?? customer.arrivedAt;
   const patienceLeft = Math.max(0, 1 - (state.clock - orderedAt) / customer.patienceMs);
   const neat = !state.build.spilled;
-
-  let earned = 0;
-  let tip = 0;
-  let text: string;
-  let tone: Tone;
-  if (quality === 'perfect' && !neat) {
-    // Right drink, but it was poured over the brim: half price, no tip.
-    earned = Math.ceil(price / 2);
-    text = `Tràn ly… +${formatMoney(earned)}`;
-    tone = 'ok';
-  } else if (quality === 'perfect') {
-    tip = Math.max(1, Math.round(patienceLeft * MAX_TIP));
-    earned = price + tip;
-    text = `Hoàn hảo! +${formatMoney(earned)}`;
-    tone = 'good';
-  } else if (quality === 'close') {
-    earned = Math.ceil(price / 2);
-    text = `Tạm được +${formatMoney(earned)}`;
-    tone = 'ok';
-  } else {
-    text = 'Sai món rồi! 😡';
-    tone = 'bad';
-  }
+  const memory = customer.regularId ? state.regulars[customer.regularId] : undefined;
+  const regular = memory && { recall: customer.recall, streak: memory.streak };
+  const { earned, tip, text, tone, streak } = payoutFor({ quality, neat, price, patienceLeft, look: customer.look, regular });
+  // A wrong drink is not a drink sold, it is a customer let down, and it counts as one. Leaving it
+  // out of `served` was not enough: nothing would be held against the shop, and one good cup and
+  // twenty-five wrong ones would still come to three stars.
+  const wrong = quality === 'wrong';
+  // A sale after closing is held in the jar, tip and all, until the shop has closed clean. A burnt jar
+  // takes nothing more: the rest of the night pays the till.
+  const toJar = inOvertime(state) && !state.overtime.lost;
+  const till = toJar ? 0 : earned;
 
   const slots = [...state.slots];
   slots[slot] = null;
   return {
     ...state,
     slots,
-    coins: state.coins + earned,
-    money: state.money + earned,
+    coins: state.coins + till,
+    money: state.money + till,
+    overtime: toJar ? { ...state.overtime, jar: state.overtime.jar + earned } : state.overtime,
+    // Any cup counts as a visit, whatever became of the streak: they were served.
+    regulars: memory && customer.regularId
+      ? { ...state.regulars, [customer.regularId]: { ...memory, visits: memory.visits + 1, streak: streak ?? memory.streak } }
+      : state.regulars,
     cup: EMPTY_DRINK,
     build: EMPTY_BUILD,
     cupId: state.cupId + 1,
     selectedSlot: resolveSelection(slots, null),
     nextId: state.nextId + 2,
     feedback: [
-      ...state.feedback,
+      ...hushed(state.feedback, slot),
       { id: state.nextId, slot, text, tone, expiresAt: state.clock + FEEDBACK_MS },
     ],
     departures: [
       ...state.departures,
-      { id: state.nextId + 1, customer, slot, outcome: quality, earned, drink: state.cup, at: state.clock },
+      {
+        id: state.nextId + 1, customer, slot, outcome: quality, earned, drink: state.cup, at: state.clock,
+        ...(toJar ? { toJar: true as const } : {}),
+      },
     ],
-    stats: {
+    stats: customer.lateRound !== undefined ? state.stats : {
       ...state.stats,
-      served: state.stats.served + 1,
+      served: state.stats.served + (wrong ? 0 : 1),
+      missed: state.stats.missed + (wrong ? 1 : 0),
       perfect: state.stats.perfect + (quality === 'perfect' && neat ? 1 : 0),
-      tips: state.stats.tips + tip,
+      tips: state.stats.tips + (toJar ? 0 : tip),
     },
   };
 }

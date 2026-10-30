@@ -197,6 +197,8 @@ cell(shopBackdropSvg(390, 500, 'back'), 'back');
 cell(shopBackdropSvg(390, 500, 'front'), 'front', 'dark');
 cell(cloudSvg(30) + cloudSvg(22), 'clouds 30, 22', 'dark');
 cell(shopBackdropSvg(844, 300), 'all 844×300 (sideways)');
+cell(shopBackdropSvg(390, 357, 'all', ['plant', 'lantern']), 'with the plant and lantern a shop can buy');
+cell(shopBackdropSvg(844, 300, 'all', ['plant', 'lantern']), 'the same, sideways');
 
 section('Counter rim and counter top');
 cell(counterSvg(390, 30), 'counter 390×30');

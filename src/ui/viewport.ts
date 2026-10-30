@@ -29,11 +29,15 @@ export function useViewport(): Viewport {
 }
 
 /**
- * Where the effects aim: the wallet in the HUD (the coins land on it) and the bin button (a
- * discarded cup is tossed into it). Registered by the elements themselves, read when an effect
- * starts, so nothing is measured until something is actually thrown.
+ * Where the effects aim: the wallet in the HUD (the coins land on it), the overtime jar (so do a
+ * late sale's) and the bin button (a discarded cup is tossed into it). Registered by the elements
+ * themselves, read when an effect starts, so nothing is measured until something is actually thrown.
  */
-export const anchors: { wallet: HTMLElement | null; trash: HTMLElement | null } = { wallet: null, trash: null };
+export const anchors: { wallet: HTMLElement | null; jar: HTMLElement | null; trash: HTMLElement | null } = {
+  wallet: null,
+  jar: null,
+  trash: null,
+};
 
 export function centreOf(element: Element | null): { x: number; y: number } | null {
   if (!element) return null;

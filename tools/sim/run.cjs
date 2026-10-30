@@ -1,5 +1,5 @@
 const fs = require('node:fs');
-const { shift, R, getDayConfig, starsFor, PROFILES, MACHINE } = require('./bot.cjs');
+const { shift, R, getDayConfig } = require('./bot.cjs');
 const { src } = require('./load.cjs');
 const { describeUnlocks } = src('game/levels.ts');
 const mean = (a) => (a.length ? a.reduce((x, y) => x + y, 0) / a.length : 0);
@@ -64,12 +64,12 @@ for (const day of [1, 30]) { const s = summary(many({ day, profile: 'skilled', l
 
 // ---------------------------------------------------------------- 2. the dial
 console.log('\n=== 2. THE DAY DIAL ===');
-const knobs = ['maxToppings', 'slots', 'durationMs', 'orderPatienceMs', 'patienceMs', 'spawnMinMs', 'spawnMaxMs'];
+const knobs = ['maxToppings', 'slots', 'durationMs', 'orderPatienceMs', 'patienceMs', 'waveSize', 'lullMinMs', 'lullMaxMs', 'lineMs'];
 for (const k of knobs) {
   let last = 1; for (let d = 2; d <= 200; d++) if (getDayConfig(d)[k] !== getDayConfig(d - 1)[k]) last = d;
   console.log(k.padEnd(16), 'day1', getDayConfig(1)[k], 'day30', getDayConfig(30)[k], 'last changes on day', last);
 }
-const { day: _a, ...c12 } = getDayConfig(12); const { day: _b, ...c30 } = getDayConfig(30); const { day: _c, ...c999 } = getDayConfig(999);
+const c12 = getDayConfig(12); const c30 = getDayConfig(30); const c999 = getDayConfig(999);
 console.log('config 12 === 30 ?', JSON.stringify(c12) === JSON.stringify(c30), '; 12 === 999 ?', JSON.stringify(c12) === JSON.stringify(c999));
 let same = 0; for (let i = 0; i < 100; i++) { const a = shift({ day: 12, seed: 5 + i, profile: 'skilled' }); const b = shift({ day: 30, seed: 5 + i, profile: 'skilled' }); if (a.coins === b.coins && a.served === b.served && a.total === b.total) same++; }
 console.log('identical shift, same seed, day 12 vs day 30:', same, '/100');
@@ -92,8 +92,8 @@ console.log('\n=== 4. COUNTERFACTUAL KNOBS, day 30 config, n=200 ===');
 console.log('patch\tprofile\tserved\tmissed\tmReq\tmOrd\tmoney\tstar3%\tleft\tleftP5\tfull%\tidle%');
 const patches = [
   ['as shipped', {}],
-  ['spawn x0.5 (2-4.5s)', { spawnMinMs: 2000, spawnMaxMs: 4500 }],
-  ['spawn x0.25 (1-2.25s)', { spawnMinMs: 1000, spawnMaxMs: 2250 }],
+  ['lull x0.5 (3-5s)', { lullMinMs: 3000, lullMaxMs: 5000 }],
+  ['lull x0.25 (1.5-2.5s)', { lullMinMs: 1500, lullMaxMs: 2500 }],
   ['patience 45s', { patienceMs: 45000 }],
   ['patience 30s', { patienceMs: 30000 }],
   ['patience 20s', { patienceMs: 20000 }],
@@ -191,7 +191,7 @@ const runs = [];
 for (const profile of ['skilled', 'sloppy']) {
   const moneyByDay = Array.from({ length: 30 }, () => []);
   const starsByDay = Array.from({ length: 30 }, () => []);
-  const allOrders = [], perRunDistinct = [];
+  const perRunDistinct = [];
   for (let run = 0; run < 40; run++) {
     let carry = null; const seen = new Set(); let count = 0;
     for (let day = 1; day <= 30; day++) {

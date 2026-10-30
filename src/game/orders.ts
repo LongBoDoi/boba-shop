@@ -1,4 +1,5 @@
 import {
+  asksFor,
   BUILD_ORDER,
   CategoryId,
   CUP_SIZES,
@@ -83,6 +84,12 @@ function pickToppings(ids: string[], max: number, rng: Rng): string[] {
     picked.push(pool.splice(Math.floor(rng.next() * pool.length), 1)[0]);
   }
   return picked;
+}
+
+/** How many tiles the order card gives a drink: its size, and one for each thing it asks for. */
+export function orderTiles(order: Drink): number {
+  const asked = BUILD_ORDER.filter((category) => category !== 'toppings' && asksFor(order, category));
+  return 1 + asked.length + order.toppings.length;
 }
 
 export function drinkPrice(drink: Drink): number {

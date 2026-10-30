@@ -60,6 +60,21 @@ assert.deepEqual(back.audio, shop.audio, 'As loud as it was left');
 assert.equal(serializeGame(back), serializeGame(shop), 'A code is exactly what the save would have been');
 assert.equal(back.paused, true, 'A restored shift comes back behind the pause card');
 
+// Changing how the shop is run moves `orderedAt` and writes down `queuedAt` beside it, here on a
+// customer who came in late. The same value is not enough: "exactly" means the bytes.
+const ticketAt = shop.slots.findIndex((customer) => customer?.status === 'ordered');
+const movedShop = gameReducer(
+  {
+    ...shop,
+    slots: shop.slots.map((customer, slot) => (slot === ticketAt
+      ? { ...customer, patienceMs: Math.round(customer.patienceMs * 0.85), lateRound: 1 }
+      : customer)),
+  },
+  { type: 'SET_MODE', mode: 'relaxed' },
+);
+assert.notEqual(movedShop.slots[ticketAt].queuedAt, undefined, 'The change of mode moved a ticket');
+assert.equal(serializeGame(decodeSaveCode(encodeSaveCode(movedShop))), serializeGame(movedShop), 'And a code is still exactly what the save would have been');
+
 /**
  * Text outside ASCII survives the trip — the whole reason the payload is base64 over UTF-8 rather
  * than the raw JSON, since a shop is full of diacritics and they go through chat windows.

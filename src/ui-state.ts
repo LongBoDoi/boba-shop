@@ -33,6 +33,8 @@ export interface UiState {
   /** The day's sign is up; the clock does not run behind it. */
   opening: boolean;
   settings: boolean;
+  /** Sổ khách is open. Like the settings, it does not follow the player to another screen. */
+  book: boolean;
   /** A short message from the kitchen, over its usual hint. */
   nudge: string;
   /** The kitchen's standing hint, as the kitchen scene works it out. */
@@ -65,6 +67,7 @@ let ui: UiState = {
   pageOffset: 0,
   opening: false,
   settings: false,
+  book: false,
   nudge: '',
   hint: '',
   meter: null,

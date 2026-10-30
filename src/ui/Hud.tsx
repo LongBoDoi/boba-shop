@@ -5,12 +5,13 @@ import { clockIconSvg, coinSvg } from '../art/icons';
 import { shallow, useGame } from '../hooks';
 import { dispatch } from '../store';
 import { formatMoney } from '../game/money';
+import { closesAt } from '../game/rules';
 import { CSS_EASE, DURATION } from './motion';
 import { Svg } from './Svg';
 import { anchors } from './viewport';
 
 /** Coins land in the wallet a moment after a sale; the counter waits for them. */
-const COIN_ARRIVAL_MS = 750;
+export const COIN_ARRIVAL_MS = 750;
 
 /**
  * The bar across the top of a shift (`Hud.tsx`): the day, the clock running down, the till, and
@@ -43,11 +44,12 @@ function HudClock({ warm }: { warm: boolean }) {
   // The label reads to the second and the bar is a couple of hundred pixels long, so a five-
   // hundredth of the day is finer than either can show — and the clock ticks several times a second.
   const { seconds, left, duration } = useGame((state) => {
-    const remaining = Math.max(0, state.config.durationMs - state.clock);
+    const closes = closesAt(state);
+    const remaining = Math.max(0, closes - state.clock);
     return {
       seconds: Math.ceil(remaining / 1000),
-      left: remaining === 0 ? 0 : Math.max(0.002, Math.round((remaining / state.config.durationMs) * 500) / 500),
-      duration: state.config.durationMs,
+      left: remaining === 0 ? 0 : Math.max(0.002, Math.round((remaining / closes) * 500) / 500),
+      duration: closes,
     };
   }, shallow);
   const closing = left === 0;
@@ -111,7 +113,7 @@ function HudMoney() {
 }
 
 /** Animates a displayed number towards `target`, starting after `delay` ms when it rises. */
-function useCountUp(target: number, delay: number) {
+export function useCountUp(target: number, delay: number) {
   const [shown, setShown] = useState(target);
   const shownRef = useRef(target);
   useEffect(() => {

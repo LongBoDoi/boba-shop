@@ -283,6 +283,35 @@ button:focus-visible { outline: 2px solid var(--primary-dark); outline-offset: 2
 .settings-step::before { content: ''; position: absolute; inset: -4px; }
 .settings-step.chosen { border-color: var(--primary); background: var(--primary-tint); font-weight: 700; color: var(--primary-dark); }
 
+/* Sổ khách: the settings card's frame, with one row to a regular. */
+.book-entry {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  border-radius: 18px;
+  background: var(--panel);
+  border: 2px solid var(--line);
+}
+.book-head { display: flex; flex-direction: row; align-items: center; gap: 10px; }
+.book-face {
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  background: #F2E4BD;
+  border: 2px solid #D8BC87;
+  flex-shrink: 0;
+}
+.book-unknown { font-size: 20px; font-weight: 800; color: #9C7B55; }
+.book-text { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.book-name { font-size: 16px; line-height: 21px; font-weight: 800; color: var(--ink); }
+.book-note { font-size: 13px; line-height: 17px; font-weight: 600; color: var(--ink-soft); }
+.book-usual { display: flex; flex-direction: row; flex-wrap: wrap; gap: 6px; }
+
 /* ------------------------------------------------------------------ The shift: HUD, tabs, pager */
 .game { position: absolute; inset: 0; display: flex; flex-direction: column; }
 .game-safe-top { height: var(--safe-top); flex-shrink: 0; background: var(--primary); }
@@ -393,6 +422,8 @@ button:focus-visible { outline: 2px solid var(--primary-dark); outline-offset: 2
   justify-content: center;
 }
 .tab-badge-text { font-weight: 800; font-size: 12px; line-height: 15px; color: var(--gold-dark); }
+/* Beside the badge and not in it: these people are not at the counter yet, and tapping does nothing for them. */
+.tab-line { font-weight: 800; font-size: 12px; line-height: 15px; color: #FFE9B8; white-space: nowrap; }
 
 /* ------------------------------------------------------------------ The kitchen page */
 .prep-page { position: absolute; inset: 0; will-change: transform; }
@@ -465,8 +496,73 @@ button:focus-visible { outline: 2px solid var(--primary-dark); outline-offset: 2
 }
 .prep-clear-button:active:not(:disabled), .prep-serve:active:not(:disabled) { opacity: 0.8; transform: translateY(2px); }
 
+/* Staying open, on the pager rather than on a page, and always over the room: its right edge comes
+   from `overtimeDockRight`. Upright and in `.band` it stands just above the action buttons, clear
+   of the hint pill at the room's foot, and `.band`'s bar is the shorter one. In the column the
+   buttons are off to the side and the space above them is the order card's, so it stands on the
+   foot of the room itself, and the hint moves over for it. */
+.overtime {
+  position: absolute;
+  bottom: calc(106px + var(--safe-bottom));
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 5px;
+  animation: fade-in 250ms var(--ease-out) both;
+}
+.overtime.band { bottom: calc(94px + var(--safe-bottom)); }
+.overtime.column { bottom: calc(6px + var(--safe-bottom)); }
+/* As narrow as it reads: upright it stands beside the cup on its mat, and must not touch it. */
+.overtime-pill {
+  min-height: 40px;
+  padding: 0 10px;
+  border-radius: 20px;
+  background: var(--primary);
+  border-bottom: 4px solid var(--primary-dark);
+  color: #FFFFFF;
+  font-weight: 800;
+  font-size: 14px;
+  white-space: nowrap;
+}
+.overtime-pill:active { transform: translateY(2px); }
+.overtime-jar {
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: #FFF4D6;
+  border: 1px solid #E8C97A;
+  color: var(--gold-dark);
+  font-weight: 700;
+  font-size: 13px;
+  line-height: 18px;
+  white-space: nowrap;
+}
+.overtime-jar.lost { background: #FFF1EF; border-color: #EFB4AF; color: var(--bad); }
+.overtime-jar-note { font-size: 11px; line-height: 14px; font-weight: 600; text-align: right; }
+
+/* The quiet between two groups, on the counter page. The prep page's is the order card's own title.
+   It takes no touches, like everything without `.live`. */
+.lull {
+  position: absolute;
+  top: 6px;
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: calc(100% - 24px);
+  padding: 4px 14px 5px;
+  border-radius: 14px;
+  background: rgba(255, 245, 220, 0.96);
+  border: 1px solid #CEAC7D;
+  text-align: center;
+  animation: fade-in 250ms var(--ease-out) both;
+}
+.lull-title { color: #795331; font-weight: 800; font-size: 14px; line-height: 19px; white-space: nowrap; }
+.lull-group { color: #795331; font-weight: 600; font-size: 13px; line-height: 18px; white-space: nowrap; }
+
 /* The kitchen's hint pill, 27px up from the foot of the room. */
 .hint-row { position: absolute; left: 6px; right: 6px; top: calc(100% - 27px); display: flex; justify-content: center; }
+/* Always clear of the spot the overtime pill stands on. The pill is only there at the end of a day, but a
+   hint that jumped aside for it would be a thing moving near the cup. Pinned by its foot, because
+   this narrower row can wrap one, and it must then grow up the room and not off the bottom. */
+.prep-wide .hint-row { top: auto; bottom: 7px; right: 136px; }
 .hint {
   max-width: 96%;
   background: rgba(255, 245, 220, 0.94);
@@ -526,6 +622,9 @@ button:focus-visible { outline: 2px solid var(--primary-dark); outline-offset: 2
 }
 .order-card.tall { flex-shrink: 1; max-height: 100%; overflow: hidden; }
 .order-head { display: flex; flex-direction: row; align-items: center; gap: 8px; flex-shrink: 0; }
+/* Standing in the narrowest column with two people queued, this is what keeps `Cho Anh Bảo` whole on a hidden card. */
+.order-card.tall .order-head { gap: 6px; }
+.order-avatar-box { position: relative; flex-shrink: 0; }
 .order-avatar {
   display: flex;
   align-items: center;
@@ -539,6 +638,8 @@ button:focus-visible { outline: 2px solid var(--primary-dark); outline-offset: 2
 .order-title, .order-subtitle { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .order-title { font-size: 17px; line-height: 22px; color: var(--ink); font-weight: 800; }
 .order-subtitle { font-size: 11px; line-height: 14px; color: #9C7B55; font-weight: 600; }
+/* Who the quiet is leading up to. It may take a second line in the side column, whose card is not of fixed height. */
+.order-subtitle.quiet { white-space: normal; }
 .order-split { width: 1.5px; height: 30px; border-radius: 1px; background: #EBD7B4; flex-shrink: 0; }
 .order-queue { display: flex; flex-direction: row; gap: 5px; flex-shrink: 0; }
 .order-track { height: 5px; margin: 7px 0 6px; border-radius: 3px; overflow: hidden; background: #F0E1C3; flex-shrink: 0; }
@@ -547,10 +648,34 @@ button:focus-visible { outline: 2px solid var(--primary-dark); outline-offset: 2
 .order-chips.wrap { flex-grow: 0; flex-wrap: wrap; align-content: flex-start; row-gap: 8px; }
 .order-chips-inline { display: flex; flex-direction: row; justify-content: flex-start; align-items: flex-start; flex-shrink: 1; min-width: 0; }
 .order-queue-compact { display: flex; align-items: center; gap: 4px; height: 26px; }
+.order-queue-compact .order-subtitle { flex: 1; min-width: 0; }
 .visually-hidden { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 .order-waiting-label { font-size: 11px; color: #9C7B55; font-weight: 600; }
 .order-hint-box { flex: 1; display: flex; align-items: center; justify-content: center; }
 .order-hint { font-size: 13px; line-height: 18px; text-align: center; color: var(--ink-soft); font-weight: 600; }
+
+/* Stands where the tiles stand, and is no taller than they are, so the card keeps its height. The
+   height is `ASK_HEIGHT`, which a short side column takes down from here. */
+.ask-again {
+  flex: 1;
+  min-width: 96px;
+  height: 44px;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 0 14px;
+  border-radius: 13px;
+  border-style: solid;
+  border-width: 1.5px 1.5px 4px;
+  border-color: #C99F6A;
+  background: #FFF4DF;
+  white-space: nowrap;
+}
+.ask-again:active { opacity: 0.8; transform: translateY(2px); }
+.ask-again-label { font-weight: 800; font-size: 16px; line-height: 20px; color: #805735; }
+.ask-again-cost { font-weight: 600; font-size: 12px; line-height: 16px; color: #9C7B55; }
 
 .chip { display: flex; flex-direction: column; align-items: center; flex-shrink: 0; }
 .chip-tile {
@@ -596,10 +721,19 @@ button:focus-visible { outline: 2px solid var(--primary-dark); outline-offset: 2
   display: flex;
   align-items: center;
   justify-content: center;
-  overflow: hidden;
-  background: #FFF6E9;
-  border: 2px solid #D8B889;
   flex-shrink: 0;
+}
+/* The ring is the pin's rim: a disc of its own, with the portrait standing on it in a smaller one. */
+.order-pin-ring { position: absolute; inset: 0; border-radius: 50%; }
+.order-pin-face {
+  position: absolute;
+  inset: 3px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border-radius: 50%;
+  background: #FFF6E9;
 }
 .order-pin-ready {
   position: absolute;
@@ -608,18 +742,31 @@ button:focus-visible { outline: 2px solid var(--primary-dark); outline-offset: 2
   background: var(--good);
   border: 1.5px solid #D8B889;
 }
+/* Hangs off the corner of a portrait, so it can be read without covering the face. */
+.kind-mark { position: absolute; right: -4px; top: -4px; line-height: 1; pointer-events: none; }
+/* In the side column the pins stand directly under the title, so a mark may not hang up into it. */
+.order-queue-compact .kind-mark { top: -1px; }
 
 /* ------------------------------------------------------------------ The day's sign */
 .sign-overlay { position: absolute; inset: 0; }
 .sign-dim { position: absolute; inset: 0; background: #2B1B17; animation: sign-dim-in 450ms var(--ease-out) both; }
-.sign-wrap {
+/* The board scrolls and the dim does not. Its one button is at its foot, so a sign taller than a
+   phone on its side would otherwise have no way off. */
+.sign-scroll {
   position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
+  inset: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+.sign-scroll::-webkit-scrollbar { display: none; }
+.sign-wrap {
   display: flex;
   flex-direction: column;
   align-items: center;
+  padding-bottom: calc(16px + var(--safe-bottom));
   animation: sign-in 450ms var(--ease-out) both;
 }
 .sign-overlay.closing .sign-dim { animation: sign-dim-out 250ms var(--ease-in-out) both; }
@@ -638,6 +785,7 @@ button:focus-visible { outline: 2px solid var(--primary-dark); outline-offset: 2
 }
 .sign-rope { width: 3px; height: 80px; background: var(--counter-dark); border-radius: 2px; }
 .sign-board {
+  flex-shrink: 0;
   width: 280px;
   padding: 8px;
   border-radius: 22px;
@@ -711,6 +859,19 @@ button:focus-visible { outline: 2px solid var(--primary-dark); outline-offset: 2
 .dayend-unlocks { margin-top: 12px; padding: 12px; border-radius: 16px; background: var(--primary-tint); }
 .dayend-unlock-title { font-weight: 800; font-size: 15px; color: var(--primary-dark); margin-bottom: 2px; }
 .dayend-unlock-line { font-size: 14px; font-weight: 600; color: var(--ink); }
+.dayend-gear { margin-top: 12px; border-radius: 16px; background: #FFFFFF; padding: 8px 14px 4px; }
+.dayend-gear-head { display: flex; flex-direction: row; justify-content: space-between; align-items: baseline; gap: 8px; margin-bottom: 2px; }
+.dayend-gear-title { font-weight: 800; font-size: 15px; color: var(--ink); white-space: nowrap; }
+.dayend-gear-till { font-weight: 700; font-size: 14px; color: var(--gold-dark); white-space: nowrap; }
+.gear-row { display: flex; flex-direction: row; align-items: center; gap: 10px; padding: 7px 0; border-top: 0.5px solid var(--line); }
+.gear-text { flex: 1; min-width: 0; }
+.gear-line { display: flex; flex-direction: row; flex-wrap: wrap; align-items: baseline; column-gap: 8px; }
+.gear-name { font-weight: 700; font-size: 15px; color: var(--ink); }
+.gear-price { font-weight: 700; font-size: 14px; color: var(--gold-dark); }
+.gear-blurb { font-weight: 500; font-size: 13px; line-height: 17px; color: var(--ink-soft); }
+.gear-buy { flex-shrink: 0; min-width: 64px; padding: 6px 12px; border-radius: 14px; border-bottom-width: 4px; }
+.gear-buy .btn-label { font-size: 15px; }
+.gear-owned { flex-shrink: 0; min-width: 64px; text-align: center; font-weight: 700; font-size: 14px; color: var(--good); }
 .dayend-buttons { margin-top: 14px; display: flex; flex-direction: column; gap: 10px; }
 .dayend-burst { position: absolute; inset: 0; pointer-events: none; }
 

@@ -15,11 +15,12 @@ require.extensions['.ts'] = (module, filename) => {
 };
 
 try {
-  const { createInitialState, gameReducer } = require(path.join(__dirname, '../src/game/reducer.ts'));
+  const { canAfford, createInitialState, gameReducer } = require(path.join(__dirname, '../src/game/reducer.ts'));
   const { drinkPrice, evaluateDrink, generateOrder } = require(path.join(__dirname, '../src/game/orders.ts'));
   const { createRng } = require(path.join(__dirname, '../src/game/random.ts'));
   const { getDayConfig, describeUnlocks } = require(path.join(__dirname, '../src/game/levels.ts'));
   const { parseGame, serializeGame } = require(path.join(__dirname, '../src/game/save.ts'));
+  const { gearItem } = require(path.join(__dirname, '../src/game/gear.ts'));
   const { cupIceFillPath, cupFillPath, cupIcePosition, cupIceRestPosition, cupSurface, CUP_SURFACE_BOTTOM, CUP_FLOOR_FRONT } = require(path.join(__dirname, '../src/art/cupGeometry.ts'));
   const { createIceLayout, ICE_LAYOUT } = require(path.join(__dirname, '../src/art/iceLayout.ts'));
   const { asksFor, BUILD_ORDER, CATEGORIES, DEFAULT_ID, ICE_LEVELS, SUGAR_STEPS, TEAS, TOPPINGS } =
@@ -253,13 +254,18 @@ try {
   assert.equal(parseGame(serializeGame(nextDay)).money, paid.money, 'The till is written down with the shop');
 
   const till = nextDay.money;
-  assert.equal(gameReducer(nextDay, { type: 'SPEND', amount: till }).money, 0, 'The shop can spend what it has');
-  assert.equal(gameReducer(nextDay, { type: 'SPEND', amount: 2 }).money, till - 2, 'And part of it');
+  assert.ok(canAfford(nextDay, till), 'The shop can spend what it has');
+  assert.ok(canAfford(nextDay, 2), 'And part of it');
   for (const amount of [till + 1, -5, 1.5, NaN, Infinity]) {
-    assert.equal(gameReducer(nextDay, { type: 'SPEND', amount }), nextDay, `${amount} is not a price the till pays`);
+    assert.equal(canAfford(nextDay, amount), false, `${amount} is not a price the till pays`);
   }
-  assert.equal(gameReducer(nextDay, { type: 'SPEND', amount: 1 }).coins, nextDay.coins,
-    "Spending comes out of the till, not out of the day's takings");
+  const { price } = gearItem('plant');
+  const closing = { ...nextDay, phase: 'dayEnd', money: price, coins: 7 };
+  const bought = gameReducer(closing, { type: 'BUY_GEAR', id: 'plant' });
+  assert.equal(bought.money, 0, 'A purchase can take the last of the till');
+  assert.equal(bought.coins, closing.coins, "Spending comes out of the till, not out of the day's takings");
+  const short = { ...closing, money: price - 1 };
+  assert.equal(gameReducer(short, { type: 'BUY_GEAR', id: 'plant' }), short, 'And one unit short buys nothing');
 
   console.log('Passed: tiny pours serve; fill-independent payment and tips; tea/order guards; overflow behavior; the whole menu open on day one; what an order asks for and leaves out; toppings saved and served; money earned, carried and spent.');
 } finally {

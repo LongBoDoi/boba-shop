@@ -9,6 +9,8 @@
  * In the original the clouds pass *behind* the window's cross-bars, sill, plant and lamps, so the
  * drawing comes in two layers: `'back'` (everything under the clouds) and `'front'` (a transparent
  * sheet with what goes over them). `'all'` is both at once, for a still with no clouds.
+ *
+ * What the shop has bought for its wall stands on the `'front'` sheet: see `gear.ts`.
  */
 import { el, n, svgDoc, uid } from './svg';
 import { colors, FONT, FONT_WEIGHT } from './theme';
@@ -36,6 +38,16 @@ export interface CloudSpec {
 }
 
 const AWNING = 16;
+/** The foot of the bought plant, above the foot of the wall: just behind the counter's 44px rim. */
+const PLANT_FOOT = 36;
+
+/** The gear the wall shows. Anything else a shop owns changes a verb and leaves the picture alone. */
+const ON_THE_WALL = ['plant', 'lantern'];
+
+/** What of `gear` the wall shows, as a string: the picture's identity, for its texture key. */
+export function wallGear(gear: readonly string[]): string {
+  return ON_THE_WALL.filter((id) => gear.includes(id)).join('+');
+}
 
 /** The window's glass, in backdrop coordinates. */
 export function backdropWindow(width: number, height: number): WindowRect {
@@ -64,10 +76,10 @@ export function cloudSvg(size: number, fill = '#FFFFFF'): string {
     '0 0 30 16');
 }
 
-export function shopBackdropSvg(width: number, height: number, layer: BackdropLayer = 'all'): string {
+export function shopBackdropSvg(width: number, height: number, layer: BackdropLayer = 'all', gear: readonly string[] = []): string {
   let body = '';
   if (layer !== 'front') body += back(width, height);
-  if (layer !== 'back') body += front(width, height);
+  if (layer !== 'back') body += front(width, height, gear);
   return svgDoc(width, height, body);
 }
 
@@ -128,16 +140,58 @@ function back(width: number, height: number): string {
   return out;
 }
 
-function front(width: number, height: number): string {
+function front(width: number, height: number, gear: readonly string[]): string {
   const win = backdropWindow(width, height);
   let out = '';
   out += el('rect', { x: win.x + win.w / 2 - 2, y: win.y, width: 4, height: win.h, fill: '#FFFFFF' });
   out += el('rect', { x: win.x, y: win.y + win.h / 2 - 2, width: win.w, height: 4, fill: '#FFFFFF' });
   out += el('rect', { x: win.x - 8, y: win.y + win.h + 2, width: win.w + 16, height: 7, rx: 3, fill: '#FFFFFF' });
   out += plant(win.x + win.w - 22, win.y + win.h - 20);
+  // After the window and its sill: it stands in the room, in front of the wall they are on.
+  if (gear.includes('plant')) out += floorPlant(width * 0.01, height - PLANT_FOOT - FLOOR_PLANT_HEIGHT);
   out += lamp(width * 0.4, AWNING - 2);
   out += lamp(width * 0.6 - 22, AWNING - 2);
+  if (gear.includes('lantern')) out += lantern(width / 2 - 14, AWNING - 2);
   return out;
+}
+
+/** The red lantern a shop can buy, 28×62, as a group at (left, top), hung between the two lamps. */
+function lantern(left: number, top: number): string {
+  return (
+    `<g transform="translate(${n(left)} ${n(top)})">` +
+    '<rect x="13.25" y="0" width="1.5" height="16" fill="#9C6638"/>' +
+    '<circle cx="14" cy="31" r="16" fill="#FFB27A" opacity="0.3"/>' +
+    '<ellipse cx="14" cy="31" rx="13" ry="13.5" fill="#E5534B"/>' +
+    '<path d="M14 17.5 C7 23 7 39 14 44.5 M14 17.5 C21 23 21 39 14 44.5 M1.5 31 H26.5" stroke="#C23D36" stroke-width="1" fill="none"/>' +
+    '<ellipse cx="9" cy="25" rx="2.5" ry="5" fill="#FF9C8F" opacity="0.7"/>' +
+    '<rect x="8" y="15" width="12" height="4" rx="1.5" fill="#E2A410"/>' +
+    '<rect x="8" y="43" width="12" height="4" rx="1.5" fill="#E2A410"/>' +
+    '<rect x="13.25" y="47" width="1.5" height="4" fill="#E2A410"/>' +
+    '<path d="M11 51 H17 L16.2 62 H11.8 Z" fill="#FFC93C"/>' +
+    '</g>'
+  );
+}
+
+const FLOOR_PLANT_HEIGHT = 112;
+
+/**
+ * The floor plant a shop can buy, 62×112, as a group at (left, top). The window's sill already has a
+ * little terracotta one, so this is drawn to be its opposite: tall, broad-leaved, in a glazed mint pot.
+ */
+function floorPlant(left: number, top: number): string {
+  return (
+    `<g transform="translate(${n(left)} ${n(top)})">` +
+    '<path d="M31 74 C30 56 32 40 31 26" stroke="#8A5A3A" stroke-width="3" fill="none"/>' +
+    '<path d="M31 62 C18 66 5 58 2 44 C17 40 29 48 31 62 Z" fill="#4E9C57"/>' +
+    '<path d="M31 54 C44 58 57 50 60 36 C45 32 33 40 31 54 Z" fill="#5FAE63"/>' +
+    '<path d="M31 42 C19 40 9 28 12 14 C25 15 33 28 31 42 Z" fill="#7CC47F"/>' +
+    '<path d="M31 34 C41 30 50 16 45 2 C34 6 28 20 31 34 Z" fill="#5FAE63"/>' +
+    '<path d="M31 72 C40 73 50 68 53 57 C42 55 33 62 31 72 Z" fill="#7CC47F"/>' +
+    '<path d="M12 74 H50 L46 112 H16 Z" fill="#6FBFA9"/>' +
+    '<path d="M38 74 H50 L46 112 H37 Z" fill="#5AAB95"/>' +
+    '<rect x="9" y="70" width="44" height="8" rx="3" fill="#9FDCCB"/>' +
+    '</g>'
+  );
 }
 
 /** A hanging lamp, 22×40, as a group at (left, top). */

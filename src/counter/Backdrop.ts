@@ -2,7 +2,7 @@ import Phaser from 'phaser';
 
 import { counterSvg } from '../art/counter';
 import { counterTopSvg } from '../art/counterTop';
-import { backdropClouds, backdropWindow, cloudSvg, cloudX, CloudSpec, shopBackdropSvg, WindowRect } from '../art/shopBackdrop';
+import { backdropClouds, backdropWindow, cloudSvg, cloudX, CloudSpec, shopBackdropSvg, wallGear, WindowRect } from '../art/shopBackdrop';
 import { addText } from '../game/view';
 import { setBaseline } from './CustomerView';
 import { COUNTER_HEIGHT, CounterLayout } from './layout';
@@ -39,6 +39,7 @@ export class Backdrop {
   private window: WindowRect | null = null;
   private generation = 0;
   private owner: string | null = null;
+  private furnished = '';
 
   constructor(private scene: Phaser.Scene, private bank: TextureBank) {
     const hidden = (depth: number) => scene.add.image(0, 0, '__DEFAULT').setOrigin(0).setVisible(false).setDepth(depth);
@@ -51,14 +52,15 @@ export class Backdrop {
   }
 
   /** Draw the still pictures for a layout; they replace the old ones when all are ready. */
-  build(layout: CounterLayout) {
+  build(layout: CounterLayout, gear: readonly string[]) {
     const generation = ++this.generation;
     const owner = `layout:${generation}`;
     const { width, stageHeight, floorHeight } = layout;
     const size = `${width}x${stageHeight}`;
+    this.furnished = wallGear(gear);
     const jobs: Promise<string | null>[] = [
       this.bank.get(owner, `counter:back:${size}`, () => shopBackdropSvg(width, stageHeight, 'back').replace(MENU_TEXT, ''), width, stageHeight),
-      this.bank.get(owner, `counter:front:${size}`, () => shopBackdropSvg(width, stageHeight, 'front'), width, stageHeight),
+      this.bank.get(owner, `counter:front:${size}:${this.furnished}`, () => shopBackdropSvg(width, stageHeight, 'front', gear), width, stageHeight),
       this.bank.get(owner, `counter:rim:${width}`, () => counterSvg(width, COUNTER_HEIGHT), width, COUNTER_HEIGHT),
       floorHeight > 0
         ? this.bank.get(owner, `counter:floor:${width}x${floorHeight}`, () => counterTopSvg(width, floorHeight), width, floorHeight)
@@ -103,6 +105,11 @@ export class Backdrop {
       if (this.owner) this.bank.release(this.owner);
       this.owner = owner;
     });
+  }
+
+  /** Redraw for what the shop owns, but only if it is something the wall shows. */
+  furnish(layout: CounterLayout, gear: readonly string[]) {
+    if (wallGear(gear) !== this.furnished) this.build(layout, gear);
   }
 
   /**

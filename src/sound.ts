@@ -2,6 +2,7 @@ import { initAudio, playSound, setAudioSettings, setGamePaused, setMusic } from 
 import { MusicId } from './audio/sounds';
 import { COIN_FLIGHT_MS, COIN_START_MS } from './game/effectTiming';
 import { GameState, Outcome, Phase } from './game/reducer';
+import { leftContent } from './game/rules';
 import { store } from './store';
 
 export { playSound, setPourFill, setPouring } from './audio/audio';
@@ -40,7 +41,8 @@ export function startSound() {
       const seen = previous.departures.reduce((max, d) => Math.max(max, d.id), 0);
       for (const departure of state.departures) {
         if (departure.id <= seen) continue;
-        playSound(DEPARTURE_CUE[departure.outcome]);
+        // A close that paid nothing was no sale, so it does not sound like one.
+        playSound(departure.outcome === 'close' && !leftContent(departure) ? 'serveBad' : DEPARTURE_CUE[departure.outcome]);
         if (departure.earned > 0) playSound('coin', COIN_START_MS + COIN_FLIGHT_MS);
       }
     }

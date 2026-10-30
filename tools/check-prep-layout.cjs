@@ -29,8 +29,10 @@ const { layoutKitchen } = require('../src/kitchen/layout.ts');
 const { getDayConfig } = require('../src/game/levels.ts');
 const { CUP_ART, CUP_FOOT } = require('../src/art/cupGeometry.ts');
 const {
-  isWideLayout, panelWidthFor, prepLayoutFor, PREP_BAND_HEIGHT, PREP_ACTIONS_HEIGHT,
+  ASK_HEIGHT, ASK_MIN_HEIGHT, askHeightFor, isWideLayout, ORDER_CARD_PAD, ORDER_TRACK_HEIGHT, overtimeDockRight, panelWidthFor,
+  prepLayoutFor, PREP_BAND_HEIGHT, PREP_ACTIONS_HEIGHT, SHORT_CARD, SIDEWAYS_MIN_WIDTH,
 } = require(path.join(__dirname, '../src/ui/responsive.ts'));
+const { isWideLayout: counterIsWide } = require('../src/counter/layout.ts');
 
 /** The box the kitchen canvas gets, in each arrangement — `PrepPage.tsx`'s own boxes. */
 function roomFor(width, pageHeight) {
@@ -53,6 +55,10 @@ const holds = (band, seen) => seen.top <= band.top + 0.5 && seen.bottom >= band.
 // ------------------------------------------------------- every shape the game is actually played at
 // Width and the pager's height (the screen less the HUD and the tabs, ~75px).
 const SHAPES = [
+  ['the shortest phone on its side', 568, 245],
+  ['a small phone on its side', 667, 297],
+  ['a Galaxy S8 on its side', 740, 285],
+  ['a Plus phone on its side', 736, 339],
   ['a phone on its side', 844, 315],
   ['a big phone on its side', 932, 355],
   ['the window this was reported from', 1284, 535],
@@ -73,7 +79,7 @@ for (const [what, width, pageHeight] of SHAPES) {
 // ------------------------------------------------------- and every shape at all, down to the workable band
 // A squat enough window cannot hold the whole painting however the chrome is arranged; what it may
 // never lose is the band the shift is worked in — the name tags down to the line the cup stands on.
-for (let width = 760; width <= 2400; width += 20) {
+for (let width = SIDEWAYS_MIN_WIDTH; width <= 2400; width += 20) {
   for (let pageHeight = 200; pageHeight <= 1200; pageHeight += 20) {
     if (!isWideLayout(width, pageHeight + 75)) continue;
     const room = roomFor(width, pageHeight);
@@ -88,6 +94,34 @@ for (let width = 760; width <= 2400; width += 20) {
     if (room.layout === 'band') assert.ok(holds(ROOM_BG_KEEP, seen), `${where} keeps the whole painting`);
   }
 }
+
+// ------------------------------------------------------- a phone on its side is laid out on its side
+// A window under the old 760 stayed `stacked` however short it was: the card and the buttons took the
+// height, and an iPhone 8 sideways was left a room 72px tall with its tanks above the top of it.
+for (const [width, height] of [[568, 320], [640, 360], [667, 375], [736, 414], [740, 360], [760, 360]]) {
+  assert.equal(prepLayoutFor(width, height, height - 75), 'column', `${width}x${height} stands the order beside the room`);
+  const room = roomFor(width, height - 75);
+  assert.ok(room.width >= 320 && room.height >= 240, `${width}x${height} keeps a room to work in, ${room.width}x${room.height}`);
+}
+assert.equal(prepLayoutFor(375, 667, 590), 'stacked', 'A phone held upright is still upright');
+assert.equal(prepLayoutFor(558, 300, 225), 'stacked', 'Anything narrower has no width to stand a card beside the room');
+// The counter keeps its own copy of this test, so that a scene need not import the interface's module.
+for (let width = 400; width <= 1000; width += 4) {
+  for (const height of [320, 375, 430, 600, 900]) {
+    assert.equal(counterIsWide(width, height), isWideLayout(width, height), `The two pages agree on ${width}x${height}`);
+  }
+}
+
+// ------------------------------------------------------- the overtime dock leaves the order alone
+// The column's card grows into all the height the column has, so a dock standing in it stands on the
+// order: at 932x430 it hid the last tile of a long one. Its right edge is in the room, in every shape.
+for (const [what, width, pageHeight] of [...SHAPES, ['the reported phone', 932, 352]]) {
+  const room = roomFor(width, pageHeight);
+  const right = overtimeDockRight(room.layout, width, pageHeight);
+  if (room.layout === 'column') assert.ok(right > room.panel, `${what}: the dock stands beside the column, not in it`);
+  assert.ok(right < width / 2 + 20, `${what}: and has the room to stand in`);
+}
+assert.ok(overtimeDockRight('stacked', 390, 700) < 20, 'Upright it stands at the edge of the screen');
 
 // ------------------------------------------------------- the card is as narrow as it can be read at
 assert.equal(prepLayoutFor(390, 844, 700), 'stacked', 'upright is upright');
@@ -117,4 +151,22 @@ for (const [width, height] of [[390, 540], [375, 330], [450, 315], [500, 355], [
       'The cup settles into the measured silicone seat, behind its near lip');
   }
 }
+
+// ------------------------------------------------------- Hỏi lại in a short side column
+// The tiles' row a column of `space` leaves a card with a queue, which has the tallest head there is.
+const QUEUE_HEAD = 48;
+const tileRoomIn = (space) => space - ORDER_CARD_PAD * 2 - 4 - QUEUE_HEAD - ORDER_TRACK_HEIGHT;
+const SHORT_FLOOR = 2 + SHORT_CARD.top + QUEUE_HEAD + SHORT_CARD.gap + ASK_MIN_HEIGHT + SHORT_CARD.bottom + 2;
+assert.equal(ASK_HEIGHT, Number(fs.readFileSync(path.join(__dirname, '../src/ui/ui.css'), 'utf8').match(/\.ask-again \{[^}]*?\n\s*height: (\d+)px/)[1]), 'The stylesheet and the arithmetic agree on the button');
+assert.equal(askHeightFor(tileRoomIn(134)), null, 'A column with the room keeps the card as it stands');
+assert.equal(askHeightFor(tileRoomIn(133)), ASK_HEIGHT, 'One pixel short gives up the empty bar and keeps the button whole');
+for (let space = SHORT_FLOOR; space < 134; space++) {
+  const height = askHeightFor(tileRoomIn(space));
+  assert(height >= ASK_MIN_HEIGHT && height <= ASK_HEIGHT, 'It is a button you can read and press');
+  assert(2 + SHORT_CARD.top + QUEUE_HEAD + SHORT_CARD.gap + height + SHORT_CARD.bottom + 2 <= space,
+    `All of it is on the card in a column ${space}px tall, which is what clipped it`);
+}
+// A window that short is the screen's height less 224px: 320 tall leaves 96, on a phone with its browser's bars up.
+assert(SHORT_FLOOR <= 96, `A 320px window still has the whole button (${SHORT_FLOOR})`);
+assert.equal(askHeightFor(tileRoomIn(40)), ASK_MIN_HEIGHT, 'Past that it stops at what can be read, which is the column being past helping');
 console.log('check-prep-layout: the painting stays visible, the card fits, and one shared mat holds S/M/L on the clear worktop.');

@@ -1,7 +1,7 @@
 import { BUILD_ORDER, CATEGORIES, CategoryId } from './ingredients';
+import { DAY_PATIENCE_FLOOR_MS, FIRST_WAVE, LINE_MS, LULL_MAX_MS, LULL_MIN_MS, MAX_WAVE, WAVE_GROWTH_DAYS } from './rules';
 
 export interface DayConfig {
-  day: number;
   /** Categories customers care about, in build order. Every one of them, from day one. */
   categories: CategoryId[];
   /** Ingredient ids available per category. */
@@ -13,8 +13,13 @@ export interface DayConfig {
   orderPatienceMs: number;
   /** How long a customer waits for the finished drink after ordering. */
   patienceMs: number;
-  spawnMinMs: number;
-  spawnMaxMs: number;
+  /** How many customers come in together. */
+  waveSize: number;
+  /** The quiet before a group comes in, once the last one has gone. */
+  lullMinMs: number;
+  lullMaxMs: number;
+  /** How long someone with no spot at the counter waits outside. See `lineWaitMs`, which is what to read. */
+  lineMs: number;
 }
 
 /**
@@ -22,7 +27,7 @@ export interface DayConfig {
  * every category, every tea and every topping is on the shelf from day one — so a save made on
  * any day can name any ingredient, and the rack and the topping stand are never drawn with an
  * empty slot waiting for a later day. What the day still moves is the pace: how many customers
- * stand at the counter, how long they wait, how often they arrive, and how many toppings one
+ * stand at the counter, how long they wait, how many come in together, and how many toppings one
  * drink may ask for.
  */
 export function getDayConfig(day: number): DayConfig {
@@ -31,9 +36,7 @@ export function getDayConfig(day: number): DayConfig {
     BUILD_ORDER.map((category) => [category, CATEGORIES[category].options.map((o) => o.id)]),
   ) as Record<CategoryId, string[]>;
 
-  const spawnMinMs = Math.max(4_000, 9_000 - day * 600);
   return {
-    day,
     categories,
     options,
     maxToppings: day >= 5 ? 2 : 1,
@@ -43,9 +46,12 @@ export function getDayConfig(day: number): DayConfig {
     // Taking the order is quick, so this window is the shorter of the two; it tightens by the day.
     orderPatienceMs: Math.max(20_000, 30_000 - (day - 1) * 1_000),
     // A full menu means a full build from day one, so the drink window starts at its widest.
-    patienceMs: Math.max(60_000, 90_000 + categories.length * 4_000 - (day - 1) * 5_000),
-    spawnMinMs,
-    spawnMaxMs: spawnMinMs + 5_000,
+    patienceMs: Math.max(DAY_PATIENCE_FLOOR_MS, 90_000 + categories.length * 4_000 - (day - 1) * 5_000),
+    // The one dial still turning after day 12, so that the day number goes on meaning something.
+    waveSize: Math.min(MAX_WAVE, FIRST_WAVE + Math.floor((day - 1) / WAVE_GROWTH_DAYS)),
+    lullMinMs: LULL_MIN_MS,
+    lullMaxMs: LULL_MAX_MS,
+    lineMs: LINE_MS,
   };
 }
 

@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 
 import { Customer } from '../game/reducer';
+import { orderVisible } from '../game/regulars';
 import { characterSvg, Mood } from '../art/character';
 import { cupLayout, cupSvg } from '../art/cup';
 import { bubblePointerColor, bubblePointerSvg, orderPadSvg, patienceRingColor, patienceRingSvg } from '../art/icons';
@@ -13,8 +14,9 @@ import { SHARED, TextureBank } from './textures';
 /**
  * A customer at the counter (`ActiveCustomer` in `CustomerStage.tsx`): the figure, which walks in
  * from the nearer side and fades up, and the speech bubble over it, which follows half a second
- * later — the order pad while they wait to be asked, their drink once the order is taken. The ring
- * on the bubble is their patience; their face follows it (happy, neutral, angry), and they blink.
+ * later — the order pad while they wait to be asked, their drink once the order is taken. A usual
+ * stays a pad after that, until it is asked for: the cup in the bubble is the whole of the answer.
+ * The ring on the bubble is their patience; their face follows it (happy, neutral, angry), and they blink.
  *
  * Every picture here is a texture drawn once. The clock only reaches `update`, which compares the
  * rounded patience, the status and the highlight against what is already showing and swaps a
@@ -63,21 +65,26 @@ export function ringTexture(bank: TextureBank, patience: number) {
 
 const BUBBLE_CUP_BOX = cupLayout(BUBBLE_CUP, { straw: true });
 
-function contentSize(requesting: boolean) {
-  return requesting ? PAD_SIZE : { width: BUBBLE_CUP_BOX.boxWidth, height: BUBBLE_CUP_BOX.boxHeight };
+function contentSize(pad: boolean) {
+  return pad ? PAD_SIZE : { width: BUBBLE_CUP_BOX.boxWidth, height: BUBBLE_CUP_BOX.boxHeight };
 }
 
-export function bubbleKey(tone: BubbleTone, requesting: boolean) {
-  return `counter:bubble:${tone}:${requesting ? 'pad' : 'cup'}`;
+/** How far the tallest bubble and its pointer reach above where a bubble is anchored. */
+export function bubbleReach() {
+  return -bubbleStack(bubbleSize(contentSize(false)).height).pointerTop;
+}
+
+export function bubbleKey(tone: BubbleTone, pad: boolean) {
+  return `counter:bubble:${tone}:${pad ? 'pad' : 'cup'}`;
 }
 
 /** The shared pieces every bubble is made of, drawn up front so the first customer has them. */
 export function preloadShared(bank: TextureBank): Promise<unknown> {
   const jobs: Promise<unknown>[] = [];
-  for (const requesting of [true, false]) {
-    const size = bubbleSize(contentSize(requesting));
+  for (const pad of [true, false]) {
+    const size = bubbleSize(contentSize(pad));
     for (const tone of Object.keys(BUBBLE_TONE) as BubbleTone[]) {
-      jobs.push(bank.get(SHARED, bubbleKey(tone, requesting), () => bubbleSvg(size.width, size.height, tone),
+      jobs.push(bank.get(SHARED, bubbleKey(tone, pad), () => bubbleSvg(size.width, size.height, tone),
         size.width, size.height + TAIL_DROP));
     }
   }
@@ -120,7 +127,7 @@ export class CustomerView {
   private mood: Mood = 'happy';
   private blinking = false;
   private tone: BubbleTone | null = null;
-  private requesting: boolean | null = null;
+  private pad: boolean | null = null;
   private tweens: Phaser.Tweens.Tween[] = [];
   private blinkTimer: Phaser.Time.TimerEvent | null = null;
   private bubbleY: number;
@@ -141,9 +148,11 @@ export class CustomerView {
     parent.add([this.figure, this.bubble]);
 
     // The drink in the bubble is wanted the moment the order is taken: draw it now.
-    void ctx.bank.get(ownerOf(customer), `${ownerOf(customer)}:cup`,
-      () => cupSvg(customer.order, { width: BUBBLE_CUP, backgroundColor: '#FFFFFF', straw: true }),
-      BUBBLE_CUP_BOX.svgWidth, BUBBLE_CUP_BOX.svgHeight);
+    if (orderVisible(customer)) {
+      void ctx.bank.get(ownerOf(customer), `${ownerOf(customer)}:cup`,
+        () => cupSvg(customer.order, { width: BUBBLE_CUP, backgroundColor: '#FFFFFF', straw: true }),
+        BUBBLE_CUP_BOX.svgWidth, BUBBLE_CUP_BOX.svgHeight);
+    }
 
     this.update(customer, patience, selected);
     this.scheduleBlink();
@@ -170,19 +179,20 @@ export class CustomerView {
   update(customer: Customer, patience: number, selected: boolean) {
     this.customer = customer;
     const requesting = customer.status === 'requesting';
-    if (requesting !== this.requesting) {
-      this.requesting = requesting;
+    const pad = requesting || !orderVisible(customer);
+    if (pad !== this.pad) {
+      this.pad = pad;
       this.tone = null;
-      this.buildContent(requesting);
+      this.buildContent(pad);
     }
     // A requesting customer always invites a tap; an ordered one points to its selected ticket.
     const tone: BubbleTone = requesting ? 'ask' : selected ? 'selected' : 'plain';
     if (tone !== this.tone) {
       this.tone = tone;
-      const size = bubbleSize(contentSize(requesting));
+      const size = bubbleSize(contentSize(pad));
       const { bubbleTop, pointerTop } = bubbleStack(size.height);
       this.body.setY(bubbleTop);
-      apply(this.body, this.ctx.bank.get(SHARED, bubbleKey(tone, requesting), () => bubbleSvg(size.width, size.height, tone),
+      apply(this.body, this.ctx.bank.get(SHARED, bubbleKey(tone, pad), () => bubbleSvg(size.width, size.height, tone),
         size.width, size.height + TAIL_DROP), size.width, size.height + TAIL_DROP, () => this.tone === tone);
       this.pointer.setY(pointerTop);
       if (tone === 'plain') this.pointer.setVisible(false);
@@ -264,15 +274,15 @@ export class CustomerView {
   }
 
   /** The pad, or the ordered drink with its size tag. */
-  private buildContent(requesting: boolean) {
+  private buildContent(showPad: boolean) {
     for (const object of this.content) object.destroy();
     this.content = [];
     const { scene, bank } = this.ctx;
-    const size = bubbleSize(contentSize(requesting));
+    const size = bubbleSize(contentSize(showPad));
     const { bubbleTop } = bubbleStack(size.height);
     const left = -size.width / 2 + BUBBLE.border + BUBBLE.padX;
     const top = bubbleTop + BUBBLE.border;
-    if (requesting) {
+    if (showPad) {
       const pad = scene.add.image(left, top, NONE).setOrigin(0).setVisible(false);
       apply(pad, bank.get(SHARED, 'counter:pad', () => orderPadSvg(PAD_SIZE.width), PAD_SIZE.width, PAD_SIZE.height),
         PAD_SIZE.width, PAD_SIZE.height);

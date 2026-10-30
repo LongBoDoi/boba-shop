@@ -18,7 +18,7 @@ export const BUBBLE_CUP = 26;
  * not have to import the interface's layout module for one comparison.
  */
 export function isWideLayout(width: number, height: number) {
-  return width >= 760 && width > height * 1.15;
+  return width >= 560 && width > height * 1.15;
 }
 
 /**
@@ -77,6 +77,20 @@ export function layoutCounter(width: number, height: number, windowWidth: number
     return { left, width: slotWidth, centre: left + slotWidth / 2 };
   });
   return { width, height, wide, stageHeight, floorHeight: Math.max(0, height - stageHeight), metrics, slots };
+}
+
+/** The least room between a floating chip and the edge of the stage. */
+const CHIP_MARGIN = 4;
+
+/**
+ * How far a chip of this width has to stand off its slot's centre to stay on the stage: nothing, most
+ * of the time. A spot on a phone's three is about 125px wide, and what a counter has to say is not
+ * always that short.
+ */
+export function chipShift(centre: number, width: number, stageWidth: number) {
+  const overLeft = CHIP_MARGIN - (centre - width / 2);
+  const overRight = centre + width / 2 - (stageWidth - CHIP_MARGIN);
+  return overLeft > 0 ? overLeft : overRight > 0 ? -overRight : 0;
 }
 
 // ------------------------------------------------------------------ the bubble

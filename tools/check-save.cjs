@@ -15,9 +15,10 @@ require.extensions['.ts'] = (module, filename) => {
 };
 
 try {
-  const { createInitialState, gameReducer, suspendedShift } = require(path.join(__dirname, '../src/game/reducer.ts'));
+  const { createInitialState, gameReducer, NO_OVERTIME, suspendedShift } = require(path.join(__dirname, '../src/game/reducer.ts'));
   const { parseGame, serializeGame, SAVE_VERSION } = require(path.join(__dirname, '../src/game/save.ts'));
   const { getDayConfig } = require(path.join(__dirname, '../src/game/levels.ts'));
+  const { dayNews, OVERTIME_MAX_ROUNDS } = require(path.join(__dirname, '../src/game/rules.ts'));
 
   // ------------------------------------------------------------------ a shift, saved mid-build
   let state = gameReducer(createInitialState(4242), { type: 'START_DAY', day: 3 });
@@ -70,7 +71,9 @@ try {
   };
   const servedBefore = finish(state);
   const servedAfter = finish(restored);
-  assert.equal(servedAfter.stats.served, 1, 'The restored cup can still be served');
+  // This cup was left half made, so it is a wrong drink, and a wrong drink is not counted as served.
+  // What a reload has to preserve is that it can still be handed over, and comes to the same thing.
+  assert.equal(servedAfter.slots[slot], null, 'The restored cup can still be handed over');
   assert.equal(servedAfter.coins, servedBefore.coins, 'Serving the restored cup pays the same');
   assert.deepEqual(servedAfter.stats, servedBefore.stats, 'And scores the same');
 
@@ -115,6 +118,20 @@ try {
   const atEnd = parseGame(serializeGame(ending));
   assert.equal(atEnd.phase, 'dayEnd', 'The day-end screen comes back');
   assert.deepEqual(atEnd.stats, ending.stats, 'With the numbers it is reporting');
+
+  // A finished day is built again when the menu opens it, so building it must change nothing:
+  // the same next day comes out whether or not the player went by way of the menu.
+  const noted = gameReducer(ending, { type: 'NOTE_NEWS', ids: ['kinds'] });
+  const direct = gameReducer(noted, { type: 'START_DAY', day: noted.day + 1 });
+  const viaMenu = gameReducer(gameReducer(noted, { type: 'GO_TO_TITLE' }), { type: 'START_DAY', day: noted.day + 1 });
+  assert.deepEqual(viaMenu, direct, 'Going through the menu between days builds the same day');
+  assert.deepEqual(direct.seen, ['kinds'], 'And what the shop has been told stays told');
+  // Both of those go through the same `carried`, so the comparison above cannot see a field it drops.
+  const relaxedEnd = gameReducer(noted, { type: 'SET_MODE', mode: 'relaxed' });
+  assert.equal(gameReducer(relaxedEnd, { type: 'START_DAY', day: noted.day + 1 }).mode, 'relaxed', 'A relaxed shop is still relaxed the next day');
+  const relaxedMenu = gameReducer(relaxedEnd, { type: 'GO_TO_TITLE' });
+  assert.equal(relaxedMenu.mode, 'relaxed', 'And at the menu');
+  assert.equal(gameReducer(relaxedMenu, { type: 'START_DAY', day: noted.day + 1 }).mode, 'relaxed', 'And on the day opened from it');
 
   // ---------------------------------------------------------------- putting the shop down
   // "Về menu chính" suspends the shift, it does not end it: the menu's one button has to hand back
@@ -191,6 +208,42 @@ try {
   assert.equal(parseGame(broken((s) => (s.slots[slot].status = 'leaving'))), null, 'An unknown status');
   assert.equal(parseGame(broken((s) => (s.slots[slot].name = ''))), null, 'A customer with no name');
   assert.equal(parseGame(broken((s) => (s.slots[slot].orderedAt = 'now'))), null, 'An order taken at no time');
+  assert.equal(parseGame(broken((s) => (s.slots[slot].queuedAt = 'soon'))), null, 'A place in the queue at no time');
+  assert.equal(parseGame(broken((s) => (s.slots[slot].queuedAt = -1))), null, 'A place in the queue before opening');
+  assert.equal(parseGame(broken((s) => (s.overtime = null))), null, 'Overtime that is nothing at all');
+  assert.equal(parseGame(broken((s) => (s.overtime = 'late'))), null, 'Overtime that is a word');
+  assert.equal(parseGame(broken((s) => (s.overtime.jar = -1))), null, 'A jar in debt');
+  assert.equal(parseGame(broken((s) => (s.overtime.jar = 1.5))), null, 'Half a unit in the jar');
+  assert.equal(parseGame(broken((s) => (s.slots[slot].lateRound = 0))), null, 'A customer who came in before the first round');
+  assert.equal(parseGame(broken((s) => (s.slots[slot].lateRound = 1.5))), null, 'Halfway through a round');
+  assert.equal(parseGame(broken((s) => (s.slots[slot].lateRound = 'two'))), null, 'A round that is not a number');
+  assert.equal(parseGame(broken((s) => (s.overtime.paid = 'all'))), null, 'A payout that is not a number');
+  assert.equal(parseGame(broken((s) => (s.overtime.paid = -1))), null, 'A payout that took money out');
+  assert.equal(parseGame(broken((s) => (s.overtime.paid = 1.5))), null, 'Half a unit paid');
+  assert.equal(parseGame(broken((s) => (s.overtime.rounds = -1))), null, 'Rounds that have not happened');
+  assert.equal(parseGame(broken((s) => (s.overtime.rounds = 1.5))), null, 'Half a round');
+  assert.equal(parseGame(broken((s) => (s.overtime.lost = 1))), null, 'A lost jar that is not a flag');
+  assert.equal(parseGame(broken((s) => (s.overtime.forfeited = 'yes'))), null, 'A forfeited bonus that is not a flag');
+  assert.equal(parseGame(broken((s) => (s.overtime.forfeited = false))), null, 'Which is only ever there as true');
+
+  // ------------------------------------------------------------------ a save as it was really written
+  // Kept as text, as written by the build at 67ae6fd. Every other save in this file comes out of the
+  // current serializer, so it carries whatever `SAVE_VERSION` now is and would go on loading after a
+  // bump that discarded every shop in existence. If this fails, that is what has just happened.
+  const WRITTEN_BY_AN_OLDER_BUILD = '{"v":1,"phase":"playing","mode":"standard","audio":{"music":0.7,"sfx":1},"day":3,"clock":6000,"coins":21,"money":137,"slots":[null,{"id":1,"look":{"skin":"#E9B48E","hair":"#9A9A9A","hairStyle":"bob","shirt":"#B7E07A","accessory":"none"},"name":"Linh","order":{"size":"M","toppings":["pandan"],"sweetness":null,"ice":null,"tea":"oolong","milk":null,"foam":"brulee"},"status":"ordered","arrivedAt":1500,"orderPatienceMs":28000,"orderedAt":6000,"patienceMs":104000},null],"selectedSlot":1,"cup":{"size":"M","toppings":[],"sweetness":null,"ice":"less","tea":"oolong","milk":null,"foam":null},"build":{"fill":0.6,"spilled":false,"iceScoops":1,"sugarPumps":0,"lidded":false,"straw":false,"inLidder":false},"cupId":2,"nextSpawnAt":13000,"nextId":3,"stats":{"served":0,"perfect":0,"missed":0,"tips":0},"seed":1071851991}';
+  const older = parseGame(WRITTEN_BY_AN_OLDER_BUILD);
+  assert.ok(older, 'A save written by an older build still loads, and SAVE_VERSION has not moved');
+  assert.deepEqual([older.day, older.clock, older.coins, older.money], [3, 6_000, 21, 137], 'On the day and at the minute it was written, with its money');
+  assert.equal(older.paused, true, 'Behind the pause card');
+  assert.deepEqual(older.seen, [], 'Having been told nothing');
+  assert.equal(older.slots[1].name, 'Linh', 'With the same customer at the counter');
+  assert.equal(older.slots[1].patienceMs, 104_000, 'On the patience they arrived with');
+  assert.ok(!('queuedAt' in older.slots[1]), 'And no queue position to account for');
+  assert.deepEqual([older.cup.tea, older.cup.ice, older.build.fill], ['oolong', 'less', 0.6], 'And the same cup on the mat');
+  assert.deepEqual(dayNews(older).map((news) => news.id), ['kinds', 'regulars'], 'Its next sign has the first two introductions for a day 3 shop');
+  assert.deepEqual(older.overtime, NO_OVERTIME, 'And it has not stayed open today');
+  assert.deepEqual(older.gear, [], 'And has bought nothing');
+  assert.ok(!('overtime' in older.slots[1]), 'And nobody at the counter came in late');
 
   // ------------------------------------------------------------------ saves that are tidied up
   // The till was added after the game shipped. A save from before it has to come back — losing a
@@ -201,6 +254,54 @@ try {
   assert.equal(earlier.money, earlier.coins, "It opens with today's takings in the till");
   assert.equal(earlier.day, state.day, 'On the day it was saved on');
   assert.deepEqual(earlier.cup, parseGame(serializeGame(state)).cup, 'With the cup it was building');
+
+  // What the sign has introduced is written down, and every shop that exists predates it: such a
+  // shop has been told nothing, and the bad cases cost a line on a sign rather than a week.
+  const told = gameReducer(state, { type: 'NOTE_NEWS', ids: ['kinds'] });
+  assert.deepEqual(parseGame(serializeGame(told)).seen, ['kinds'], 'What has been introduced is saved');
+  assert.deepEqual(parseGame(broken((s) => delete s.seen)).seen, [], 'A save from before it has seen nothing');
+  assert.deepEqual(dayNews(parseGame(broken((s) => delete s.seen))).map((news) => news.id), ['kinds', 'regulars'],
+    'So an existing shop meets the introductions on its next sign');
+  assert.deepEqual(parseGame(broken((s) => (s.seen = ['kinds', 'a-later-build', 7, 'kinds']))).seen, ['kinds'],
+    'An id this build does not know is dropped');
+  assert.deepEqual(parseGame(broken((s) => (s.seen = 'kinds'))).seen, [], 'And a list that is not a list is no list');
+
+  // A day's overtime and what the shop owns are both newer than every shop in existence, and both
+  // ride in the save: a jar is the player's money, and the shift it belongs to can be put down.
+  const late = {
+    ...state,
+    overtime: { rounds: 2, jar: 37, lost: false, paid: 0 },
+    gear: ['plant', 'board'],
+    slots: state.slots.map((customer) => customer && { ...customer, lateRound: 2 }),
+  };
+  const lateAgain = parseGame(serializeGame(late));
+  assert.deepEqual(lateAgain.overtime, late.overtime, 'A jar mid-shift comes back as it was');
+  assert.deepEqual(lateAgain.gear, ['plant', 'board'], 'And so does what the shop owns');
+  assert.equal(lateAgain.slots[slot].lateRound, 2, 'And a late customer is still a late customer, of the same round');
+  assert.ok(!('overtime' in restored.slots[slot]), 'While one who came in on time does not become one');
+  assert.ok(!('lateRound' in restored.slots[slot]), 'Or gain a round');
+  const forfeit = { ...late, overtime: { rounds: 2, jar: 20, lost: false, paid: 0, forfeited: true } };
+  assert.deepEqual(parseGame(serializeGame(forfeit)).overtime, forfeit.overtime, 'A forfeited bonus comes back forfeited, or a reload would be a way to get it back');
+  assert.ok(!('forfeited' in lateAgain.overtime), 'And one that was never forfeited does not become so');
+  const burnt = { ...late, overtime: { rounds: 2, jar: 20, lost: true, paid: 0 } };
+  assert.deepEqual(parseGame(serializeGame(burnt)).overtime, burnt.overtime, 'A burnt jar comes back burnt, or a reload would be a way out of losing it');
+  assert.deepEqual(finish(lateAgain).stats, lateAgain.stats, 'So a reload does not let a late customer reach the day\'s stats');
+  assert.deepEqual(parseGame(broken((s) => delete s.overtime)).overtime, NO_OVERTIME, 'A save from before overtime has none running');
+  assert.deepEqual(parseGame(broken((s) => delete s.gear)).gear, [], 'A save from before the shopping has bought nothing');
+  assert.deepEqual(parseGame(broken((s) => (s.gear = ['lantern', 'a-later-build', 7, 'plant']))).gear, ['lantern', 'plant'],
+    'An item this build does not know is dropped, and the rest stay in the order they came');
+  // A backup code is the very bytes of the save, so a reload must not put a list into another order.
+  const boughtOutOfOrder = serializeGame({ ...state, gear: ['board', 'plant'], seen: ['regulars', 'kinds'] });
+  assert.deepEqual(parseGame(boughtOutOfOrder).gear, ['board', 'plant'], 'What the shop owns stays in the order it was bought');
+  assert.deepEqual(parseGame(boughtOutOfOrder).seen, ['regulars', 'kinds'], 'And what it has been told in the order it heard it');
+  assert.equal(serializeGame(parseGame(boughtOutOfOrder)), boughtOutOfOrder, 'So a save comes back as the same bytes');
+  assert.deepEqual(parseGame(broken((s) => (s.gear = 'plant'))).gear, [], 'And a list that is not a list is no list');
+  assert.deepEqual(parseGame(broken((s) => (s.gear = ['plant', 'plant']))).gear, ['plant'], 'And a thing is owned once');
+  assert.equal(parseGame(broken((s) => (s.overtime = { rounds: OVERTIME_MAX_ROUNDS + 4, jar: 9, lost: false, paid: 0 }))).overtime.rounds, OVERTIME_MAX_ROUNDS,
+    'Rounds past today\'s limit come back to it, because tuning may lower that limit under a shift in progress');
+
+  assert.equal(parseGame(broken((s) => (s.slots[slot].queuedAt = 9_000))).slots[slot].queuedAt, 9_000, 'A place in the queue is kept');
+  assert.ok(!('queuedAt' in restored.slots[slot]), 'And a customer who has none does not gain one');
 
   const narrower = parseGame(broken((s) => s.slots.push(s.slots[slot])));
   assert.ok(narrower, 'A save from a day with more spots than today still loads');

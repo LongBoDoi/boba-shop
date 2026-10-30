@@ -13,7 +13,7 @@ const MODES: { id: GameMode; label: string; note: string }[] = [
   {
     id: 'standard',
     label: 'Tiêu chuẩn',
-    note: 'Ra quầy nhận order từng khách, khách mới tới sau một lúc.',
+    note: 'Ra quầy nhận order từng khách, khách tới theo từng đợt.',
   },
   {
     id: 'relaxed',

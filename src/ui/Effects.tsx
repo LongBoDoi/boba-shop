@@ -67,7 +67,7 @@ export function EffectsLayer() {
 function reward(root: HTMLElement, departure: Departure, at: Point) {
   if (departure.outcome === 'perfect') confetti(root, at, { delay: 300 });
   if (departure.earned > 0) {
-    const to = centreOf(anchors.wallet) ?? { x: window.innerWidth * 0.65, y: 30 };
+    const to = (departure.toJar ? centreOf(anchors.jar) : null) ?? centreOf(anchors.wallet) ?? { x: window.innerWidth * 0.65, y: 30 };
     const count = Math.min(3, Math.max(1, Math.ceil(departure.earned / 3)));
     for (let i = 0; i < count; i++) flyCoin(root, at, to, COIN_START_MS + i * COIN_STAGGER_MS);
   }

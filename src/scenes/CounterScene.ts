@@ -114,12 +114,13 @@ export class CounterScene extends Phaser.Scene {
     this.layoutKey = key;
     this.layout = layout;
     if (!was || was.width !== layout.width || was.stageHeight !== layout.stageHeight || was.floorHeight !== layout.floorHeight) {
-      this.backdrop.build(layout);
+      this.backdrop.build(layout, store.state.gear);
     }
     this.stage.build(layout, store.state);
   }
 
   private onState(state: GameState, previous: GameState) {
+    if (state.gear !== previous.gear && this.layout) this.backdrop.furnish(this.layout, state.gear);
     if (state.slots.length !== previous.slots.length) {
       this.relayout();
       return;

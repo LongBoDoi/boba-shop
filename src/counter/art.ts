@@ -47,9 +47,9 @@ export function sizeTagSvg(): string {
     borderedRect(0, 0, SIZE_TAG.width, SIZE_TAG.height, 5, '#FFF4DC', 1, '#C99F6A'));
 }
 
-/** `FloatingText`'s chip: white, 12px corners, a 2px border in the message's tone. 25 tall. */
+/** `FloatingText`'s chip: white, 12px corners, a 2px border in the message's tone. 25 tall for one line. */
 export const CHIP_HEIGHT = 25;
 
-export function chipSvg(width: number, color: string): string {
-  return svgDoc(width, CHIP_HEIGHT, borderedRect(0, 0, width, CHIP_HEIGHT, 12, '#FFFFFF', 2, color));
+export function chipSvg(width: number, color: string, height: number): string {
+  return svgDoc(width, height, borderedRect(0, 0, width, height, 12, '#FFFFFF', 2, color));
 }

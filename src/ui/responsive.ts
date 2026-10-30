@@ -14,8 +14,38 @@ export const ORDER_PANEL_HEIGHT = 132;
 /** …and laid across the top of a landscape screen, where the tiles move up beside the name. */
 export const ORDER_BAND_HEIGHT = 100;
 
+/** The order card's padding, and the room its progress bar takes with the air around it. */
+export const ORDER_CARD_PAD = 10;
+export const ORDER_TRACK_HEIGHT = 18;
+
+/** Hỏi lại where it stands in for a row of tiles, and the least it can be read and pressed at. */
+export const ASK_HEIGHT = 44;
+export const ASK_MIN_HEIGHT = 28;
+/** A short card's padding above and below, and the air between its head and the button. */
+export const SHORT_CARD = { top: 6, gap: 4, bottom: 4 };
+
+/**
+ * How tall Hỏi lại stands in a side column too short for it, or null where it fits. `tileRoom` is
+ * what the card has left for its tiles. A tile can shrink and a clipped one costs a look, but this
+ * button is the one thing on a hidden card to press. So what the card can do without goes first: the
+ * progress bar, which is empty on this card, then most of the padding, then the button's own height.
+ */
+export function askHeightFor(tileRoom: number): number | null {
+  if (tileRoom >= ASK_HEIGHT) return null;
+  const given = ORDER_TRACK_HEIGHT + ORDER_CARD_PAD * 2 - SHORT_CARD.top - SHORT_CARD.gap - SHORT_CARD.bottom;
+  return Math.min(ASK_HEIGHT, Math.max(ASK_MIN_HEIGHT, tileRoom + given));
+}
+
+/**
+ * The narrowest window that counts as sideways: just under the shortest phone there is on its side,
+ * which is 568. It was 760, and a phone narrower than that (667, 736, 740) was laid out upright, with
+ * the order card and the buttons stacked into its height. That left the room 17 to 111px tall, with
+ * the tanks above the top of it and the cup's mat below the bottom.
+ */
+export const SIDEWAYS_MIN_WIDTH = 560;
+
 export function isWideLayout(width: number, height: number) {
-  return width >= 760 && width > height * 1.15;
+  return width >= SIDEWAYS_MIN_WIDTH && width > height * 1.15;
 }
 
 /**
@@ -53,6 +83,18 @@ export const PREP_BAND_HEIGHT = ORDER_BAND_HEIGHT + 7 + 8 + 2;
 export const PREP_ACTIONS_HEIGHT = 48 + 6 + 6 + 2;
 
 export type PrepLayout = 'stacked' | 'band' | 'column';
+
+/** The gap between the overtime dock and the edge it stands against. */
+const DOCK_GUTTER = 6;
+
+/**
+ * How far the overtime dock stands from the pager's right edge. In the column that is the width of
+ * the column and then some: the column has no space of its own to lend, because `fitTiles` grows the
+ * card into all of it, and a pill over the order hides what the customer asked for.
+ */
+export function overtimeDockRight(layout: PrepLayout, width: number, height: number) {
+  return (layout === 'column' ? panelWidthFor(width, height) : 0) + DOCK_GUTTER;
+}
 
 /**
  * Where the order and the buttons go. `pageHeight` is the pager's measured height (0 until

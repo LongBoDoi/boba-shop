@@ -14,6 +14,7 @@ import { DayEndScreen } from './DayEndScreen';
 import { GameScreen } from './GameScreen';
 import { LoadingScreen } from './LoadingScreen';
 import { animateSampled, easeInOut } from './motion';
+import { RegularBook } from './RegularBook';
 import { SettingsSheet } from './SettingsSheet';
 import { Svg } from './Svg';
 import { TitleScreen } from './TitleScreen';
@@ -47,6 +48,7 @@ export function App() {
   const ready = useUi((ui) => ui.ready);
   const phase = useGame((state) => state.phase);
   const settings = useUi((ui) => ui.settings);
+  const book = useUi((ui) => ui.book);
   // A card that covers the screen and takes every touch must not be able to drain three patience
   // timers while it is read, so it waits for a lull — which at launch is immediate, because the
   // day is always either not started or paused by then.
@@ -97,7 +99,7 @@ export function App() {
 
   // A card opened on one screen does not follow the player to the next.
   useEffect(() => {
-    uiState.set({ settings: false });
+    uiState.set({ settings: false, book: false });
     if (shown !== 'playing') setGameArea(null);
   }, [shown]);
 
@@ -112,6 +114,7 @@ export function App() {
       {shown === 'playing' && <GameScreen />}
       {shown === 'dayEnd' && <DayEndScreen />}
       {settings && <SettingsSheet />}
+      {book && <RegularBook />}
       {!busy && !opening && <UpdateCard />}
       <div class="wipe">
         <div ref={fade} class="wipe-fade" />

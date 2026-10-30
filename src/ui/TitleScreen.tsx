@@ -94,6 +94,7 @@ export function TitleScreen() {
                 onPress={() => dispatch(resuming ? { type: 'RESUME_DAY' } : { type: 'START_DAY', day: openDay })}
                 class="title-start" />
               <Button label="⚙️ Cài đặt" variant="secondary" onPress={() => uiState.set({ settings: true })} />
+              <Button label="📒 Sổ khách" variant="secondary" onPress={() => uiState.set({ book: true })} />
             </div>
           </div>
         </div>

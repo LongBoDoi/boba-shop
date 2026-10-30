@@ -1,6 +1,8 @@
 import Phaser from 'phaser';
 
+import { kindOf } from '../game/customers';
 import { Departure } from '../game/reducer';
+import { leftContent } from '../game/rules';
 import { Mood } from '../art/character';
 import { cupLayout, cupSvg } from '../art/cup';
 import { risingHeartSvg, steamPuffSvg } from '../art/icons';
@@ -25,8 +27,11 @@ export class LeavingView {
     const { scene, bank, layout } = ctx;
     const { charWidth, charHeight, slotWidth } = layout.metrics;
     const { outcome, drink, customer } = departure;
-    const happy = outcome === 'perfect' || outcome === 'close';
-    const mood: Mood = outcome === 'perfect' ? 'delighted' : outcome === 'close' ? 'happy' : 'angry';
+    const happy = leftContent(departure);
+    // A shipper who ran out of time has another delivery to get to, and no quarrel with the shop. An
+    // office worker handed something nearly right takes it unimpressed, and does not pay for it.
+    const unbothered = (outcome === 'timeout' && kindOf(customer.look) === 'shipper') || (outcome === 'close' && !happy);
+    const mood: Mood = outcome === 'perfect' ? 'delighted' : happy ? 'happy' : unbothered ? 'neutral' : 'angry';
 
     // The figure's own box, as the `Animated.View` it is drawn in.
     const top = layout.stageHeight - FIGURE_LIFT - charHeight;
@@ -51,7 +56,7 @@ export class LeavingView {
       this.root.add(cup);
     }
 
-    const rising = outcome === 'perfect' ? 'heart' : !happy ? 'steam' : null;
+    const rising = outcome === 'perfect' ? 'heart' : !happy && !unbothered ? 'steam' : null;
     if (rising) {
       const size = rising === 'heart' ? { width: 18, height: 16 } : { width: 24, height: 14 };
       const y = top + charHeight * 0.05;

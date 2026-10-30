@@ -1,16 +1,78 @@
 # Making the shop deeper: a proposal
 
-**Status: nothing here is built, and nobody has played any of it.** This is a design document
-written to be handed to another machine or another session. The measurements are real — a bot
-played whole shifts through the shipped `gameReducer` — but every rule value in it ("half
-patience", "triple tip", prices) is a starting guess to tune, and no bot can say whether any of
-this is fun.
+**Status: built, and nobody has played any of it.** The prerequisites, Kiểu khách with its spoken
+line, Tăng ca, Sắm cho tiệm, Đợt khách and the first version of Như cũ nhé are all in the game.
+**CLAUDE.md is the record of what exists: where it and this document differ, CLAUDE.md is right.**
+They were built one after another, but not shipped and played one at a time as §4 asks: nobody timed
+a real drink first, and none of §4's keep-going tests has been run. A bot has played the whole set
+(`tools/sim/baseline/mechanics-final.out`), and no bot can say whether any of this is fun.
+
+Everything below this status is the proposal as it was written, and its analysis has not been
+rewritten. §1 measures the game before any of this. The rule values in §3 were starting guesses:
+"half patience", "triple tip" and the prices stood, and what tuning did move is in the list below.
+The numbers are in `src/game/rules.ts` and `src/game/gear.ts`.
+
+**Left out of this version, and why:**
+
+- **The pour target band (decision 1).** It reverses a pinned rule, "Payment has no hidden fill
+  threshold", and it was not in the build order.
+- **The throwaway no-hints build (decision 8).** It is a test with players, and there have been none.
+- **One-change visits, patience scaling and absences for regulars.** §3C's first version leaves them
+  out, which leaves a learned drink free to become a lookup.
+- **Chiêu trong tuần.** Held until the rest has been played, as §4 says.
+- **Everything in §6**, for the reasons given there.
+- **The minimum-build field for backup codes** (§7). The trap stands: a code from a newer build
+  pasted into an older install still silently loses purchases and regulars.
+
+**Decisions taken:** 2 (losing half the jar is compatible with "a day cannot be failed"), 3 (a usual
+is capped at four tiles, its size included), 4 (a wrong drink stops counting as served), 5 (rushes are
+tuned for the slower player), 6 (the mechanics are live from day 1, overtime still from day 3 as §3D
+says) and 7 (relaxed is warmth without pressure), all as recommended. 1 and 8 are the two above.
+
+**Where the build overrode this document, or decided what it left open:**
+
+- A wrong drink also adds to `missed`. Leaving it out of `served` alone keeps one perfect cup and
+  twenty-five wrong ones at three stars. An office worker's `close` pays nothing but counts as served.
+- The overtime pill is low on the screen and not over the tabs, which are at the top. §3D says both.
+- A customer who came in after a press never touches `stats`, in any outcome. That is how "the normal
+  day's stars are never touched" is kept.
+- A shipper leaving does not burn the jar, which §3D asked to have ruled on.
+- Going relaxed with a round running forfeits that day's bonus and any further press, even if the
+  shop switches back; otherwise relaxed is a free way to a safe bonus.
+- A press brings one group at once, cancelling any quiet, and no other wave starts after it, which
+  §3B said to decide. That holds in relaxed too: nobody new comes in once a round has been pressed,
+  or going relaxed after a press would pay better than the bonus it forfeits.
+- A regular takes only a seat announced as plain or not announced at all, so that the lull's preview
+  stays true, and none comes after a press. `Customer.asked?` became `Customer.recall`.
+- The introductions run kinds, regulars, waves, overtime, so a new shop hears about regulars on day
+  2 and overtime on day 3, the days they first happen.
+- Where tuning landed: the late-round floor is 25 s and not §3D's about 31 s, a round leaves ×0.7 of
+  patience, the jar's bonus is 0.1 a round, someone outside waits 35 s, and the day's own shortest wait
+  for a drink is 65 s and not 60.
+
+**Three deviations nobody ruled on, built that way and listed here for the owner to accept or reverse:**
+
+- **The lull pill is on the counter page only.** The build brief put it at the top of the pager on
+  both pages. On the prep page it lay over the empty order card and its own words, so the card now
+  says the same two lines itself: the player reads them on both pages, but only one of them has a pill.
+- **A group's kinds are rolled when the quiet starts, and its faces as each customer arrives.** The
+  brief rolled looks and kinds together. Only kinds are previewed and only kinds are kept (`incoming`),
+  so nothing on screen can tell the difference.
+- **Sideways starts at 560 wide, not 760**, on both pages. Nobody asked for it, and it changes the
+  layout of every landscape window from 560 to 759. It went in because a phone on its side (667, 736,
+  740) was being laid out upright, with a room 17 to 111px tall. See "Turning it on its side" in
+  CLAUDE.md.
+
+**Two things below no longer hold.** The opening sign scrolls now, so "cannot grow" in §2 and §7 is
+resolved, and there is no spawn rate left to tune (§1, §8): customers come in groups.
+
+**Every line reference below is stale.** They were taken against commit `208cffc` with the frontal-cup
+work uncommitted on top, and those files have moved a long way since. Some of what they point at has
+changed file, like `starsFor`, which is in `rules.ts` now, and some is gone, like the spawn block.
+Read them as where things were.
 
 It exists because the two people who play this game both said the same thing: it feels like
 something is missing, it is too simple, and it gets boring after a few minutes.
-
-Line references were taken against commit `208cffc` with the frontal-cup work uncommitted on top.
-Check each one before trusting it.
 
 ---
 
