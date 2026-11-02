@@ -21,6 +21,10 @@ node tools/sim/tune.cjs          # sweeps the constants in rules.ts without edit
 node tools/sim/probe-layout.cjs  # where the stations sit, and how much wall fits on screen
 ```
 
+Lidding now takes one tap, with no machine loading or press delay. The `machine` timing
+column remains for comparison with historical baselines and is zero for new runs; the old
+`lidHop` option has no effect. Historical baseline files are unchanged.
+
 `bot.cjs` is the bot, `shop.cjs` chains one shop through the days for `run5.cjs` and `tune.cjs`, and
 `load.cjs` does the loading.
 

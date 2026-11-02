@@ -61,7 +61,7 @@ try {
     let cup = gameReducer(state, { type: 'TAKE_ORDER', slot });
     cup = gameReducer({ ...cup, selectedSlot: slot }, { type: 'PICK_CUP', size: 'M' });
     cup = gameReducer(cup, { type: 'POUR', category: 'tea', optionId: 'black', amount: 0.6 });
-    for (const type of ['LOAD_LIDDER', 'LID_CUP', 'ADD_STRAW', 'SERVE']) cup = gameReducer(cup, { type });
+    for (const type of ['LID_CUP', 'ADD_STRAW', 'SERVE']) cup = gameReducer(cup, { type });
     return cup;
   };
   /** The counter emptied, and it is not the opening of the day: someone has already been through the door. */

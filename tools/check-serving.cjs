@@ -154,7 +154,7 @@ try {
     return state;
   }
 
-  const finishCup = (state) => gameReducer(gameReducer(gameReducer(state, { type: 'LOAD_LIDDER' }), { type: 'LID_CUP' }), { type: 'ADD_STRAW' });
+  const finishCup = (state) => gameReducer(gameReducer(state, { type: 'LID_CUP' }), { type: 'ADD_STRAW' });
 
   const makeCup = (amount) => buildCup(ordered, recipe, amount);
 

@@ -1324,12 +1324,9 @@ pan: it is the one thing that belongs to the player's hand.
   (`tipToolIn`), whichever way the tool got there: a tap is refused before it sets off, so nothing
   crosses the room to be turned away at the cup. Sugar carries a spoonful while its jar stays on
   the counter. Milk takes room in the cup, so a cup filled to the brim with tea has nowhere to put it.
-- **A carton and a cream dispenser are carried whole, so their place on the counter stands empty.** The room
-  has one of each, and `holdStation` hides the station's sprite and its contact shadow from the
-  moment it is lifted until the carried one is off the screen — tipped in, put back, or dropped
-  when the game was put down, which is why the release is in `update` where `show` reaches 0 rather
-  than in each of those three. A topping bin, the ice machine and the sugar jar stay where they
-  are, because what leaves them is a scoopful and not the container.
+- **Stationary supplies are painted into one room image.** Cartons, cream cans and their shadows
+  remain in the background while a temporary serving-tool sprite is carried or tipped into the cup.
+  There is no hiding a station, repainting a footprint or scaling its artwork on press.
 - **While the cup is docked under a tap, nothing can be picked up.** A touch on any tool answers
   `Ly đang ở dưới vòi … — kéo ly ra trước` rather than lifting, and still takes the touch, so the
   room does not pan out from under it. The cup is up at the shelf, nowhere near the bench.
@@ -1421,10 +1418,16 @@ is loaded. See `docs/frontal-cup.md`.
   ambient loop refreshes at 24 fps independently of faster pouring ripples; it stops while paused,
   off the kitchen page, or under reduced motion. All motion stays clipped to the real liquid fill
   and behind ingredients, glass and finishing parts. No fill-level or gameplay change is involved.
-- **Glass has warm, natural material detail.** Clear PET reflections cross filled regions at
-  62%; reflections continue across ice and the topping bed. A cached front-wall texture replaces
-  only the back-floor painting with continuous wall material, so the rear base ellipse stays
-  behind the contents. A rolled rim and the outer base contour stay crisp at device density.
+- **Glass reflections follow the outer wall.** The original interior material is restrained to
+  22%, with cached, tapered window highlights over the near wall. A stronger warm reflection
+  on the right and quieter counter bounce on the left cross air, tea, ice and toppings without
+  cutting off at the fill line. Their feathered width converges toward the base; the center stays
+  clear enough to read the drink. The rear floor stays behind contents, and the rolled near lip
+  and outer base remain crisp. Reflections are rasterized once at 6× density, without blur filters
+  or per-frame pixel processing. The former liquid-only reflection has been removed.
+  The mouth's original rectangular white strips are attenuated in a cached glass texture:
+  a faint inner-wall gradient and curved rim glint replace them. The mask extends beneath the
+  near lip to avoid white tabs at its ends; the back rim is still drawn before the straw and cream.
 - **Ingredients are identified by pictures, without name tags.** Tea tanks have distinct
   leaf, jasmine, anise, rolled-leaf, taro and matcha emblems (`art/ingredientMarks.ts`). Topping
   pans show their contents unobscured. Sugar uses a cube motif; the ice box keeps its original
@@ -1441,17 +1444,13 @@ is loaded. See `docs/frontal-cup.md`.
   Carton frames are 104×159 room units at x565/710 on the left compact board, with 76×119 cream frames at
   x996/1116 on the right board. Each pair's feet stagger slightly at y884/890, leaving space
   on the wooden top for the cast shadows before its front edge.
-  Carton and cream silhouettes project down-left. Both use each source column's
-  measured opaque lower rim instead of a flat baseline; the contact stroke follows that same
-  curve. The profile is cached once per source texture. Source-in shading clips to its own
-  atlas frame. Overlapping dairy touch targets select the nearest container center.
-  Soft directional shadows and tight contact shading ground the packages. Their proportions and positions
-  follow the background scale in every orientation, and stay the same when picked up. Cream counter objects
-  hide while held. See `docs/milk-cartons.md`, `docs/cream-options.md` and `docs/visual-orders.md`.
+  Stationary cartons, cream cans and their contact shadows are part of `kitchen-unified.png`;
+  only carried tools use the package sprites. Overlapping dairy touch targets select the nearest
+  container center. See `docs/unified-kitchen.md` for the active painting and validation.
 - **Functional kitchen lettering keeps an 11 CSS pixel minimum** (`kitchen/typography.ts`):
   cup-size badges, quantities and hints. The ivory cup rack has painted S/M/L cat medallions,
   with no separate plaque overlays. Its clear stacks and the matching wrapped-straw box use
-  two small local patches; all other background pixels remain original. Touch targets follow
+  the unified room painting. Touch targets follow
   their measured footprints. See `docs/cat-organizers.md`. The cup-size badge compensates for
   docking scale. Ingredient names remain available to screen readers; there are no visible
   ingredient name captions or plaques.
@@ -1470,45 +1469,24 @@ is loaded. See `docs/frontal-cup.md`.
 **A full cup is drawn full.** Liquid reaches y28 at fill 1. `cupMarks.ts` and the visible
 stream derive endpoints from the same geometry. No artificial starting fill or upper plateau
 is applied. S/M/L share the frontal projection and original relative widths, and stand by
-`CUP_FOOT` on the shared mat. Lid, straw, lidding press, ingredient landing, and shadow use
+`CUP_FOOT` on the shared mat. Lid, straw, ingredient landing, and shadow use
 the frontal dimensions. The dome has thin reflective edges; the inserted straw fades below
 the lid instead of painting opaquely across the front of the cup.
 
 ### The kitchen's artwork
-The active room keeps `kitchen-room-counter-cups.png` for the upper room. The lower counter
-renders directly from the untouched first `kitchen-overhead.png`, starting at native source y343.
-Both wooden boards use independent transparent sprites from `dairy-boards-overhead-v2.png`,
-420×206 and 366×206 logical units at x440/882, y760. The top-to-front projection eases smoothly
-through the rounded lower edge, using every source row. The old six-unit compressed edge looked
-clipped; reserve 14 units for its complete front profile and cast the outer shadow once after
-assembling the board. A masked marble removal source fills only their old footprints
-and shadow margins. Raised ice/sugar use separate rounded rim crops and their existing small
-old-ice clearing patch. See `docs/central-boards.md` and `docs/restored-original-boards.md`.
-**Preserve background sharpness:** the user requires unrelated artwork to remain untouched.
-Keep original PNGs immutable. Future edits must use isolated object sprites or tightly scoped
-crops/masks; never replace broad counter strips or the full background with regenerated output.
-Restore original pixels when available rather than sharpening or regenerating them repeatedly.
-`tea-dispensers-overhead.png`, `counter-props-overhead.png` and
-`topping-pans-overhead.png` supply matching equipment, shared with order illustrations.
-The original plate uses 1920×1080 coordinates; its counter anchors are offset by a 350-unit upper extension,
-for a 1920×1430 room. The original file remains untouched as a design reference.
-All six tanks keep the first top-down design's apparent size, with 180-unit reference widths
-compensated for the taller room. `roomGeometry.ts` owns those dimensions. `kitchenRoomArt.ts` supplies
-one imagegen-repaired room, including the tall rack and continuous sunlit wall. Do not reintroduce
-separate wall strips or stretched-row fades; they caused a blurry horizontal join. The press head
-crops from the same active background. The compact cup organizer rests directly on the counter;
-the long shelf behind it is removed. Its lower selection targets and size badges follow
-`ROOM_BG_CUP_STATION`. See [cup station](docs/counter-cup-station.md) and [wall repair](docs/continuous-kitchen-wall.md) for their
-prompt, and [tall tea shelf](docs/tall-tea-shelf.md) for the room and tank anchors.
-See [overhead kitchen artwork](docs/overhead-kitchen.md) for the original asset provenance.
-The counter pans by swiping; there are no bottom station shortcuts or reserved shortcut bar.
-One compact foreground mat serves preparation and finishing; lidded cups return to that same mat.
-The ice and liquid-sugar trays share straight aligned edges. Their existing source crop is raised
-160 source pixels, placing ice level with the topping station; `KITCHEN_ROOM_TRAY_RAISE` moves
-both the artwork and touch bounds. A local marble patch clears the old ice footprint. Their station
-bounds share x/width/height, separated by eight logical pixels. Only touch highlights and carried
-scoops/ladles are dynamic; do not preload a separate sugar-tray sprite. See
-[raised trays](docs/raised-ice-sugar.md) for placement, source artwork and validation.
+
+`src/assets/kitchen/kitchen-unified.png` is the active 1453×1083 painting. The user explicitly
+requested a complete repaint to integrate all stationary interactable equipment into the room.
+`KitchenScene.buildRoom` displays one background image, with transparent-at-rest touch highlights.
+There are no room patches, station sprites, projected bin strips or separate equipment shadows.
+The original PNGs remain untouched as references; the old patch assets are no longer preloaded.
+The logical room remains 1920×1430, so scrolling, tank spouts, tray cells, rack sizes, dairy,
+instant lidding and straw targets keep their registered positions. All ingredients are available
+from day one. Adding a new stationary ingredient now requires updating the painting and its target.
+The player's cup, contents, lid/straw, serving tools, pour stream and shared cup holder remain
+independent dynamic visuals. The holder stays fixed while the room pans, as before.
+Preserve the new painting's sharpness: use its native pixels directly without repeated resizing,
+blur, or broad patch overlays. See `docs/unified-kitchen.md` for the prompt, source and verification.
 
 Nearly everything in the prep room is a **painted sprite**. `tools/cut-sheets.py` cuts
 `tools/sheets/*.png` into `src/assets/kitchen/`; `tools/cut-topping-boxes.py` cuts the new
@@ -1779,12 +1757,9 @@ The holder stays fixed while the room pans. Preparation and finished cups stand 
 at `HOLDER_SEAT`; there is no separate finishing home. See [holder](docs/cat-cup-design.md).
 The room opens panned all the way to the left.
 
-The background contains empty pans, so the topping atlas fills their measured plane. Each row
-shares its boundaries with the next; `toppingGeometry.ts` projects the painted rims as horizontal
-bands. Row boundaries follow the active background's compartments at logical y427/516/616/725
-before the wall offset, rather than equal thirds. These same bounds place the topping touch
-targets. See [topping alignment](docs/topping-bin-alignment.md). The press head is cropped from
-the active room and moves to the inserted cup's rim.
+The background includes all nine filled topping bins. `toppingGeometry.ts` retains their measured
+row boundaries for hit testing and order-panel diagrams; the scene does not project separate pan
+sprites over them. Finishing uses a painted lid stack, with no moving machine or press head.
 
 
 ## Conventions
@@ -1918,3 +1893,12 @@ the active room and moves to the inserted cup's rim.
   reason. The rest is phone-only and a browser cannot fake it: downloading a build into the app, pointing the WebView at it, the rollback when one does not
   boot, and Android's installer prompt all need two real builds on a real device. Say so in the
   report.
+
+### Tap-to-lid stack
+
+The clear cat-ear lid stack replaces the lidding machine within the unified background painting.
+Tapping it dispatches `LID_CUP` immediately and returns the cup to its holder. There is no
+loading movement or press timer. Tea is required; a straw still follows the lid. Old saves
+with `inLidder` return unfinished to the holder after validation. Legacy machine actions
+remain reducer-compatible, but no player interaction or simulator route uses them.
+See `docs/lidding-station.md` for art provenance and validation.

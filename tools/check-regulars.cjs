@@ -66,7 +66,7 @@ try {
   function hand(state, { size = 'M', tea = 'black', amount = 0.6 } = {}) {
     let cup = gameReducer(state, { type: 'PICK_CUP', size });
     cup = gameReducer(cup, { type: 'POUR', category: 'tea', optionId: tea, amount });
-    for (const type of ['LOAD_LIDDER', 'LID_CUP', 'ADD_STRAW']) cup = gameReducer(cup, { type });
+    for (const type of ['LID_CUP', 'ADD_STRAW']) cup = gameReducer(cup, { type });
     assert.ok(canServe(cup), 'The cup is ready');
     return gameReducer(cup, { type: 'SERVE' });
   }

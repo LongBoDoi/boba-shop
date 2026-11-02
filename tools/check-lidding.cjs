@@ -27,21 +27,22 @@ const legacy = JSON.parse(serializeGame(state));
 delete legacy.build.lidded; delete legacy.build.straw; delete legacy.build.inLidder;
 assert.equal(parseGame(JSON.stringify(legacy)).build.lidded, false, 'Old saves keep their unfinished cup');
 assert.equal(parseGame(JSON.stringify(legacy)).build.straw, false);
-assert.equal(reduce(state, { type: 'LID_CUP' }), state, 'The cup must be inserted into the machine');
 assert.equal(parseGame(JSON.stringify(legacy)).build.inLidder, false);
-state = reduce(state, { type: 'LOAD_LIDDER' });
-assert.equal(state.build.inLidder, true);
-assert.equal(parseGame(serializeGame(state)).build.inLidder, true, 'A cup left inside the machine survives reload');
-assert.equal(reduce(state, { type: 'LOAD_LIDDER' }), state, 'A machine cannot load a second cup');
-assert.equal(reduce(state, { type: 'ICE_SCOOP' }), state, 'Ingredients cannot be added inside the machine');
-const pausedCycle = reduce(state, { type: 'SET_PAUSED', paused: true });
-assert.equal(reduce(pausedCycle, { type: 'LID_CUP' }), pausedCycle, 'Pausing suspends the machine');
-const pulledOut = reduce(state, { type: 'UNLOAD_LIDDER' });
-assert.equal(pulledOut.build.inLidder, false);
-assert.equal(pulledOut.build.lidded, false, 'Pulling the cup out cancels lidding');
-assert.equal(reduce(pulledOut, { type: 'LID_CUP' }), pulledOut);
+const oldMachineSave = JSON.parse(serializeGame(state));
+oldMachineSave.build.inLidder = true;
+const restored = parseGame(JSON.stringify(oldMachineSave));
+assert.equal(restored.build.inLidder, false, 'Old machine saves return to the holder');
+assert.equal(restored.build.lidded, false, 'Restoring does not silently finish a drink');
+assert.deepEqual(restored.cup, state.cup, 'Migration preserves every ingredient');
+const resumed = reduce(restored, { type: 'SET_PAUSED', paused: false });
+assert.equal(reduce(resumed, { type: 'LID_CUP' }).build.lidded, true, 'A restored drink lids with one tap');
+for (const mutate of [raw => raw.build.lidded = true, raw => raw.cup.tea = null]) {
+  const invalid = structuredClone(oldMachineSave); mutate(invalid);
+  assert.equal(parseGame(JSON.stringify(invalid)), null, 'Invalid legacy machine states are still rejected');
+}
 state = reduce(state, { type: 'LID_CUP' });
-assert.equal(state.build.inLidder, false, 'A completed machine cycle ejects the cup');
+assert.equal(state.build.lidded, true, 'One action lids the cup without loading or waiting');
+assert.equal(state.build.inLidder, false, 'The cup stays on its holder');
 assert.equal(reduce(state, { type: 'LID_CUP' }), state, 'A cup takes one lid');
 assert.equal(reduce(state, { type: 'SERVE' }), state, 'A lidded cup still needs a straw');
 assert.equal(parseGame(serializeGame(state)).build.lidded, true, 'Lid-only progress survives reload');
@@ -77,11 +78,11 @@ for (const [width, height] of [[390, 480], [375, 330], [620, 315], [740, 400]]) 
   const cupX = lid.cx - pan - layout.cupW / 2;
   const cupY = lid.y + lid.h * 0.7 - layout.cupH / 2;
   assert.equal(findStation(layout.stations, cupX, cupY, layout.cupW, layout.cupH, pan, width)?.kind,
-    'lid', 'Dropping a cup into the machine bay selects the machine');
+    'lid', 'Dropping a cup onto the lid stack selects lids');
   for (const station of [lid, straw]) {
     assert(station.x + station.w <= layout.room.width, 'The station fits in the expanded room');
     assert(station.cx - layout.room.maxPan < width, 'Panning reaches the station');
     assert(station.y >= 0 && station.y + station.h <= height, 'The station stays visible vertically');
   }
 }
-console.log('Passed: machine insertion, cancellation, paused cycles, ejection, straw/serve gates, save migration, bay drops and station reach.');
+console.log('Passed: instant lidding, pause/empty/duplicate gates, straw/serve gates, legacy save migration, lid drops and station reach.');

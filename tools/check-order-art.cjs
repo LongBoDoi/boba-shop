@@ -19,12 +19,7 @@ const { TEA_DISPENSER_ART, ROOM_BG_TEA_SHELF, ROOM_BG_TOPPING_SHELF } = require(
 const { TOPPING_PAN_ART, TOPPING_PANS, TOPPING_SCOOP_ART, TOPPING_SCOOPS } = require('../src/art/toppingArt.ts');
 const { equipmentFrame } = require('../src/art/equipmentArt.ts');
 const { PRELOAD, ROOM_BG, ROOM_BG_ICE_MACHINE, ROOM_BG_EXTRAS } = require('../src/art/kitchenArt.ts');
-const {
-  KITCHEN_ROOM_ART, KITCHEN_ROOM_RENDER, KITCHEN_ROOM_TRAYS, KITCHEN_ROOM_TRAY_PATCH,
-  KITCHEN_ORIGINAL_COUNTER, KITCHEN_ORIGINAL_COUNTER_ART, KITCHEN_ROOM_TRAY_CELLS,
-  KITCHEN_BOARDS, KITCHEN_BOARD_ART, KITCHEN_BOARD_ATLAS, KITCHEN_CLEAR_BOARDS, KITCHEN_CLEAR_BOARDS_PATCH,
-  KITCHEN_ROOM_TRAY_RAISE, KITCHEN_ROOM_CLEAR_ICE, KITCHEN_ROOM_CLEAR_ICE_PATCH,
-} = require('../src/art/kitchenRoomArt.ts');
+const { KITCHEN_ROOM_ART, KITCHEN_ROOM_RENDER, KITCHEN_BOARDS } = require('../src/art/kitchenRoomArt.ts');
 const { ORIGINAL_TEA_WIDTH, ORIGINAL_ROOM_SIZE } = require('../src/art/roomGeometry.ts');
 const { layoutKitchen, findDairyStation } = require('../src/kitchen/layout.ts');
 const { getDayConfig } = require('../src/game/levels.ts');
@@ -65,59 +60,21 @@ const roomPng = fs.readFileSync(KITCHEN_ROOM_RENDER);
 assert.equal(roomPng.readUInt32BE(16), KITCHEN_ROOM_ART.width);
 assert.equal(roomPng.readUInt32BE(20), KITCHEN_ROOM_ART.height);
 assert(PRELOAD.includes(KITCHEN_ROOM_RENDER), 'The continuous room must load before play');
-assert.equal(crypto.createHash('sha256').update(roomPng).digest('hex'),
+assert.equal(crypto.createHash('sha256').update(fs.readFileSync(require.resolve('../src/assets/kitchen/kitchen-room-counter-cups.png'))).digest('hex'),
   'b00a0387aafe06ddb56a187c2b212edae5c12ec15e2e96e6723b977979b7bd5a',
-  'Use the original room pixels instead of the repeatedly regenerated room');
-assert(PRELOAD.includes(KITCHEN_ROOM_TRAYS), 'The local tray edit loads before play');
-const patch = KITCHEN_ROOM_TRAY_PATCH;
-assert(patch.x >= 0 && patch.y >= 0 && patch.x + patch.width <= KITCHEN_ROOM_ART.width
-  && patch.y + patch.height <= KITCHEN_ROOM_ART.height, 'The tray crop fits its source');
-assert(patch.width * patch.height < KITCHEN_ROOM_ART.width * KITCHEN_ROOM_ART.height * 0.05,
-  'Tray edits cannot replace or soften the rest of the room');
-assert(PRELOAD.includes(KITCHEN_ROOM_CLEAR_ICE));
-const clearedCounter = fs.readFileSync(KITCHEN_ROOM_CLEAR_ICE);
-assert.equal(clearedCounter.readUInt32BE(16), KITCHEN_ROOM_ART.width);
-assert.equal(clearedCounter.readUInt32BE(20), KITCHEN_ROOM_ART.height);
-const clear = KITCHEN_ROOM_CLEAR_ICE_PATCH;
-assert(clear.x + clear.width <= KITCHEN_ROOM_ART.width && clear.y + clear.height <= KITCHEN_ROOM_ART.height);
-assert(clear.y >= 734, 'Clearing the old ice cannot overwrite the restored boards');
-assert(clear.width * clear.height < KITCHEN_ROOM_ART.width * KITCHEN_ROOM_ART.height * 0.04,
-  'Clearing the old ice footprint preserves the surrounding stations');
+  'The previous painting remains available as an untouched source');
+assert(KITCHEN_ROOM_RENDER.endsWith('kitchen-unified.png'), 'The room uses the complete repaint');
+for (const file of ['cat-lid-stack.png', 'cat-cup-rack.png', 'cat-straw-box.png',
+  'kitchen-room-aligned-trays.png', 'kitchen-room-clear-ice.png', 'kitchen-counter-clear-boards.png', 'kitchen-overhead.png']) {
+  assert(!PRELOAD.some(asset => asset.endsWith(file)), `${file}: obsolete room patches must not be loaded`);
+}
 assert(Math.abs(ROOM_BG_ICE_MACHINE.y - ROOM_BG_TOPPING_SHELF.edges[0].y) < 16,
-  'The ice tray starts at the same counter level as the topping station');
-assert(Math.abs((979 - ROOM_BG_ICE_MACHINE.y) / 1430 * 1083 - KITCHEN_ROOM_TRAY_RAISE) < 0.001,
-  'Ice touch bounds move with the painted tray');
+  'Ice and toppings remain at the same level of the painted counter');
 assert.equal(ROOM_BG_EXTRAS.sugar.y, ROOM_BG_ICE_MACHINE.y + ROOM_BG_ICE_MACHINE.height + 8);
-assert.equal(KITCHEN_ORIGINAL_COUNTER, ROOM_BG, 'Restore the boards directly from the untouched first design');
-assert(PRELOAD.includes(KITCHEN_ORIGINAL_COUNTER));
-const counterPng = fs.readFileSync(KITCHEN_ORIGINAL_COUNTER);
-assert.equal(counterPng.readUInt32BE(16), KITCHEN_ORIGINAL_COUNTER_ART.width);
-assert.equal(counterPng.readUInt32BE(20), KITCHEN_ORIGINAL_COUNTER_ART.height);
-assert(KITCHEN_ORIGINAL_COUNTER_ART.top < 350, 'The original counter crop includes both complete boards');
-assert(PRELOAD.includes(KITCHEN_CLEAR_BOARDS));
-assert(KITCHEN_CLEAR_BOARDS_PATCH.x + KITCHEN_CLEAR_BOARDS_PATCH.width < 1230,
-  'The board removal source stops before the topping station');
-assert(KITCHEN_CLEAR_BOARDS_PATCH.y + KITCHEN_CLEAR_BOARDS_PATCH.height <= 590,
-  'Only a short marble blend extends below the old board shadows');
-assert(KITCHEN_BOARDS[0].x > (KITCHEN_ROOM_TRAY_CELLS[0].x + KITCHEN_ROOM_TRAY_CELLS[0].width)
-  / KITCHEN_ROOM_ART.width * 1920 + 80, 'The compact boards clear the raised trays');
+assert(KITCHEN_BOARDS[0].x > ROOM_BG_ICE_MACHINE.x + ROOM_BG_ICE_MACHINE.width + 80,
+  'The boards clear the ice/sugar station');
 assert(KITCHEN_BOARDS[1].x > KITCHEN_BOARDS[0].x + KITCHEN_BOARDS[0].width + 12,
   'Both boards have a visible marble gap');
-assert(PRELOAD.includes(KITCHEN_BOARD_ART), 'The boards load with the matching package atlas');
-const boardPng = fs.readFileSync(KITCHEN_BOARD_ART);
-assert.equal(boardPng.readUInt32BE(16), KITCHEN_BOARD_ATLAS.width);
-assert.equal(boardPng.readUInt32BE(20), KITCHEN_BOARD_ATLAS.height);
-for (const board of KITCHEN_BOARDS) {
-  const s = board.source;
-  assert(s.x >= 0 && s.y >= 0 && s.x + s.width <= KITCHEN_BOARD_ATLAS.width
-    && s.y + s.height <= KITCHEN_BOARD_ATLAS.height, 'Board crops stay in the transparent atlas');
-  assert(board.surfaceHeight > board.height * 0.9 && board.height - board.surfaceHeight <= 16,
-    'The overhead board keeps its top plane and a complete rounded front edge');
-}
-for (const pan of KITCHEN_ROOM_TRAY_CELLS) {
-  assert(pan.x >= 0 && pan.y >= 0 && pan.x + pan.width <= KITCHEN_ROOM_ART.width
-    && pan.y + pan.height <= KITCHEN_ROOM_ART.height, 'Each isolated pan fits its source');
-}
 
 // A taller room must not shrink the tanks back below the first top-down design's apparent size.
 for (const [width, height] of [[390, 541], [375, 364], [450, 315], [500, 355], [715, 532]]) {

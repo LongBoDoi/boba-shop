@@ -13,8 +13,6 @@ const { createRng } = src('game/random.ts');
 
 /** Taken from the code, not assumed. */
 const MACHINE = {
-  lidLoad: 600,   // DURATION.slow, KitchenScene.ts:934 (lidderLoading until the cup tween ends)
-  lidPress: 1100, // KitchenScene.ts:1400
   slide: 320,     // SLIDE_MS, pager.ts:13
 };
 
@@ -137,7 +135,7 @@ function knownRegulars({ visits, streak = 0 }, day, seed) {
 
 function shift(opts) {
   const { day, seed, profile = 'skilled', queue = 'fifo', take = 'eager', pour = 'normal', fix = 'remake',
-    layout = 'portrait', speed = 1, panicOff = false, noticeMs = 0, lidHop = false, routeOverride = null, garbage = false, configPatch = null, slipOverride = null, dt = 50, start = null, overtime = 'never', overtimeRounds = Infinity, gear = null, usual = 'sure', known = null } = opts;
+    layout = 'portrait', speed = 1, panicOff = false, noticeMs = 0, routeOverride = null, garbage = false, configPatch = null, slipOverride = null, dt = 50, start = null, overtime = 'never', overtimeRounds = Infinity, gear = null, usual = 'sure', known = null } = opts;
   const P = { ...PROFILES[profile] };
   if (slipOverride !== null) P.slip = slipOverride;
   if (routeOverride) P.route = routeOverride;
@@ -343,26 +341,7 @@ function shift(opts) {
         });
       }
       case 'lid':
-        act({ type: 'LOAD_LIDDER' });
-        return spend(human(P.tap), 'hands', () => {
-          const waiting = customers().filter((t) => t.c.status === 'requesting');
-          const LID = MACHINE.lidLoad + MACHINE.lidPress;
-          if (lidHop && waiting.length) {
-            // The one overlap the game allows: the press runs on while the player is at the counter.
-            const go = human(P.tabTap) + MACHINE.slide, back = human(P.tabTap) + MACHINE.slide;
-            const taps = waiting.reduce((n) => n + human(P.tap), 0);
-            log.trips += 2;
-            return spend(go, 'travel', () => {
-              for (const w of customers().filter((t) => t.c.status === 'requesting')) {
-                log.takes.push({ left: (w.c.orderPatienceMs - (s.clock - w.c.arrivedAt)) / w.c.orderPatienceMs });
-                act({ type: 'TAKE_ORDER', slot: w.slot });
-              }
-              spend(taps, 'hands', () => spend(back, 'travel', () =>
-                spend(Math.max(0, LID - go - taps - back), 'machine', () => act({ type: 'LID_CUP' }))));
-            });
-          }
-          spend(LID, 'machine', () => act({ type: 'LID_CUP' }));
-        });
+        return spend(human(P.tap), 'hands', () => act({ type: 'LID_CUP' }));
       case 'straw':
         return spend(human(P.tap), 'hands', () => act({ type: 'ADD_STRAW' }));
       case 'serve':

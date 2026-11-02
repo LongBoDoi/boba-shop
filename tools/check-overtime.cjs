@@ -60,7 +60,7 @@ try {
   function hand(state, { tea = 'black', size = 'M', amount = 0.6 } = {}) {
     let cup = gameReducer(state, { type: 'PICK_CUP', size });
     cup = gameReducer(cup, { type: 'POUR', category: 'tea', optionId: tea, amount });
-    for (const type of ['LOAD_LIDDER', 'LID_CUP', 'ADD_STRAW', 'SERVE']) cup = gameReducer(cup, { type });
+    for (const type of ['LID_CUP', 'ADD_STRAW', 'SERVE']) cup = gameReducer(cup, { type });
     return cup;
   }
 

@@ -203,6 +203,9 @@ export function parseGame(json: string | null | undefined): GameState | null {
   if ((build.lidded && !cup.tea) || (build.straw && !build.lidded)) return null;
   if (build.inLidder && (!cup.tea || build.lidded || build.straw)) return null;
 
+  // The machine was replaced by a lid stack. Restore old in-progress cups on the holder.
+  build.inLidder = false;
+
   // Only a customer whose order has been taken can be the selected one. If that customer has since
   // gone, the next tick picks whoever has been waiting longest for their drink.
   const selected = int(save.selectedSlot, 0, slots.length - 1);

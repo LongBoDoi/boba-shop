@@ -1,15 +1,12 @@
 import Phaser from 'phaser';
 
 import { SCOOP_ART, SCOOPFUL, SUGAR_SCOOP, SUGAR_SCOOP_ART } from '../art/kitchenArt';
-import { TOPPING_PAN_ART, TOPPING_SCOOP_ART, TOPPING_SCOOPS } from '../art/toppingArt';
-import { toppingPanBands, ToppingPanShape } from '../art/toppingGeometry';
+import { TOPPING_SCOOP_ART, TOPPING_SCOOPS } from '../art/toppingArt';
 import { equipmentFrame, paintEquipment, PaintedEquipmentId } from '../art/equipmentArt';
-import { bakeCanvas, svgTexture, tex } from '../game/view';
+import { bakeCanvas, tex } from '../game/view';
 import { Station } from './layout';
 import { REFERENCE_CUP } from '../art/referenceCupArt';
 import { paintStraw } from '../art/finishingArt';
-import { ingredientMarkSvg } from '../art/ingredientMarks';
-import { TEAS } from '../game/ingredients';
 
 /** One topping's scoopful, as a frame of its atlas. */
 export function scoopFrame(scene: Phaser.Scene, id: string): string | null {
@@ -18,37 +15,6 @@ export function scoopFrame(scene: Phaser.Scene, id: string): string | null {
   const texture = scene.textures.get(tex(TOPPING_SCOOPS));
   if (!texture.has(id)) texture.add(id, 0, cell.x, cell.y, cell.width, cell.height);
   return id;
-}
-
-/**
- * One pan, fitted to its cell of the tray so its painted rims meet its neighbours'. The fit is a
- * trapezoid, drawn as the same stack of horizontal bands `ToppingPanArt` uses. It is a little wider
- * than the cell, so the rims reach its edges: `left` is where the drawing starts relative to it.
- */
-export function panExtent(width: number, height: number, shape: ToppingPanShape | undefined) {
-  const bands = shape ? toppingPanBands(width, height, shape)
-    : [{ x: 0, y: 0, w: width, h: height, top: 0, bottom: 1 }];
-  const left = Math.min(...bands.map((band) => band.x));
-  const right = Math.max(...bands.map((band) => band.x + band.w));
-  return { bands, left, width: right - left };
-}
-
-/** Draw that pan with its own left edge at x = 0. */
-export function drawPan(c: CanvasRenderingContext2D, image: CanvasImageSource, id: string, width: number, height: number,
-  shape: ToppingPanShape | undefined) {
-  const cell = TOPPING_PAN_ART.cells[id] ?? TOPPING_PAN_ART.cells.empty;
-  const { bands, left } = panExtent(width, height, shape);
-  // Trim the transparent top/bottom gutter before fitting the painted rims to their edges.
-  const cropHeight = cell.height - 6;
-  c.save();
-  c.translate(-left, 0);
-  for (const band of bands) {
-    const sy = cell.y + 3 + band.top * cropHeight;
-    const sh = (band.bottom - band.top) * cropHeight;
-    // A hair of overlap, so the seam between two bands never opens into a bright line.
-    c.drawImage(image, cell.x, sy, cell.width, sh, band.x, band.y - 0.25, band.w, band.h + 0.5);
-  }
-  c.restore();
 }
 
 export function sourceImage(scene: Phaser.Scene, asset: string): CanvasImageSource {
@@ -102,105 +68,7 @@ export function wrap(text: string, font: string, width: number, max = 2): string
   return lines;
 }
 
-/** Room light projects the package silhouette down-left from its actual foot. */
-export function equipmentShadowExtent(w: number, h: number, foot: number) {
-  const pad = Math.max(3, w * 0.1);
-  const originY = pad + w * 0.15;
-  return { left: -h * 0.24 - pad, top: foot - originY,
-    width: w + h * 0.24 + pad * 2, height: h * 0.15 + originY + pad, originY };
-}
-
-const equipmentBaseProfiles = new WeakMap<CanvasImageSource, { base: Float32Array; image: HTMLCanvasElement }>();
-
-/** Read the painted lower rim once per source texture, including its curved sides. */
-function equipmentBaseProfile(image: CanvasImageSource, id: PaintedEquipmentId) {
-  const cached = equipmentBaseProfiles.get(image);
-  if (cached) return cached;
-  const frame = equipmentFrame(id);
-  const canvas = document.createElement('canvas');
-  canvas.width = frame.width * 4; canvas.height = frame.height * 4;
-  const context = canvas.getContext('2d')!;
-  context.drawImage(image, 0, 0, canvas.width, canvas.height);
-  const pixels = context.getImageData(0, 0, canvas.width, canvas.height).data;
-  const base = new Float32Array(canvas.width).fill(-1);
-  for (let x = 0; x < canvas.width; x++) {
-    for (let y = canvas.height - 1; y >= canvas.height * 0.8; y--) {
-      if (pixels[(y * canvas.width + x) * 4 + 3] >= 128) {
-        base[x] = (y + 0.5) / canvas.height;
-        break;
-      }
-    }
-  }
-  const profile = { base, image: canvas };
-  equipmentBaseProfiles.set(image, profile);
-  return profile;
-}
-
-export function drawEquipmentShadow(c: CanvasRenderingContext2D, image: CanvasImageSource,
-  id: PaintedEquipmentId, w: number, h: number, foot: number) {
-  const box = equipmentShadowExtent(w, h, foot);
-  const frame = equipmentFrame(id);
-  const bodyWidth = w * frame.target.width / frame.width;
-  const cx = -box.left + w / 2, cy = box.originY;
-  const profile = equipmentBaseProfile(image, id);
-  const base = profile?.base;
-  // source-in must stay inside this atlas frame; otherwise it erases earlier equipment frames.
-  c.save();
-  c.beginPath(); c.rect(0, 0, box.width, box.height); c.clip();
-  c.save();
-  c.shadowColor = '#000'; c.shadowBlur = Math.max(1.6, w * 0.06);
-  c.translate(-box.left, box.originY);
-  if (profile && base) {
-    // Each strip starts at its own painted bottom, rather than reflecting the curved rim
-    // below a flat baseline. At y=ground the projected point stays exactly on that rim.
-    const strip = 0.5;
-    for (let x = 0; x < w; x += strip) {
-      const index = Math.min(base.length - 1, Math.floor((x + strip / 2) / w * base.length));
-      if (base[index] < 0) continue;
-      const ground = base[index] * h;
-      c.save();
-      c.transform(1, 0, 0.24, -0.15, -ground * 0.24, ground * 1.15 - foot);
-      // Draw only this source strip; source coordinates share the cached rim's resolution.
-      c.drawImage(profile.image, x / w * profile.image.width, 0,
-        Math.min(strip, w - x) / w * profile.image.width, profile.image.height,
-        x, 0, Math.min(strip, w - x), h);
-      c.restore();
-    }
-  } else {
-    c.transform(1, 0, 0.24, -0.15, -foot * 0.24, foot * 0.15);
-    c.drawImage(image, 0, 0, w, h);
-  }
-  c.restore();
-  c.save();
-  c.globalCompositeOperation = 'source-in';
-  const fade = c.createLinearGradient(0, box.originY, 0, box.height);
-  fade.addColorStop(0, 'rgba(65,55,44,0.18)');
-  fade.addColorStop(1, 'rgba(65,55,44,0.02)');
-  c.fillStyle = fade; c.fillRect(0, 0, box.width, box.height);
-  c.restore();
-  c.save();
-  c.shadowColor = 'rgba(58,48,37,0.25)'; c.shadowBlur = Math.max(0.4, w * 0.012);
-  if (base) {
-    c.beginPath();
-    let started = false;
-    for (let i = 0; i < base.length; i++) {
-      if (base[i] < 0) continue;
-      const x = (i + 0.5) / base.length * w - box.left;
-      const y = base[i] * h - foot + cy;
-      if (started) c.lineTo(x, y); else { c.moveTo(x, y); started = true; }
-    }
-    c.strokeStyle = 'rgba(58,48,37,0.27)'; c.lineWidth = Math.max(0.5, bodyWidth * 0.025); c.stroke();
-  } else {
-    c.fillStyle = 'rgba(58,48,37,0.32)';
-    roundRect(c, cx - bodyWidth * 0.44, cy - bodyWidth * 0.025,
-      bodyWidth * 0.88, bodyWidth * 0.065, bodyWidth * 0.025);
-    c.fill();
-  }
-  c.restore();
-  c.restore();
-}
-
-/** Equipment pictures and emblems are shared with the order-panel illustrations. */
+/** Carried equipment uses the same source artwork as the order-panel illustrations. */
 export async function prepareEquipmentTextures(scene: Phaser.Scene): Promise<void> {
   for (const id of ['whole', 'oat', 'cheese', 'brulee'] as PaintedEquipmentId[]) {
     const { width, height, atlas } = equipmentFrame(id);
@@ -212,11 +80,7 @@ export async function prepareEquipmentTextures(scene: Phaser.Scene): Promise<voi
       paintEquipment(c, image, id);
     });
   }
-  await Promise.all([
-    ...TEAS.map(tea => svgTexture(scene, `ingredient-mark-tea-${tea.id}`,
-      ingredientMarkSvg('tea', tea.id, 96), 96, 96)),
-    svgTexture(scene, 'ingredient-mark-sweetness', ingredientMarkSvg('sweetness', '', 96), 96, 96),
-  ]);
+
 }
 
 /**

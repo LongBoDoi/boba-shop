@@ -56,11 +56,7 @@ import iconCup from '../assets/kitchen/icon-cup.png';
 
 import { TOPPING_PANS, TOPPING_PIECES, TOPPING_SCOOPS } from './toppingArt';
 import { EXTENDED_ROOM_SIZE, EXTENDED_TEA_WIDTH, ROOM_EXTRA_HEIGHT } from './roomGeometry';
-import {
-  KITCHEN_ROOM_RENDER, KITCHEN_ROOM_TRAYS, KITCHEN_ORIGINAL_COUNTER, KITCHEN_ROOM_ART,
-  KITCHEN_ROOM_TRAY_RAISE, KITCHEN_ROOM_CLEAR_ICE, KITCHEN_CLEAR_BOARDS,
-  KITCHEN_ORGANIZER_PATCHES,
-} from './kitchenRoomArt';
+import { KITCHEN_ROOM_RENDER, KITCHEN_ROOM_ART, KITCHEN_ROOM_TRAY_RAISE } from './kitchenRoomArt';
 import { TOPPING_TRAY_EDGES } from './toppingGeometry';
 import { EQUIPMENT_FRAMES, PAINTED_EQUIPMENT, PAINTED_MILK } from './equipmentArt';
 import { CUP_GLASS } from './frontalCupArt';
@@ -229,10 +225,8 @@ export const ROOM_BG_ICE_MACHINE = {
   width: 260, height: 182,
 };
 export const ROOM_BG_LIDDING = {
-  lid: { x: 1440, y: 90 + ROOM_EXTRA_HEIGHT, width: 320, height: 300 },
+  lid: { x: 1110 * roomX, y: 322 * roomY, width: 200 * roomX, height: 210 * roomY },
   straw: { x: 1334 * roomX, y: 314 * roomY, width: 106 * roomX, height: 234 * roomY },
-  bay: { x: 1540, y: 208 + ROOM_EXTRA_HEIGHT, width: 142, height: 120, cx: 1605, foot: 320 + ROOM_EXTRA_HEIGHT },
-  head: { x: 1510, y: 166 + ROOM_EXTRA_HEIGHT, width: 197, height: 34 },
 };
 export const ROOM_BG_EXTRAS = {
   // Each pair rests inside its compact central board, leaving room for its cast shadow.
@@ -391,11 +385,6 @@ export const ART = {
 export const PRELOAD: Sprite[] = [
   // the room itself, and what stands in it
   KITCHEN_ROOM_RENDER,
-  ...KITCHEN_ORGANIZER_PATCHES.map(patch => patch.image),
-  KITCHEN_ROOM_TRAYS,
-  KITCHEN_ROOM_CLEAR_ICE,
-  KITCHEN_ORIGINAL_COUNTER,
-  KITCHEN_CLEAR_BOARDS,
   SUGAR_SCOOP,
   PAINTED_EQUIPMENT,
   PAINTED_MILK,

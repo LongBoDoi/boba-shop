@@ -74,7 +74,6 @@ try {
     for (const chosen of [size, other]) {
       let state = gameReducer(customerState, { type: 'PICK_CUP', size: chosen });
       state = gameReducer(state, { type: 'POUR', category: 'tea', optionId: 'black', amount: 0.6 });
-      state = gameReducer(state, { type: 'LOAD_LIDDER' });
       state = gameReducer(state, { type: 'LID_CUP' });
       state = gameReducer(state, { type: 'ADD_STRAW' });
       const served = gameReducer(state, { type: 'SERVE' });

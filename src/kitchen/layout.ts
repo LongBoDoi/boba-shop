@@ -124,7 +124,7 @@ export function layoutKitchen(config: DayConfig, W: number, H: number, size: Cup
     const base = top + (y + h) * scale;
     const dockScale = Math.min(1, Math.max(0.7, 44 / cupW));
     stations.push({
-      key: `${kind}-${id}`, kind, id, name: option?.name ?? ({ ice: 'Đá', sugar: 'Đường', lid: 'Máy đậy nắp', straw: 'Ống hút' }[kind as 'ice' | 'sugar' | 'lid' | 'straw']),
+      key: `${kind}-${id}`, kind, id, name: option?.name ?? ({ ice: 'Đá', sugar: 'Đường', lid: 'Nắp ly', straw: 'Ống hút' }[kind as 'ice' | 'sugar' | 'lid' | 'straw']),
       color: option?.color ?? '#D8B774', x: x * scale, y: top + y * scale,
       w: w * scale, h: h * scale, cx: (x + w / 2) * scale,
       slot: Math.max(44, w * scale), labelW: Math.max(44, w * scale), base,
@@ -185,13 +185,6 @@ export function layoutKitchen(config: DayConfig, W: number, H: number, size: Cup
   for (const kind of ['lid', 'straw'] as const) {
     const area = ROOM_BG_LIDDING[kind];
     add(kind, kind, area.x, area.y, area.width, area.height);
-    if (kind === 'lid') {
-      const machine = stations[stations.length - 1];
-      machine.cx = ROOM_BG_LIDDING.bay.cx * scale;
-      machine.dockScale = Math.min(1, 108 * scale * CUP_SIZE_SCALE[size] / cupH);
-      machine.dockY = top + ROOM_BG_LIDDING.bay.foot * scale
-        + cupH * machine.dockScale * (1 - CUP_FOOT / CUP_ART.h);
-    }
   }
 
   // The rack of cups is painted into the room; these are the three stacks' touch targets.
@@ -257,13 +250,12 @@ export function findStation(stations: Station[], x: number, y: number, cupW: num
 
 export function hintFor(cup: Drink, docked?: Station, build?: CupBuild): string {
   if (!cup.size) return 'Vuốt ngang để tìm kệ, chọn ly đúng cỡ khách gọi';
-  if (build?.inLidder) return 'Máy đang đậy nắp — đợi ly trở lại thảm rồi thêm ống hút';
   if (build?.straw) return 'Đã đậy nắp và thêm ống hút — sẵn sàng phục vụ';
-  if (build?.lidded) return 'Thêm ống hút từ hộp bên cạnh máy đậy nắp';
+  if (build?.lidded) return 'Thêm ống hút từ hộp bên cạnh chồng nắp';
   if (docked) {
     if (cup.tea && cup.tea !== docked.id) return 'Ly đã có trà khác — đổ bỏ để pha lại';
     return `Giữ vòi ${docked.name} để rót — xem thanh lượng trà`;
   }
   if (!cup.tea) return 'Chạm bình trà để đặt ly dưới vòi, rồi giữ vòi để rót';
-  return 'Pha xong? Kéo ly vào máy đậy nắp bên phải';
+  return 'Pha xong? Chạm chồng nắp bên phải để đậy nắp ly';
 }

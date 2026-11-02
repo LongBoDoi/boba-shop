@@ -52,7 +52,7 @@ try {
   function hand(state, { tea = 'black', amount = 0.6, size = 'M' } = {}) {
     let cup = gameReducer(state, { type: 'PICK_CUP', size });
     cup = gameReducer(cup, { type: 'POUR', category: 'tea', optionId: tea, amount });
-    for (const type of ['LOAD_LIDDER', 'LID_CUP', 'ADD_STRAW', 'SERVE']) cup = gameReducer(cup, { type });
+    for (const type of ['LID_CUP', 'ADD_STRAW', 'SERVE']) cup = gameReducer(cup, { type });
     return cup;
   }
 
@@ -326,7 +326,7 @@ try {
   let cupWaiting = gameReducer(gameReducer(createInitialState(11), { type: 'START_DAY', day: 2 }), { type: 'SET_MODE', mode: 'relaxed' });
   cupWaiting = gameReducer(cupWaiting, { type: 'PICK_CUP', size: 'M' });
   cupWaiting = gameReducer(cupWaiting, { type: 'POUR', category: 'tea', optionId: 'black', amount: 0.5 });
-  for (const type of ['LOAD_LIDDER', 'LID_CUP', 'ADD_STRAW']) cupWaiting = gameReducer(cupWaiting, { type });
+  for (const type of ['LID_CUP', 'ADD_STRAW']) cupWaiting = gameReducer(cupWaiting, { type });
   for (let i = 0; i < 2; i++) cupWaiting = gameReducer(cupWaiting, { type: 'TICK', dt: 100 });
   const servedSlot = cupWaiting.selectedSlot;
   assert.equal(cupWaiting.feedback.filter((item) => item.tone === 'say').length, 2, 'Two are still mid-sentence');

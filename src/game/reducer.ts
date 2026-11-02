@@ -143,7 +143,7 @@ export interface CupBuild {
   sugarPumps: number;
   lidded: boolean;
   straw: boolean;
-  /** The cup is inside the lidding machine until its cycle finishes or it is pulled out. */
+  /** Legacy machine state; old saves return the unfinished drink to its holder. */
   inLidder: boolean;
 }
 
@@ -396,7 +396,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       return isActive(state) && state.build.inLidder
         ? { ...state, build: { ...state.build, inLidder: false } } : state;
     case 'LID_CUP':
-      return isActive(state) && state.cup.size && state.cup.tea && state.build.inLidder && !state.build.lidded
+      return isActive(state) && state.cup.size && state.cup.tea && !state.build.lidded
         ? { ...state, build: { ...state.build, lidded: true, inLidder: false } } : state;
     case 'ADD_STRAW':
       return isActive(state) && state.cup.size && state.build.lidded && !state.build.inLidder && !state.build.straw

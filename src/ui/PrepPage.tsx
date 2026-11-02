@@ -168,12 +168,10 @@ function ServeButton({ layout }: { layout: PrepLayout }) {
         ? 'Lấy ly đúng cỡ từ kệ'
         : !state.cup.tea
           ? 'Rót trà vào ly'
-          : state.build.inLidder
-            ? 'Máy đang đậy nắp…'
           : !state.build.lidded
-            ? 'Đặt ly vào máy đậy nắp ➜'
+            ? 'Chạm chồng nắp để đậy nắp ➜'
             : !state.build.straw
-              ? 'Thêm ống hút bên cạnh máy ➜'
+              ? 'Thêm ống hút bên cạnh chồng nắp ➜'
               : `Phục vụ ${customer.name} ➜`;
     return { label, canServe: cupCanServe(state) };
   }, shallow);
