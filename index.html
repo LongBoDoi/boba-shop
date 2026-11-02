@@ -36,6 +36,71 @@
           navigator.storage.persisted().then(function (already) { if (!already) navigator.storage.persist(); });
         }
       })();
+
+      // A deploy can leave a player holding a page that names files the new deployment has not
+      // got — see public/sw.js, which keeps that from becoming permanent but cannot keep it from
+      // happening: a stale page may have come from the browser's own cache, before any worker was
+      // consulted. So the page watches its own bundle fail to load and repairs itself — throw away
+      // what was kept, pull the page fresh, come back. It is inline and it styles itself because
+      // the stylesheet is one of the files that may be missing.
+      //
+      // **Once per session.** A reload that fails the same way twice is a loop, and a loop is a
+      // worse failure than a sentence: if the newest page still cannot load its own bundle then
+      // the deploy is mid-flight, and the honest thing is to say so and let the player press.
+      (function () {
+        var KEY = 'boba-shop.repaired';
+        var busy = false;
+        function tried() {
+          try { return sessionStorage.getItem(KEY) === '1'; } catch (blocked) { return true; }
+        }
+        function note() {
+          if (document.getElementById('stale')) return;
+          var box = document.createElement('div');
+          box.id = 'stale';
+          box.setAttribute('style', 'position:fixed;inset:0;z-index:99;display:flex;flex-direction:column;'
+            + 'align-items:center;justify-content:center;gap:16px;padding:28px;text-align:center;'
+            + 'background:#FFE3EC;color:#5B3A2E;font:500 16px/1.5 system-ui,-apple-system,sans-serif');
+          var what = document.createElement('p');
+          what.setAttribute('style', 'margin:0;max-width:22em');
+          what.textContent = 'Tiệm có thể đang được cập nhật. Thử lại sau một lát nhé.';
+          var again = document.createElement('button');
+          again.setAttribute('style', 'font:600 16px/1 system-ui,-apple-system,sans-serif;color:#fff;'
+            + 'background:#E8638E;border:0;border-radius:999px;padding:14px 32px');
+          again.textContent = 'Thử lại';
+          again.addEventListener('click', function () { location.reload(); });
+          box.appendChild(what);
+          box.appendChild(again);
+          document.body.appendChild(box);
+        }
+        function repair() {
+          if (busy) return;
+          busy = true;
+          try { sessionStorage.setItem(KEY, '1'); } catch (blocked) { /* then it is one try only */ }
+          var swept = window.caches
+            ? caches.keys().then(function (names) {
+                return Promise.all(names.map(function (name) {
+                  return name.indexOf('boba-shop-') === 0 ? caches.delete(name) : null;
+                }));
+              })
+            : Promise.resolve();
+          swept.catch(function () { /* a cache that will not open is not what is being fixed */ })
+            // Refreshing the browser's own copy of the page is what makes the reload worth doing:
+            // without it, the reload is handed the same stale page out of the same cache.
+            .then(function () { return fetch('./', { cache: 'reload' }).catch(function () {}); })
+            .then(function () { location.reload(); });
+        }
+        // Resource errors do not bubble, hence the capture. Only the bundle and the stylesheet can
+        // raise one here: the artwork is loaded by Phaser into elements that are never in the
+        // document, and a missing icon is not worth reloading a game for.
+        window.addEventListener('error', function (event) {
+          var el = event.target;
+          if (!el || !el.tagName) return;
+          var tag = el.tagName.toLowerCase();
+          if (tag !== 'script' && tag !== 'link') return;
+          if ((el.src || el.href || '').indexOf('/assets/') === -1) return;
+          if (tried()) note(); else repair();
+        }, true);
+      })();
     </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>

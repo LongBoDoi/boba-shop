@@ -126,6 +126,43 @@ and no signal needed. Four small things in `public/` do it, and Vite copies that
   adds `viewport-fit=cover`, refuses the browser gestures that CSS cannot (see below), and asks for
   `navigator.storage.persist()` so the shop is not evicted when the phone is short of room.
 
+**A deploy must not be able to break an installed page**, and for two releases it could. A hashed
+filename cannot go stale, but **the page that names it is not hashed**, and that is the seam:
+
+- **EAS Hosting sends `index.html` with no `Cache-Control` at all**, which does not mean "do not
+  cache" — with nothing to go on a browser invents a lifetime, and what it invents is a tenth of
+  the file's age, so a page deployed a day ago is kept for hours. A launch inside those hours never
+  reaches the network to learn that a new game exists. `page()` in `sw.js` therefore asks with
+  `cache: 'reload'`. It costs two kilobytes a launch and it is the difference between a deploy
+  arriving and a deploy arriving eventually. There is nothing to fix at the host: EAS Hosting has
+  no configuration for the headers on a static file (the hour on `/assets/` and on `update.json` is
+  its own default), so this is the client's problem by construction.
+- **A file the deployment has not got comes back as the page, with status 200** — the
+  single-page-app fallback, measured on the live host, not a 404. That is what turns a merely old
+  page into a broken one: the stale page asks for `index-OLDHASH.js`, the host answers 200
+  `text/html`, the browser will not run HTML as a module, and the shop is a white screen with
+  nothing in any log. **So `response.ok` is not enough to cache on**, and caching it was the half
+  that lasted: `/assets/` is served cache-first, so a page stored under a script's name is answered
+  from for ever. That was not a bad launch, it was a permanently broken install, curable only by
+  clearing site data. `servedThePage()` is the test and it is exact — there is no `.html` under
+  `/assets/`. Bumping `VERSION` is how everyone already holding one is got out of it, which is why
+  it is `v2`.
+- **The page repairs itself**, because the worker cannot be relied on to be the one that answered:
+  a stale page may have come from the browser's own cache before any worker was consulted. The
+  inline script in `index.html` watches for a `script` or `link` under `/assets/` failing to load,
+  and once per session throws away both caches, pulls the page with `cache: 'reload'` — which is
+  what makes the reload worth doing, since without it the reload is handed the same stale page out
+  of the same cache — and comes back. **Once** per session: a reload that fails the same way twice
+  is a loop, and a loop is a worse failure than a sentence, so the second failure shows the message
+  and a button. It is inline and it styles itself because the stylesheet is one of the files that
+  may be missing.
+- **The app's updater refuses the same answer** (`servedThePage` in `live.ts`). A 200 of `text/html`
+  where a sprite belongs would otherwise be *written into the build*, and a build that cannot boot
+  is still on disk for the next update to copy forward. `isWhole` normally keeps this out of reach
+  by holding the page against the manifest; what it cannot cover is a deploy landing *during* an
+  update, which is twenty megabytes and several minutes wide. `index.html` is the one file in a
+  build that really is HTML, so the test is "asked for a file, got HTML", not "got HTML".
+
 Verifying it needs a browser, not a reader: build, serve `dist/`, load it once, play as far as the
 menu, then **go offline and reload**. The shop should open on the pause card with the kitchen
 painted. Check the console for failed requests, which is how a missing bundle and a missing icon
@@ -435,6 +472,7 @@ tools/check-audio-engine.cjs  the scheduler and the whole browser lifecycle, aga
 tools/check-prep-layout.cjs   the sideways layouts, against the painting's own band
 tools/check-backup-code.cjs   the backup code's round trip and its refusals
 tools/check-updates.cjs       the native shell's fingerprint, and which new version is which
+tools/check-web-cache.cjs     the worker, against a host that answers a missing file with the page
 tools/sim/              the bot that plays whole shifts through the real reducer; not in `npm test`
 ```
 
@@ -1854,6 +1892,15 @@ the active room and moves to the inserted cup's rim.
   there for reasons no import graph knows about. The big paintings under `src/assets/kitchen/` are
   in the same class: they are the imagegen sources the sprites were cut out of, they do not ship
   (Vite bundles only what is imported), and they stay.
+- A deploy, and the caches it has to get past: `tools/check-web-cache.cjs` runs the real
+  `public/sw.js` against a fake `CacheStorage` and a fake host that does what EAS Hosting was
+  measured doing — no `Cache-Control` on the page, and a missing file answered with the page at
+  status 200. Each check is written to fail if its guard is removed, which is worth re-testing by
+  actually removing one: a check that passes against the broken code is worse than no check. What a
+  desk cannot show is the browser refusing to run HTML as a module. For that, serve `dist/` behind a
+  server that falls back to `index.html` with a 200, load it, let the worker take over, then ask it
+  for `/assets/index-DOESNOTEXIST.js`: the fixed worker answers 404 and caches nothing, and the old
+  one answers 200 `text/html` and keeps it. Both were run that way.
 - The phone apps: `npm run sync` copies `dist/` into `android/` and `ios/` and re-writes their
   plugin lists — run it after adding a plugin, and expect `check-updates.cjs` to fail until
   `NATIVE_VERSION` moves with it. A real build needs the **Build apps** workflow or a local

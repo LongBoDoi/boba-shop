@@ -17,6 +17,50 @@ Deployments run one at a time. GitHub keeps the latest pending run when several 
 during a deployment. Pushes to other branches do not deploy. To redeploy the current `main`, open
 the workflow's **Run workflow** button and choose `main`.
 
+## What the host does with caching, and why the page works around it
+
+Measured against the live site rather than assumed, because two of these are the opposite of what
+you would guess:
+
+| What | `Cache-Control` |
+| --- | --- |
+| `/` (`index.html`) | **none at all** |
+| `/assets/*` | `public, max-age=3600` |
+| `/update.json` | `public, max-age=3600` |
+| `/sw.js` | `public, max-age=3600` |
+
+Two consequences, and both have bitten:
+
+- **No header on the page is worse than a short one.** With nothing to go on a browser invents a
+  lifetime — a tenth of the file's age — so a page deployed yesterday is held for hours and a
+  launch inside them never asks the server whether a new game exists.
+- **A path the deployment has not got is answered with `index.html`, at status 200**, not with a
+  404. Each deploy is its own set of files, so the previous build's hashed assets are simply not
+  there, and a stale page asking for one is handed the page instead. The browser will not run HTML
+  as a module, and the shop is a white screen.
+
+**None of this is configurable.** EAS Hosting exposes headers only to API routes, through the
+`Response` a route returns; a static deploy has no route and no config file, so the defaults above
+are the defaults. The hour on `/assets/` is harmless — those names carry a hash of their contents —
+and the hour on `/update.json` is what `isWhole` exists to survive.
+
+So the work-arounds live in the client, and they are described where they are implemented: see
+"A deploy must not be able to break an installed page" in `CLAUDE.md` for `public/sw.js`, the
+inline repair in `index.html`, and the matching guard in `src/updates/live.ts`.
+`tools/check-web-cache.cjs` holds the lot against a fake host.
+
+**After a deploy, the thing to check is not that the site is new — it is that the site is
+consistent.** `curl -s https://boba-shop.expo.app/ | grep -o 'assets/index-[^"]*'` names the bundle
+the page asks for, and that name has to come back as JavaScript:
+
+```sh
+curl -sI https://boba-shop.expo.app/assets/index-<hash>.js | grep -i content-type
+```
+
+`application/javascript` is a whole deploy. `text/html` is the fallback, which means the page and
+the files it names are from different deployments — wait for the hour and check again before
+believing anything else is wrong.
+
 ## What `app.json` is now
 
 `app.json` is **not** an app config — the game has no Expo app any more. It is only the identity of

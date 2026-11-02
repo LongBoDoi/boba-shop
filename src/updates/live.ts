@@ -106,6 +106,29 @@ async function readSite(file: string): Promise<unknown> {
 const asText = (data: unknown): string => (typeof data === 'string' ? data : JSON.stringify(data));
 const asJson = (data: unknown): unknown => (typeof data === 'string' ? JSON.parse(data) : data);
 
+/**
+ * Did the host answer with the page instead of the file that was asked for?
+ *
+ * A static host serves `index.html` for any path it does not have, **with status 200**, so a file
+ * that has gone — a newer deploy landed while this update was running — arrives looking exactly
+ * like a successful download. Writing it would put HTML where a script or a sprite belongs and
+ * then persist a build that cannot boot, which is the one failure the rollback cannot catch (see
+ * "A build is made permanent only once it has booted": that build never boots, so it is never
+ * persisted — but the files are still on disk and the next update copies them forward).
+ *
+ * `isWhole` normally keeps this from being reachable at all, by holding the page against the
+ * manifest before anything is offered. What it cannot cover is a deploy that lands *during* an
+ * update, which is twenty megabytes and several minutes wide.
+ *
+ * The test is exact because `index.html` is the only HTML in a build, and it is named rather than
+ * guessed at: everything else is a script, a stylesheet, a sprite, a sound, a font or JSON.
+ */
+function servedThePage(file: string, headers: Record<string, string>): boolean {
+  if (file.endsWith('.html')) return false;
+  const named = Object.entries(headers).find(([name]) => name.toLowerCase() === 'content-type');
+  return (named?.[1] ?? '').toLowerCase().includes('text/html');
+}
+
 export const reasonFor = (error: unknown): string =>
   (error instanceof Error ? error.message : String(error)) || 'không rõ lý do';
 
@@ -155,6 +178,11 @@ async function downloadInto(file: string, to: string, check: () => void): Promis
 
     const { status, data } = answer;
     if (status >= 200 && status < 300) {
+      // Before the content is trusted: a 200 here may be the host's fallback page, and asking
+      // again would only fetch it again — a file this deployment has not got will not appear.
+      if (servedThePage(file, answer.headers ?? {})) {
+        throw new Error(`${file} không còn trong bản này`);
+      }
       if (typeof data !== 'string') throw new Error('không nhận được nội dung tệp');
       await Filesystem.writeFile({ path: to, directory: HOME, data, recursive: true });
       return;

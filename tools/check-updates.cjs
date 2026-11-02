@@ -470,6 +470,47 @@ let siteChecks = Promise.resolve();
     assert.equal(downloaded().filter((file) => file === 'assets/index-ddd.js').length, 1,
       'and is asked for exactly once');
 
+    // --- the host answering with the page is not the file, whatever the status says
+    // A static host serves `index.html` for any path it has not got, **with status 200**, so a
+    // file that has gone — a newer deploy landed during the twenty megabytes and several minutes
+    // this takes — arrives looking exactly like a success. Writing it would put HTML where a
+    // script belongs, and that build is still on disk for the next update to copy forward.
+    asked.length = 0;
+    site['assets/index-ddd.js'] = {
+      status: 200,
+      data: body('index.html'),
+      headers: { 'Content-Type': 'text/html; charset=utf-8' },
+    };
+    await assert.rejects(
+      () => quietly(() => live.applyUpdate({ ...NEXT, webBuild: 'commit-9' }, () => {}, () => false)),
+      (error) => {
+        assert.match(error.message, /assets\/index-ddd\.js/, 'The failure names the file');
+        return true;
+      },
+      'A page served in place of a file fails the update rather than being written as the file');
+    assert.equal(disk.get('builds/commit-9/assets/index-ddd.js'), undefined,
+      'and the page is not left on disk under a script\'s name');
+    assert.equal(downloaded().filter((file) => file === 'assets/index-ddd.js').length, 1,
+      'A file this deployment has not got will not appear, so it is asked for once');
+
+    // `index.html` is the one file in a build that really is HTML, so the test cannot simply be
+    // "the answer was HTML" — that would refuse the page itself and no update would ever apply.
+    // The page is normally *copied* from the build on disk, which never reaches the downloader, so
+    // it is taken off the disk first to force it down the one path the guard is on.
+    asked.length = 0;
+    site['assets/index-ddd.js'] = { status: 200, data: body('assets/index-ddd.js') };
+    site['index.html'] = {
+      status: 200,
+      data: body('index.html'),
+      headers: { 'Content-Type': 'text/html; charset=utf-8' },
+    };
+    disk.delete(`${basePath.replace(`${HOME}/`, '')}/index.html`);
+    await quietly(() => live.applyUpdate({ ...NEXT, webBuild: 'commit-10' }, () => {}, () => false));
+    assert.ok(downloaded().includes('index.html'),
+      'the page was copied, not fetched, so this proves nothing about the guard');
+    assert.equal(disk.get('builds/commit-10/index.html'), body('index.html'),
+      'The page itself is served as HTML because it is HTML, and is written all the same');
+
     // --- the parents are made twice over, on purpose
     // `mkdirp` makes them for the copies, and every write asks for them again (`recursive`). The
     // belt is there because the braces are what broke: the downloader this replaced wrote straight
