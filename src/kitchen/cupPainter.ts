@@ -106,8 +106,41 @@ const FRONT = new Path2D(FRONT_GLASS);
 const REAR = new Path2D(`${BOX} ${FRONT_GLASS}`);
 const FLOOR_EDGE = new Path2D(CUP_FLOOR_EDGE);
 const frontWalls = new WeakMap<object, HTMLCanvasElement>();
+const rearWalls = new WeakMap<object, HTMLCanvasElement>();
 type ContentsDepth = 'all' | 'rear' | 'front';
 const wetStraws = new Map<string, HTMLCanvasElement>();
+
+/** Both faces transmit neutral PET tones while retaining painted glints and shadows. */
+function glassTransmission(r: number, g: number, b: number) {
+  const light = (r + g + b) / 3;
+  const shine = Math.max(0, Math.min(1, (light - 205) / 42));
+  const shadow = Math.max(0, Math.min(1, (170 - light) / 60));
+  return 0.22 + 0.78 * Math.max(shine * shine, shadow);
+}
+
+/** Match the far inner wall to the front material without flattening the painted rim. */
+function rearWall(sprite: CanvasImageSource) {
+  const cached = rearWalls.get(sprite);
+  if (cached) return cached;
+  const canvas = document.createElement('canvas');
+  canvas.width = W * 6; canvas.height = H * 6;
+  const c = canvas.getContext('2d')!;
+  c.drawImage(sprite, 0, 0, canvas.width, canvas.height);
+  const pixels = c.getImageData(0, 0, canvas.width, canvas.height);
+  for (let y = 7 * 6; y < 28 * 6; y++) for (let x = 8 * 6; x < 105 * 6; x++) {
+    const radius = Math.hypot(((x + 0.5) / 6 - 56.5) / 48.5, ((y + 0.5) / 6 - 17.5) / 10.5);
+    // Blend into the rolled edge rather than cutting out an oval from its texture.
+    const t = Math.max(0, Math.min(1, (1 - radius) / 0.16));
+    const blend = t * t * (3 - 2 * t);
+    if (!blend) continue;
+    const i = (y * canvas.width + x) * 4;
+    const transmitted = GLASS_FILLED_ALPHA * glassTransmission(pixels.data[i], pixels.data[i + 1], pixels.data[i + 2]);
+    pixels.data[i + 3] *= 1 + (transmitted - 1) * blend;
+  }
+  c.putImageData(pixels, 0, 0);
+  rearWalls.set(sprite, canvas);
+  return canvas;
+}
 
 /** A wet tube carries the tea's colour while preserving the painted hollow edges. */
 function wetStraw(source: CanvasImageSource, tint: string) {
@@ -156,11 +189,7 @@ function frontWall(sprite: CanvasImageSource) {
   // highlights and shadow detail while letting the drink show through neutral PET.
   const pixels = c.getImageData(0, 0, canvas.width, canvas.height);
   for (let i = 0; i < pixels.data.length; i += 4) {
-    const r = pixels.data[i], g = pixels.data[i + 1], b = pixels.data[i + 2];
-    const light = (r + g + b) / 3;
-    const shine = Math.max(0, Math.min(1, (light - 205) / 42));
-    const shadow = Math.max(0, Math.min(1, (170 - light) / 60));
-    pixels.data[i + 3] *= 0.22 + 0.78 * Math.max(shine * shine, shadow);
+    pixels.data[i + 3] *= glassTransmission(pixels.data[i], pixels.data[i + 1], pixels.data[i + 2]);
   }
   c.putImageData(pixels, 0, 0);
   frontWalls.set(sprite, canvas);
@@ -340,7 +369,7 @@ export class CupPainter {
     const walls = path(`${BOX} ${CUP_REAR_FLOOR_GLASS}`);
     c.save();
     c.clip(REAR, 'evenodd');
-    this.glass(filled, walls, true, glass);
+    this.glass(filled, walls, true, rearWall(glass));
     c.restore();
     // The part in the dome's air space is behind the cream and the lid's front reflection.
     if (frame.straw) {

@@ -11,9 +11,14 @@ its pixels from:
 `/Users/dev/.codex/generated_images/01a13e8f-a6f5-7171-9278-add319e78a23/exec-d095bfc5-fb00-47ed-bcdc-382532612b6e.png`
 
 `cupMaterialArt.ts` registers the painted rim and foot to the existing cup geometry. Both
-Canvas and SVG use that registration. `cupPainter.ts` separates soft transmitted tones from
+Canvas and SVG use that registration. The whole rim uses a single scale from source y138–373
+to cup y2–32; splitting it at its center distorts the ellipse. Its front-wall and near-lip masks
+share the registered ellipse center at y17.5. `cupPainter.ts` separates soft transmitted tones from
 painted highlights in a cached front-wall texture. This preserves the paint's variation without
-whitening the tea. The rear floor is drawn behind contents; the front reflection continues
+whitening the tea. The rear inner wall uses the same transmission response inside the mouth,
+feathered into the rolled edge, so it does not retain an opaque gray cast against the warmer
+front. Highlights and shadow detail remain painted rather than being erased uniformly.
+The rear floor is drawn behind contents; the front reflection continues
 along the taper, so rear base arcs cannot appear over the drink. The previous erased-mouth
 texture and procedural reflection ribbons have been removed.
 

@@ -5,7 +5,9 @@ import { el } from './svg';
 export const CUP_MATERIAL = material;
 export const CUP_MATERIAL_ART = { width: 1024, height: 1536 };
 export const CUP_MATERIAL_CROP = { x: 78, y: 138, width: 870, height: 1236 };
-const ROWS = [[138, 2], [265, 14], [373, 32], [1180, 143], [1270, 157.5], [1374, 170]];
+// One projection across the entire mouth preserves the painted ellipse. Splitting
+// it at its center compressed the far half and made the side curves kink.
+const ROWS = [[138, 2], [373, 32], [1180, 143], [1270, 157.5], [1374, 170]];
 let embedded: string | undefined;
 
 export function paintCupMaterial(c: CanvasRenderingContext2D, source: CanvasImageSource) {

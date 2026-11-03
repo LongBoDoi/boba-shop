@@ -47,12 +47,12 @@ export const CUP_CONTENTS = `M13.6 ${MOUTH_Y} A${MOUTH_RX} ${MOUTH_RY} 0 0 1 99.
 /** The inner floor painting is behind the ingredients; its front edge and wall glints are in front. */
 export const CUP_REAR_FLOOR_GLASS = `M24.4 132H88.6 ${CUP_FLOOR}`;
 /**
- * Near glass traced from cup.png's painted lip, independently of the liquid well.
- * The actual front lip crosses the centre at y29–31; the old y35.5 split missed it.
+ * Near glass follows the registered cup-painted-v2 rim, independently of the liquid well.
+ * Its ellipse center is y17.5 and the inner front edge crosses y28.
  */
-export const CUP_NEAR_GLASS = 'M0 14H5 A51.5 12.7 0 0 0 108 14H113V174H0Z';
+export const CUP_NEAR_GLASS = 'M0 17.5H5 A51.5 10.5 0 0 0 108 17.5H113V174H0Z';
 /** The actual rim band, excluding the front wall below it. */
-export const CUP_NEAR_LIP_BAND = 'M4 14 A52.5 18 0 0 0 109 14 L105 14 A48.5 12 0 0 1 8 14Z';
+export const CUP_NEAR_LIP_BAND = 'M4 17.5 A52.5 14.5 0 0 0 109 17.5 L105 17.5 A48.5 10.5 0 0 1 8 17.5Z';
 
 /** Spread pieces to the inner walls; fit whole rotated sprites above the same floor as the tea. */
 export function cupToppingPosition(x: number, rx: number, ry: number, angle: number, lift: number) {
