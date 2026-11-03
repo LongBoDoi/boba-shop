@@ -13,18 +13,19 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
       const art = await import('/src/art/kitchenArt.ts');
       const { TOPPING_PIECES } = await import('/src/art/toppingArt.ts');
       const { CUP_GLASS, frontalCupGlass } = await import('/src/art/frontalCupArt.ts');
+      const { CUP_MATERIAL } = await import('/src/art/cupMaterialArt.ts');
       const { createIceLayout } = await import('/src/art/iceLayout.ts');
       const { EMPTY_DRINK, TOPPINGS, TEAS, FOAMS } = await import('/src/game/ingredients.ts');
       const { CUP_CONTENTS, CUP_NEAR_LIP_BAND } = await import('/src/art/cupGeometry.ts');
       const { insertedStrawX, paintInsertedStraw, paintLid } = await import('/src/art/finishingArt.ts');
       const load = async url => { const img = new Image(); img.src = url; await img.decode(); return img; };
-      const [sprite, cream, ice, pieces] = await Promise.all([
-        load(CUP_GLASS), load(art.CUP_CREAM), load(art.CUP_ICE), load(TOPPING_PIECES),
+      const [sprite, cream, ice, pieces, material] = await Promise.all([
+        load(CUP_GLASS), load(art.CUP_CREAM), load(art.CUP_ICE), load(TOPPING_PIECES), load(CUP_MATERIAL),
       ]);
       const urls = [...Object.values(art.DRINK), ...Object.values(art.DRINK_MILKY),
         ...Object.values(art.DRINK_TOP), ...Object.values(art.DRINK_MILKY_TOP)];
       const drinks = new Map(await Promise.all(urls.map(async url => [url, await load(url)])));
-      const painter = new CupPainter({ reference: sprite, sprite: frontalCupGlass(sprite), cream, ice, pieces,
+      const painter = new CupPainter({ reference: sprite, sprite: frontalCupGlass(material), cream, ice, pieces,
         drink: (id, milky) => ({ body: drinks.get((milky ? art.DRINK_MILKY : art.DRINK)[id]),
           top: drinks.get((milky ? art.DRINK_MILKY_TOP : art.DRINK_TOP)[id]) }) }, 226, 348);
       const frame = { iceLayout: createIceLayout(7), iceSettle: [], portionSettle: [], phase: 0.2, agitation: 0 };

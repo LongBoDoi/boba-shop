@@ -24,13 +24,14 @@ const { ORIGINAL_TEA_WIDTH, ORIGINAL_ROOM_SIZE } = require('../src/art/roomGeome
 const { layoutKitchen, findDairyStation } = require('../src/kitchen/layout.ts');
 const { getDayConfig } = require('../src/game/levels.ts');
 const { CUP_GLASS, CUP_GLASS_ART } = require('../src/art/frontalCupArt.ts');
+const { CUP_MATERIAL, CUP_MATERIAL_ART } = require('../src/art/cupMaterialArt.ts');
 const { CUP_CREAM } = require('../src/art/kitchenArt.ts');
 const { CUP_CREAM_ART } = require('../src/kitchen/creamPainter.ts');
 const { CUP_ART, CUP_BASE, CUP_FOOT, CUP_FLOOR_FRONT } = require('../src/art/cupGeometry.ts');
 
 // Refined materials must remain high-resolution transparent sources with correctly registered bands.
 assert(CUP_ART.h / CUP_ART.w > 1.5, 'The playable cup keeps its tall frontal silhouette');
-for (const [asset, art] of [[CUP_CREAM, CUP_CREAM_ART]]) {
+for (const [asset, art] of [[CUP_CREAM, CUP_CREAM_ART], [CUP_MATERIAL, CUP_MATERIAL_ART]]) {
   const png = fs.readFileSync(asset);
   assert.equal(png.readUInt32BE(16), art.width);
   assert.equal(png.readUInt32BE(20), art.height);

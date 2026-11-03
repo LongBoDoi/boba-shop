@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 
 import { CUP_CREAM, PRELOAD, SCOOPFUL } from '../art/kitchenArt';
 import { prepareReferenceCup, REFERENCE_CUP } from '../art/referenceCupArt';
+import { CUP_MATERIAL, prepareCupMaterial } from '../art/cupMaterialArt';
 import { tex } from '../game/view';
 import { FOAMS } from '../game/ingredients';
 import { prepareCupCream } from '../kitchen/creamPainter';
@@ -45,6 +46,7 @@ export class PreloadScene extends Phaser.Scene {
     if (this.finished) return;
     this.finished = true;
     prepareReferenceCup(this.textures.get(tex(REFERENCE_CUP)).getSourceImage() as CanvasImageSource);
+    prepareCupMaterial(this.textures.get(tex(CUP_MATERIAL)).getSourceImage() as CanvasImageSource);
     const cream = this.textures.get(tex(CUP_CREAM)).getSourceImage() as CanvasImageSource;
     for (const foam of FOAMS) if (!foam.isNone) prepareCupCream(foam.id, foam.color, cream);
     this.scene.launch('counter');

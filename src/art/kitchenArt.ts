@@ -60,6 +60,7 @@ import { KITCHEN_ROOM_RENDER, KITCHEN_ROOM_ART, KITCHEN_ROOM_TRAY_RAISE } from '
 import { TOPPING_TRAY_EDGES } from './toppingGeometry';
 import { EQUIPMENT_FRAMES, PAINTED_EQUIPMENT, PAINTED_MILK } from './equipmentArt';
 import { CUP_GLASS } from './frontalCupArt';
+import { CUP_MATERIAL } from './cupMaterialArt';
 
 /**
  * A sprite is the **URL** of its own file. `import cup from '../assets/kitchen/cup.png'` hands one
@@ -391,6 +392,7 @@ export const PRELOAD: Sprite[] = [
   TEA_DISPENSERS,
   CUP_HOLDER,
   CUP_GLASS,
+  CUP_MATERIAL,
   TOPPING_PANS,
   TOPPING_SCOOPS,
   TOPPING_PIECES,

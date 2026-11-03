@@ -1,5 +1,6 @@
 import reference from '../assets/kitchen/cup-reference-painted.png';
 import { el } from './svg';
+import { cupMaterialSvg } from './cupMaterialArt';
 
 /** Isolated painted parts derived from the user's reference; untouched RGBA atlas. */
 export const REFERENCE_CUP = reference;
@@ -47,6 +48,7 @@ export function paintReferencePart(c: CanvasRenderingContext2D, source: CanvasIm
 }
 
 export function referencePartSvg(part: Part): string {
+  if (part === 'cup') return cupMaterialSvg();
   const { source: s, target: t } = REFERENCE_CUP_PARTS[part];
   const href = embedded.get(part);
   if (href) return el('image', { href, ...t, preserveAspectRatio: 'none' });

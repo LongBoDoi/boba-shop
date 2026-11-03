@@ -12,6 +12,7 @@ import { bakeCanvas, canvasFont, DPR, tex } from '../game/view';
 import { card, measure } from './equipment';
 import { CupImages, CupPainter } from './cupPainter';
 import { CUP_GLASS, frontalCupGlass } from '../art/frontalCupArt';
+import { CUP_MATERIAL } from '../art/cupMaterialArt';
 import { CUP_OVERFLOW } from './creamPainter';
 import { KITCHEN_TEXT_MIN } from './typography';
 import { easeOut } from './motion';
@@ -24,7 +25,7 @@ function images(scene: Phaser.Scene): CupImages {
   const img = (asset: string) => scene.textures.get(tex(asset)).getSourceImage() as CanvasImageSource;
   return {
     reference: img(CUP_GLASS),
-    sprite: frontalCupGlass(img(CUP_GLASS)),
+    sprite: frontalCupGlass(img(CUP_MATERIAL)),
     cream: img(CUP_CREAM),
     ice: img(CUP_ICE),
     pieces: img(TOPPING_PIECES),

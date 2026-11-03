@@ -81,7 +81,7 @@ const BODY_ART_TOP = 48;
 /**
  * A light material reflection over the drink, leaving its color and the submerged ingredients clear.
  */
-const GLASS_FILLED_ALPHA = 0.22;
+const GLASS_FILLED_ALPHA = 0.8;
 
 // ------------------------------------------------------------------ paths, parsed once
 const pathCache = new Map<string, Path2D>();
@@ -106,90 +106,8 @@ const FRONT = new Path2D(FRONT_GLASS);
 const REAR = new Path2D(`${BOX} ${FRONT_GLASS}`);
 const FLOOR_EDGE = new Path2D(CUP_FLOOR_EDGE);
 const frontWalls = new WeakMap<object, HTMLCanvasElement>();
-const rearOpenings = new WeakMap<object, HTMLCanvasElement>();
-let wallReflections: HTMLCanvasElement | undefined;
 type ContentsDepth = 'all' | 'rear' | 'front';
 const wetStraws = new Map<string, HTMLCanvasElement>();
-
-/** The open mouth shows the far inner wall, not opaque white strips across an oval.
- * Keep the painted rolled edge; soften only the material just inside it. */
-function rearOpening(sprite: CanvasImageSource) {
-  const cached = rearOpenings.get(sprite);
-  if (cached) return cached;
-  const canvas = document.createElement('canvas');
-  canvas.width = W * 6; canvas.height = H * 6;
-  const c = canvas.getContext('2d')!;
-  c.scale(6, 6);
-  c.drawImage(sprite, 0, 0, W, H);
-  // Continue beneath the near lip, which is restored by the foreground pass.
-  // Ending at a smaller ellipse leaves little white tabs where the old strips met it.
-  const opening = new Path2D('M8 14 A48.5 9 0 0 1 105 14 A48.5 14.5 0 0 1 8 14Z');
-  c.clip(opening);
-  c.globalCompositeOperation = 'destination-out';
-  c.fillStyle = 'rgba(0,0,0,0.92)';
-  c.fillRect(0, 0, W, 32);
-  c.globalCompositeOperation = 'source-over';
-  // A shallow crescent of thickness at the back fades into the clear opening.
-  const shade = c.createLinearGradient(0, 5, 0, 23);
-  shade.addColorStop(0, '#786A5C38');
-  shade.addColorStop(0.4, '#AA947915');
-  shade.addColorStop(1, '#C4AD8C00');
-  c.fillStyle = shade;
-  c.fill(opening);
-  // Light follows the rolled ellipse instead of forming vertical rectangular patches.
-  c.lineCap = 'round';
-  c.lineWidth = 0.8;
-  c.strokeStyle = '#FFFDF5A3';
-  c.beginPath(); c.ellipse(56.5, 15.5, 46.5, 9.9, 0, Math.PI * 1.2, Math.PI * 1.83); c.stroke();
-  rearOpenings.set(sprite, canvas);
-  return canvas;
-}
-
-/** Fixed window light on the outer PET wall: it crosses the waterline and every ingredient.
- * Paint once at art density; no blur filter or per-frame pixel processing on mobile. */
-function cupReflections() {
-  if (wallReflections) return wallReflections;
-  const canvas = document.createElement('canvas');
-  canvas.width = W * 6; canvas.height = H * 6;
-  const c = canvas.getContext('2d')!;
-  c.scale(6, 6);
-  c.clip(CONTENTS);
-  // Parameterize across the tapered wall, so both edges of each reflection converge
-  // toward the same base. Feather across the light, fade toward the curved floor.
-  const ribbon = (across: number, width: number, strength: number, start: number, end: number) => {
-    const rows = 96;
-    const step = (end - start) / rows;
-    for (let row = 0; row < rows; row++) {
-      const y = start + row * step;
-      const t = (y - 28) / (157.5 - 28);
-      const half = 42.9 - 13.4 * t;
-      const x = 56.5 + half * across;
-      const p = row / rows;
-      const fade = Math.min(1, p / 0.09) * Math.min(1, (1 - p) / 0.18);
-      const w = width * (1 - 0.32 * t) * (0.85 + 0.15 * Math.sin(p * Math.PI));
-      const light = c.createLinearGradient(x - w, 0, x + w, 0);
-      light.addColorStop(0, '#FFF9ED00');
-      light.addColorStop(0.27, withAlpha('#FFF4DC', strength * fade * 0.25));
-      light.addColorStop(0.56, withAlpha('#FFFDF5', strength * fade));
-      light.addColorStop(0.72, withAlpha('#FFFFFF', strength * fade * 0.68));
-      light.addColorStop(1, '#FFFFFF00');
-      c.fillStyle = light;
-      c.fillRect(x - w, y, w * 2, step + 0.02);
-    }
-  };
-  // Warm window on the right, quieter reflected counter light on the left.
-  ribbon(0.73, 6.2, 0.46, 25, 165);
-  ribbon(0.79, 1.3, 0.34, 32, 150);
-  ribbon(-0.77, 4.2, 0.26, 28, 164);
-  ribbon(-0.82, 0.85, 0.3, 40, 155);
-  // A broad, low-energy reflection gives the cylinder volume without whitening its center.
-  ribbon(0.39, 9, 0.075, 38, 146);
-  c.strokeStyle = '#FFF2D657';
-  c.lineWidth = 0.7;
-  c.beginPath(); c.ellipse(56.5, 157.5, 27.5, 7.6, 0, 0.18, Math.PI * 0.8); c.stroke();
-  wallReflections = canvas;
-  return canvas;
-}
 
 /** A wet tube carries the tea's colour while preserving the painted hollow edges. */
 function wetStraw(source: CanvasImageSource, tint: string) {
@@ -224,9 +142,27 @@ function frontWall(sprite: CanvasImageSource) {
   c.drawImage(source, 0, 0, W, H);
   c.clip(path(CUP_REAR_FLOOR_GLASS));
   c.clearRect(0, 132, W, H - 132);
-  // This strip ends above both painted back arcs. Its continuous glints follow the
-  // same wall down to the curved inner floor; the actual outer base is untouched.
-  c.drawImage(source, 0, 132 * 6, W * 6, 13 * 6, 0, 132, W, CUP_FLOOR_FRONT - 132);
+  // Continue a wall-only strip, above the NEW painting's rear floor arcs. Those
+  // arcs belong behind the tea; stretching one would create a pale hump at its foot.
+  const halfWidth = (y: number) => 42.9 - 13.4 * (y - 28) / 129.5;
+  for (let y = 132; y < CUP_FLOOR_FRONT; y += 0.5) {
+    const sy = 132 + (y - 132) * 6 / (CUP_FLOOR_FRONT - 132);
+    const taper = halfWidth(y) / halfWidth(sy);
+    c.drawImage(source, 0, sy * 6, W * 6, 1,
+      W * (1 - taper) / 2, y, W * taper, 0.5);
+  }
+  // Separate the material's soft transmitted tones from its bright specular texture.
+  // A uniform opacity flattened both in the previous renderer. Retain the painted
+  // highlights and shadow detail while letting the drink show through neutral PET.
+  const pixels = c.getImageData(0, 0, canvas.width, canvas.height);
+  for (let i = 0; i < pixels.data.length; i += 4) {
+    const r = pixels.data[i], g = pixels.data[i + 1], b = pixels.data[i + 2];
+    const light = (r + g + b) / 3;
+    const shine = Math.max(0, Math.min(1, (light - 205) / 42));
+    const shadow = Math.max(0, Math.min(1, (170 - light) / 60));
+    pixels.data[i + 3] *= 0.22 + 0.78 * Math.max(shine * shine, shadow);
+  }
+  c.putImageData(pixels, 0, 0);
   frontWalls.set(sprite, canvas);
   return canvas;
 }
@@ -400,7 +336,7 @@ export class CupPainter {
     if (frame.lidded) paintLid(c, this.images.reference, 'rear');
     // The far cup rim must be behind the tube, just like the lid's far sealing arc.
     // Drawing it after the contents makes the straw appear to pass behind the cup.
-    const glass = rearOpening(this.images.sprite);
+    const glass = this.images.sprite;
     const walls = path(`${BOX} ${CUP_REAR_FLOOR_GLASS}`);
     c.save();
     c.clip(REAR, 'evenodd');
@@ -419,7 +355,11 @@ export class CupPainter {
     c.save();
     c.clip(CONTENTS);
     // The back of the moulded floor is behind the drink, never a translucent band over it.
-    this.glass(CUP_CONTENTS, path(CUP_REAR_FLOOR_GLASS), false);
+    c.save();
+    c.globalAlpha = 0.6;
+    this.glass(CUP_CONTENTS,
+      path('M27 157.5 A29.5 14.5 0 0 1 86 157.5 A29.5 9.5 0 0 1 27 157.5Z'), false);
+    c.restore();
     if (tint) this.liquid(tea, milk?.color, raw, frame.phase, frame.agitation, frame.ambientPhase ?? 0);
     this.syrup(drink.sweetness, raw);
 
@@ -450,7 +390,6 @@ export class CupPainter {
     // Outer-wall reflections belong to the plastic, not the tea's fill mask. Use the
     // same material over air, tea, ice and cream, keeping the original rolled edges.
     this.glass(CUP_CONTENTS, path(BOX), false, frontWall(glass));
-    c.drawImage(cupReflections(), 0, 0, W, H);
     // The rolled near lip has its own solid highlight, independent of wall transparency.
     // It also crosses in front of cream when the drink reaches the mouth.
     c.save();

@@ -1383,7 +1383,8 @@ and dissolves into the first shallow fill; freshly poured milk briefly forms tra
 ### Liquid and glass layers
 
 The frontal cup uses a 113 x 174 coordinate box, a shallow mouth, and base contact y157.5.
-`referenceCupArt.ts` registers the painted cup, cat-ear lid, straw and separate silicone holder
+`cupMaterialArt.ts` registers the painted cup from `cup-painted-v2.png` (1024×1536 RGBA).
+`referenceCupArt.ts` keeps the cat-ear lid, straw and separate silicone holder
 from `cup-reference-painted.png` (1536×1024 RGBA). The display aspect is 113×154 while the live
 contents retain their 113×174 coordinate system. `frontalCupArt.ts` registers the shell at six
 pixels per unit; no extra vector outline or cat-face decal covers it.
@@ -1418,16 +1419,14 @@ is loaded. See `docs/frontal-cup.md`.
   ambient loop refreshes at 24 fps independently of faster pouring ripples; it stops while paused,
   off the kitchen page, or under reduced motion. All motion stays clipped to the real liquid fill
   and behind ingredients, glass and finishing parts. No fill-level or gameplay change is involved.
-- **Glass reflections follow the outer wall.** The original interior material is restrained to
-  22%, with cached, tapered window highlights over the near wall. A stronger warm reflection
-  on the right and quieter counter bounce on the left cross air, tea, ice and toppings without
-  cutting off at the fill line. Their feathered width converges toward the base; the center stays
-  clear enough to read the drink. The rear floor stays behind contents, and the rolled near lip
-  and outer base remain crisp. Reflections are rasterized once at 6× density, without blur filters
-  or per-frame pixel processing. The former liquid-only reflection has been removed.
-  The mouth's original rectangular white strips are attenuated in a cached glass texture:
-  a faint inner-wall gradient and curved rim glint replace them. The mask extends beneath the
-  near lip to avoid white tabs at its ends; the back rim is still drawn before the straw and cream.
+- **The whole cup has a new painted material.** `cup-painted-v2.png` supplies the rolled rim,
+  inner shading, irregular highlights and molded base. Canvas and order SVGs share its registered
+  geometry. The front-wall texture separates bright specular paint from soft transmitted tones
+  once at 6× density: highlights retain detail, while neutral PET stays transparent over tea.
+  Reflections cross air, liquid and ingredients continuously. The rear floor is drawn behind
+  contents; front-wall glints continue along the taper so no rear ellipse crosses the tea.
+  The former erased-mouth patch and procedural reflection ribbons are removed. No pixel reads
+  occur per frame. See [the artwork and generation prompt](docs/cup-painted-v2.md).
 - **Ingredients are identified by pictures, without name tags.** Tea tanks have distinct
   leaf, jasmine, anise, rolled-leaf, taro and matcha emblems (`art/ingredientMarks.ts`). Topping
   pans show their contents unobscured. Sugar uses a cube motif; the ice box keeps its original
