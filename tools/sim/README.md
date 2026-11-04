@@ -50,8 +50,9 @@ Keep `baseline/` as it is. New results go in a new file, with a note here.
 judgement by someone who knows the rule: shippers left out of it, nobody outside, at most `most` at
 the counter. `overtimeRounds` caps the presses. A press is a tap and waits for free hands. The result
 carries the day's `overtime` and `lost`, and `coins` already includes whatever the jar paid at closing.
-`queue: 'kinds'` triages by deadline and tip; `'line'` is that, taking the shortest drink while
-anyone is outside. `gear` puts the shop's purchases on the shift. `noticeMs` changes how the bot
+The live game now serves a single FIFO customer at a time. The bot only considers the front
+customer for ordering and preparation; historical `queue` policies remain accepted for baseline
+compatibility, but cannot reorder today's line. `gear` puts the shop's purchases on the shift. `noticeMs` changes how the bot
 notices someone waiting from the kitchen, and `panicOff` stops it noticing; see below.
 
 `usual` is what the bot does with a regular's blank card: `'ask'` every time, `'guess'` every time,

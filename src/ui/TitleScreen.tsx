@@ -2,26 +2,15 @@ import { useMemo, useRef } from 'preact/hooks';
 
 import { characterSvg } from '../art/character';
 import { titleAwningSvg, titlePearlsSvg, titleWallpaperSvg } from '../art/icons';
-import { colors } from '../art/theme';
+import logo from '../assets/logo.png';
 import { useGame } from '../hooks';
 import { dispatch } from '../store';
 import { uiState } from '../ui-state';
 import { CustomerLook } from '../game/customers';
-import { Drink } from '../game/ingredients';
 import { GameMode, suspendedShift } from '../game/reducer';
 import { Button } from './Button';
-import { CupArt, Svg } from './Svg';
+import { Svg } from './Svg';
 import { useViewport } from './viewport';
-
-const SHOWCASE_DRINK: Drink = {
-  size: 'M',
-  toppings: ['pearls'],
-  sweetness: null,
-  ice: 'regular',
-  tea: 'taro',
-  milk: 'whole',
-  foam: 'cheese',
-};
 
 const LEFT_FAN: CustomerLook = { skin: '#F6C8A4', hair: '#2B1B17', hairStyle: 'bun', shirt: '#7FD6C2', accessory: 'none' };
 const RIGHT_FAN: CustomerLook = { skin: '#E9B48E', hair: '#6B4423', hairStyle: 'cap', shirt: '#FFCF6E', accessory: 'glasses' };
@@ -55,13 +44,16 @@ export function TitleScreen() {
   const offer = useRef({ day, waiting });
   if (phase === 'title') offer.current = { day, waiting };
   const { day: openDay, waiting: resuming } = offer.current;
-  const cupWidth = Math.min(130, width * 0.32);
+  // The shop's mark, between the two who came for it. Both shrink with the screen rather than
+  // the mark alone, so the three of them stay inside the narrowest phone's 20px padding.
+  const markWidth = Math.min(220, width * 0.46);
+  const fanWidth = Math.min(74, width * 0.18);
 
   const wallpaper = useMemo(() => titleWallpaperSvg(width, height, false), [width, height]);
   const pearls = useMemo(() => titlePearlsSvg(width, height), [width, height]);
   const awning = useMemo(() => titleAwningSvg(width), [width]);
-  const leftFan = useMemo(() => characterSvg(LEFT_FAN, { mood: 'delighted', width: 74 }), []);
-  const rightFan = useMemo(() => characterSvg(RIGHT_FAN, { mood: 'happy', width: 74 }), []);
+  const leftFan = useMemo(() => characterSvg(LEFT_FAN, { mood: 'delighted', width: fanWidth }), [fanWidth]);
+  const rightFan = useMemo(() => characterSvg(RIGHT_FAN, { mood: 'happy', width: fanWidth }), [fanWidth]);
 
   return (
     <div class="title live">
@@ -80,7 +72,7 @@ export function TitleScreen() {
               </div>
               <div class="title-scene">
                 <div class="title-fan"><Svg markup={leftFan} /></div>
-                <CupArt drink={SHOWCASE_DRINK} width={cupWidth} backgroundColor={colors.wall} straw />
+                <img class="title-mark" src={String(logo)} alt="" width={markWidth} />
                 <div class="title-fan"><Svg markup={rightFan} /></div>
               </div>
             </div>

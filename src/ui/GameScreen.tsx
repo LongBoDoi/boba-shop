@@ -4,7 +4,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'preact/hooks';
 import { setGameArea } from '../game/host';
 import { formatMoney } from '../game/money';
 import { goToPage } from '../game/pager';
-import { canExtend } from '../game/reducer';
+import { canExtend, frontSlot } from '../game/reducer';
 import { lullGroup, lullPreview, OVERTIME_ROUND_MS } from '../game/rules';
 import { shallow, useGame, useUi } from '../hooks';
 import { playSound } from '../sound';
@@ -86,13 +86,11 @@ export function GameScreen() {
 /** The two-page indicator under the HUD: tap a label to switch screens. Swiping is the main way. */
 const PageTabs = memo(function PageTabs({ page }: { page: 0 | 1 }) {
   const { requesting, tickets, outside } = useGame((state) => {
-    let requesting = 0;
-    let tickets = 0;
-    for (const customer of state.slots) {
-      if (customer?.status === 'requesting') requesting++;
-      else if (customer?.status === 'ordered') tickets++;
-    }
-    return { requesting, tickets, outside: state.line.length };
+    const head = frontSlot(state.slots);
+    const customer = head === null ? null : state.slots[head];
+    return { requesting: Number(customer?.status === 'requesting'),
+      tickets: Number(customer?.status === 'ordered'),
+      outside: Math.max(0, state.slots.filter(Boolean).length - 1) + state.line.length };
   }, shallow);
   return (
     <div class="tabs live" role="tablist">
@@ -112,7 +110,7 @@ function Tab({ label, active, badge, outside = 0, onPress }: { label: string; ac
           <span class="tab-badge-text">{badge}</span>
         </span>
       )}
-      {outside > 0 && <span class="tab-line" aria-label={`${outside} khách đợi ngoài cửa`}>+{outside}</span>}
+      {outside > 0 && <span class="tab-line" aria-label={`${outside} khách đang xếp hàng`}>+{outside}</span>}
     </button>
   );
 }

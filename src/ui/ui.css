@@ -157,6 +157,13 @@ button:focus-visible { outline: 2px solid var(--primary-dark); outline-offset: 2
 .title-subtitle { font-size: 17px; font-weight: 600; color: var(--ink-soft); }
 .title-scene { margin-top: 24px; display: flex; flex-direction: row; align-items: flex-end; gap: 6px; }
 .title-fan { margin-bottom: -4px; }
+/* The shop's mark (`tools/make-logo.py`), cut out of its painting so it stands on the wall. */
+.title-mark {
+  height: auto;
+  display: block;
+  filter: drop-shadow(0 5px 6px rgba(74, 44, 42, 0.14));
+  animation: rise-16 450ms var(--ease-out) 180ms both;
+}
 .title-card {
   width: 100%;
   max-width: 520px;

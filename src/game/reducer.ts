@@ -619,7 +619,7 @@ function tick(state: GameState, dt: number): GameState {
    * patience is worked out again because the shop may have changed how it runs while they were outside.
    */
   const toCounter = (customer: Customer, spot: number) => {
-    // Nobody has to come over for this one: the relaxed shop takes every order, the board one spot's.
+    // Automatic ordering belongs to the head of the line, not an arbitrary storage slot.
     const ordered = frontSlot(slots) === null && (auto || state.gear.includes('board'));
     slots[spot] = {
       ...customer,
@@ -718,7 +718,7 @@ function tick(state: GameState, dt: number): GameState {
     regulars,
     waveLeft,
     seed: rng.seed,
-    selectedSlot: resolveSelection(slots, state.selectedSlot),
+    selectedSlot: resolveSelection(slots),
     stats: missed > 0 ? { ...state.stats, missed: state.stats.missed + missed } : state.stats,
   };
 }
@@ -748,10 +748,9 @@ function unchanged<T>(before: readonly T[], after: T[]): T[] {
 }
 
 /**
- * Keep the current selection if that customer still has an open order, else pick whoever
- * has been waiting longest for their drink. Only `ordered` customers can be selected.
+ * Selection follows the head of the FIFO line. A waiting guest never replaces the active order.
  */
-function resolveSelection(slots: (Customer | null)[], _current: number | null): number | null {
+function resolveSelection(slots: (Customer | null)[]): number | null {
   const front = frontSlot(slots);
   return front !== null && slots[front]?.status === 'ordered' ? front : null;
 }
@@ -781,7 +780,7 @@ function setMode(state: GameState, mode: GameMode): GameState {
     overtime: mode === 'relaxed' ? forfeitJar(state.overtime) : state.overtime,
     ...(mode === 'relaxed' ? { waveLeft: 0, lullUntil: 0, incoming: [] } : {}),
     nextSpawnAt: mode === 'relaxed' ? Math.min(state.nextSpawnAt, state.clock) : state.nextSpawnAt,
-    selectedSlot: resolveSelection(slots, state.selectedSlot),
+    selectedSlot: resolveSelection(slots),
   };
 }
 
@@ -797,8 +796,9 @@ function setMode(state: GameState, mode: GameMode): GameState {
 function changeShop(state: GameState, customer: Customer, mode: GameMode): Customer {
   const { clock } = state;
   const patience = patienceFor(state, customer.look, { mode, rounds: customer.lateRound ?? 0 });
-  // Only going relaxed finds anyone here: a relaxed shop has nobody waiting to order.
-  if (customer.status === 'requesting') return { ...customer, ...patience, status: 'ordered', orderedAt: clock };
+  if (customer.status === 'requesting') return mode === 'relaxed'
+    ? { ...customer, ...patience, status: 'ordered', orderedAt: clock }
+    : { ...customer, ...patience };
   if (patience.patienceMs === customer.patienceMs) return { ...customer, ...patience };
   const since = customer.orderedAt ?? customer.arrivedAt;
   const orderedAt = Math.max(0, since + (clock - since) * (1 - patience.patienceMs / customer.patienceMs));
@@ -940,7 +940,7 @@ function serve(state: GameState): GameState {
     cup: EMPTY_DRINK,
     build: EMPTY_BUILD,
     cupId: state.cupId + 1,
-    selectedSlot: resolveSelection(slots, null),
+    selectedSlot: resolveSelection(slots),
     nextId: state.nextId + 2,
     feedback: [
       ...hushed(state.feedback, slot),

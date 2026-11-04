@@ -4,6 +4,10 @@ The counter now uses one cohesive painted cafe background per orientation, with 
 palette, queue aisle, windows, lamps, seating, register and cookie shelves from the user's
 reference. All signage is Vietnamese. The original kitchen painting is unchanged.
 
+The current [cat-themed entrance paintings](counter-cats.md) and single-file queue supersede the original side-by-side staging;
+see [queue artwork and behavior](counter-queue.md). The original assets and prompts below remain
+as provenance.
+
 ## Artwork
 
 - `src/assets/counter/cafe-portrait.png`: 941×1672, copied from built-in image-generation output
@@ -27,7 +31,7 @@ Customers retain their faces, accessories, moods, patience bubbles and order int
 Their standing variant adds legs, shoes and floor shadows, with their feet aligned to the queue
 mat. Taps are limited to the customer/bubble region so decorative surfaces do not take orders.
 The register is a keyboard-accessible shortcut: `Nhận đơn` takes the next requesting customer;
-when all orders are taken, `Pha chế` opens the kitchen. Its touch target is at least 44px tall,
+after the front order is taken, `Pha chế` opens the kitchen. Its touch target is at least 44px tall,
 and it stops accepting touches while the page slides, while paused, or under the opening sign.
 All displayed counts come from the existing game state. The HUD uses the warm palette on both pages.
 
@@ -37,7 +41,7 @@ All displayed counts come from the existing game state. The HUD uses the warm pa
 Native assets are copied for Android/iOS; native-device execution is not part of this check.
 
 The optional `tools/check-counter-screen.cjs` browser check needs Vite running and Playwright.
-It checks 375×667, 390×844, 568×320, 932×430 and 768×1024: two/three customers, actual pointer
+It checks 375×667, 390×844, 568×320, 932×430 and 768×1024: short/full queues, actual pointer
 taps, the register, selecting an ordered customer, swipe cancellation, pause, no hidden register
 touch interception and no page errors. `PLAYWRIGHT_MODULE`, `CHROME_PATH`, `BASE_URL` and
 `SCREENSHOT_DIR` can select local browser tooling and capture previews.

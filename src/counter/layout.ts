@@ -35,7 +35,7 @@ export interface CounterLayout {
   width: number;
   height: number;
   wide: boolean;
-  /** Logical customer stage ending just below the queue mat. */
+  /** Logical foot line at the counter; the foreground hides the lower body. */
   stageHeight: number;
   /** Foreground room below the customers. */
   floorHeight: number;
@@ -53,7 +53,7 @@ export function layoutCounter(width: number, height: number, windowWidth: number
   const queueWidth = Math.min(width * 0.74, wide ? 300 : 230);
   const metrics = stageMetrics(queueWidth, stageHeight, 1, wide);
   // Scale the standing figure with the painted room; never stretch it with queue length.
-  metrics.charWidth = Math.min(wide ? 96 : 90, (wide ? 186 : 178) * room.scale);
+  metrics.charWidth = (wide ? 200 : 300) * room.scale;
   metrics.charHeight = metrics.charWidth * 1.76;
   metrics.bubbleBottom = metrics.charHeight * 0.86 + FIGURE_LIFT;
   metrics.bubbleCenterY = stageHeight - metrics.bubbleBottom - 26;
@@ -66,7 +66,8 @@ export function layoutCounter(width: number, height: number, windowWidth: number
 /** Feet follow the same straight aisle; perspective compresses each successive place. */
 export function queuePosition(layout: CounterLayout, rank: number) {
   const distance = Math.pow(0.63, rank);
-  const scale = 0.43 + 0.57 * distance;
+  const doorScale = layout.wide ? 0.28 : 0.26;
+  const scale = doorScale + (1 - doorScale) * distance;
   const { room } = layout;
   return { x: room.doorX + (room.queueX - room.doorX) * distance,
     feet: room.doorY + (room.queueY - room.doorY) * distance, scale };

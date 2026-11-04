@@ -3,6 +3,7 @@ import Phaser from 'phaser';
 import { Departure, Feedback, frontSlot, GameState, patienceLeft, queueSlots } from '../game/reducer';
 import { CustomerView, ownerOf, preloadShared, StageContext } from './CustomerView';
 import { FloatingText } from './FloatingText';
+import { behindCounterForeground } from './foreground';
 import { CounterLayout, queuePosition } from './layout';
 import { LeavingView } from './LeavingView';
 import { TextureBank } from './textures';
@@ -73,8 +74,10 @@ export class Stage {
           slot === state.selectedSlot, 0, false);
         guest = { root, view, rank: -1, slot };
         this.customers.set(customer.id, guest);
-        if (animate) root.setPosition(layout.room.doorX, layout.room.doorY - layout.room.queueY * 0.43)
-          .setScale(0.43).setAlpha(0);
+        if (animate) {
+          const door = queuePosition(layout, Infinity);
+          root.setPosition(door.x, door.feet - layout.room.queueY * door.scale).setScale(door.scale).setAlpha(0);
+        }
       } else guest.view.update(customer, waiting ? 1 : patienceLeft(customer, state.clock), slot === state.selectedSlot);
       guest.view.setWaiting(waiting);
       guest.slot = slot;
@@ -113,7 +116,7 @@ export class Stage {
     }
     for (const item of feedback) {
       if (seen.has(item.id) || this.floating.has(item.id) || (item.tone === 'say' && item.slot !== this.front)) continue;
-      const root = this.scene.add.container(ctx.layout.room.queueX + ctx.layout.metrics.charWidth * 0.82, 0)
+      const root = this.scene.add.container(ctx.layout.room.queueX + Math.max(56, ctx.layout.metrics.charWidth * 0.82), 0)
         .setDepth(SLOT_DEPTH + 102);
       const view = new FloatingText(ctx, root, item, () => {
         const effect = this.floating.get(item.id);
@@ -133,13 +136,13 @@ export class Stage {
   /** Waiting customers are scenery, never alternate service targets. */
   slotAt(x: number, y: number): number | null {
     const layout = this.ctx?.layout;
-    if (!layout || this.front === null) return null;
+    if (!layout || this.front === null || behindCounterForeground(layout.room, x, y)) return null;
     const guest = [...this.customers.values()].find(item => item.slot === this.front);
     if (!guest || guest.walk?.isPlaying()) return null;
     const { charWidth, charHeight } = layout.metrics;
     const figure = Math.abs(x - layout.room.queueX) <= Math.max(22, charWidth / 2)
       && y >= layout.room.queueY - charHeight && y <= layout.room.queueY + 8;
-    const bubble = Math.abs(x - (layout.room.queueX + charWidth * 0.82)) <= 32
+    const bubble = Math.abs(x - (layout.room.queueX + Math.max(56, charWidth * 0.82))) <= 32
       && y >= layout.stageHeight - layout.metrics.bubbleBottom - 74
       && y <= layout.stageHeight - layout.metrics.bubbleBottom + 8;
     return figure || bubble ? this.front : null;

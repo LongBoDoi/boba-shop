@@ -140,7 +140,7 @@ export class CustomerView {
 
     this.figure = scene.add.image(0, stageHeight - FIGURE_LIFT, NONE).setOrigin(0.5, 1).setVisible(false);
     this.bubbleY = stageHeight - metrics.bubbleBottom;
-    this.bubble = scene.add.container(metrics.charWidth * 0.82, this.bubbleY);
+    this.bubble = scene.add.container(Math.max(56, metrics.charWidth * 0.82), this.bubbleY);
     this.pointer = scene.add.image(0, 0, NONE).setOrigin(0.5, 0).setVisible(false);
     this.body = scene.add.image(0, 0, NONE).setOrigin(0.5, 0).setVisible(false);
     this.ring = scene.add.image(0, 0, NONE).setOrigin(0, 0).setVisible(false);
