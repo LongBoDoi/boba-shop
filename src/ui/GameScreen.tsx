@@ -15,7 +15,8 @@ import { EffectsLayer } from './Effects';
 import { COIN_ARRIVAL_MS, Hud, useCountUp } from './Hud';
 import { OpeningSign } from './OpeningSign';
 import { PrepPage } from './PrepPage';
-import { overtimeDockRight, PrepLayout, prepLayoutFor } from './responsive';
+import { CounterPage } from './CounterPage';
+import { isWideLayout, overtimeDockRight, PrepLayout, prepLayoutFor } from './responsive';
 import { anchors, useViewport } from './viewport';
 
 /**
@@ -23,7 +24,7 @@ import { anchors, useViewport } from './viewport';
  * pager — the counter and the kitchen side by side. The pager itself is a hole in the HTML: it is
  * measured and handed to the game (`setGameArea`), which lays the canvas over exactly that box and
  * slides its two scenes through it. The kitchen page's own HTML (the order card, the buttons)
- * slides with it; the counter page has none.
+ * slides with it; the counter's register control follows the same offset.
  *
  * The overlays — the day's sign, the pause card — stand over all of it. They never stack: the
  * pause card waits until the sign is put away (see "Saving the shop" in CLAUDE.md).
@@ -36,7 +37,6 @@ export function GameScreen() {
   const opening = useUi((ui) => ui.opening);
   const paused = useGame((state) => state.paused);
   const day = useGame((state) => state.day);
-  const warm = page === 1;
   const layout = prepLayoutFor(viewport.width, viewport.height, pager.height);
 
   useLayoutEffect(() => {
@@ -60,14 +60,16 @@ export function GameScreen() {
   }, []);
 
   return (
-    <div class={`game ${warm ? 'warm' : ''}`}>
+    <div class="game warm">
       <div class="game-safe-top" />
       <div class="game-side left" />
       <div class="game-side right" />
       <div class="game-body">
-        <Hud warm={warm} />
+        <Hud warm />
         <PageTabs page={page} />
         <div ref={pagerRef} class="pager">
+          {pager.width > 0 && <CounterPage width={pager.width} height={pager.height}
+            wide={isWideLayout(viewport.width, viewport.height)} />}
           {pager.width > 0 && <PrepPage layout={layout} width={pager.width} height={pager.height} />}
           {pager.width > 0 && <OvertimeDock layout={layout} right={overtimeDockRight(layout, pager.width, pager.height)} />}
           {pager.width > 0 && <LullPill />}

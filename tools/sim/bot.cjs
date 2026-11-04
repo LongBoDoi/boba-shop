@@ -1,7 +1,7 @@
 /* A bot that plays whole shifts through the shipped gameReducer. Rules are the game's; only the
  * human's timing and slips are modelled, and every such number is in PROFILES / MACHINE below. */
 const { src } = require('./load.cjs');
-const { canExtend, canServe, createInitialState, gameReducer: R, patienceLeft } = src('game/reducer.ts');
+const { canCarryOut, canExtend, canServe, createInitialState, gameReducer: R, patienceLeft } = src('game/reducer.ts');
 const { kindOf } = src('game/customers.ts');
 const { patienceFor, payoutFor, starsFor } = src('game/rules.ts');
 const { drinkPrice, evaluateDrink } = src('game/orders.ts');
@@ -293,7 +293,8 @@ function shift(opts) {
     if (cur.spoiled && fix === 'remake') return bin(true);
     const step = cur.plan[0];
     const need = zoneOf(step.kind, step.id);
-    if (layout === 'portrait' && need !== zone) {
+    // The hand-over is a tap on the till, on the other page: the kitchen's wall is not involved.
+    if (layout === 'portrait' && step.kind !== 'handover' && need !== zone) {
       log.pans += 1;
       return spend(human(P.swipe), 'hands', () => { zone = need; });
     }
@@ -344,9 +345,18 @@ function shift(opts) {
         return spend(human(P.tap), 'hands', () => act({ type: 'LID_CUP' }));
       case 'straw':
         return spend(human(P.tap), 'hands', () => act({ type: 'ADD_STRAW' }));
+      // The finished cup is carried out to the counter, and the page goes with it. The drink is
+      // handed over there, by a second tap on the till, so a serve costs two taps and a slide.
       case 'serve':
-        return spend(human(P.tap), 'hands', () => {
+        return spend(human(P.tap) + MACHINE.slide, 'hands', () => {
           if (cur.spoiled && fix === 'remake') { cur.plan = [{ kind: 'serve' }]; return; }
+          if (!s.slots[s.selectedSlot] || !canCarryOut(s)) { cur = null; return; }
+          s = R(s, { type: 'CARRY_OUT' });
+          page = 'counter';
+          cur.plan = [{ kind: 'handover' }];
+        });
+      case 'handover':
+        return spend(human(P.tap), 'hands', () => {
           const c = s.slots[s.selectedSlot];
           if (!c || !canServe(s)) { cur = null; return; }
           const { quality, mistakes } = evaluateDrink(s.cup, c.order, s.config.categories);
@@ -398,6 +408,9 @@ function shift(opts) {
         }
       });
     }
+    // A cup already standing on the till is handed over where the bot is standing: the counter is
+    // the page it was carried out to, so this must not send it back to the kitchen first.
+    if (cur && cur.plan[0]?.kind === 'handover') return nextStep();
     if (cur || ordered.length) {
       if (page !== 'kitchen') return travel('kitchen');
       if (!cur) { startBuild(); if (s.clock >= busyUntil && !cur) { /* nothing selected yet */ } return; }

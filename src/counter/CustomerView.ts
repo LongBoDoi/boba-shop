@@ -44,12 +44,12 @@ export function moodFor(patience: number): Mood {
 export function figureTexture(ctx: StageContext, customer: Customer, mood: Mood, blinking: boolean): Promise<string | null> {
   const { charWidth, charHeight } = ctx.layout.metrics;
   const owner = ownerOf(customer);
-  const key = `${owner}:${mood}${blinking ? ':blink' : ''}:${n(charWidth)}`;
-  return ctx.bank.get(owner, key, () => characterSvg(customer.look, { mood, blinking, width: charWidth }), charWidth, charHeight);
+  const key = `${owner}:standing:${mood}${blinking ? ':blink' : ''}:${n(charWidth)}`;
+  return ctx.bank.get(owner, key, () => characterSvg(customer.look, { mood, blinking, width: charWidth, fullBody: true }), charWidth, charHeight);
 }
 
 export function figureKeyIfReady(ctx: StageContext, customer: Customer, mood: Mood, blinking: boolean): string | null {
-  const key = `${ownerOf(customer)}:${mood}${blinking ? ':blink' : ''}:${n(ctx.layout.metrics.charWidth)}`;
+  const key = `${ownerOf(customer)}:standing:${mood}${blinking ? ':blink' : ''}:${n(ctx.layout.metrics.charWidth)}`;
   return ctx.bank.has(key) ? key : null;
 }
 
@@ -140,7 +140,7 @@ export class CustomerView {
 
     this.figure = scene.add.image(0, stageHeight - FIGURE_LIFT, NONE).setOrigin(0.5, 1).setVisible(false);
     this.bubbleY = stageHeight - metrics.bubbleBottom;
-    this.bubble = scene.add.container(0, this.bubbleY);
+    this.bubble = scene.add.container(metrics.charWidth * 0.82, this.bubbleY);
     this.pointer = scene.add.image(0, 0, NONE).setOrigin(0.5, 0).setVisible(false);
     this.body = scene.add.image(0, 0, NONE).setOrigin(0.5, 0).setVisible(false);
     this.ring = scene.add.image(0, 0, NONE).setOrigin(0, 0).setVisible(false);
@@ -221,6 +221,11 @@ export class CustomerView {
         }
       }
     }
+  }
+
+  /** Only the head of the line invites interaction; waiting faces stay visible behind it. */
+  setWaiting(waiting: boolean) {
+    this.bubble.setVisible(!waiting);
   }
 
   /** The texture showing right now, for a departure to start from while its own face is drawn. */

@@ -61,7 +61,7 @@ try {
     let cup = gameReducer(state, { type: 'TAKE_ORDER', slot });
     cup = gameReducer({ ...cup, selectedSlot: slot }, { type: 'PICK_CUP', size: 'M' });
     cup = gameReducer(cup, { type: 'POUR', category: 'tea', optionId: 'black', amount: 0.6 });
-    for (const type of ['LID_CUP', 'ADD_STRAW', 'SERVE']) cup = gameReducer(cup, { type });
+    for (const type of ['LID_CUP', 'ADD_STRAW', 'CARRY_OUT', 'SERVE']) cup = gameReducer(cup, { type });
     return cup;
   };
   /** The counter emptied, and it is not the opening of the day: someone has already been through the door. */
@@ -126,7 +126,7 @@ try {
   const queued = fullHouse(5, 30_000, { line: [person(1, 'plain', { arrivedAt: 20_000 }), person(2, 'elder', { arrivedAt: 25_000 })] });
   const stillFull = tick(queued);
   assert.equal(stillFull.line, queued.line, 'A tick that moves nobody hands back the same line, so nothing redraws');
-  assert.equal(stillFull.slots, queued.slots, 'And the same counter');
+  assert.deepEqual(stillFull.slots.map(c => c.id), queued.slots.map(c => c.id), 'The queue keeps the same customers while waiting deadlines are paused');
   assert.equal(stillFull.feedback, queued.feedback, 'And the same feedback');
   assert.equal(stillFull.departures, queued.departures, 'And the same departures');
   const spotFree = { ...queued, slots: queued.slots.map((customer, slot) => (slot === 1 ? null : customer)) };
@@ -367,7 +367,7 @@ try {
   let calm = gameReducer(opened(5), { type: 'SET_MODE', mode: 'relaxed' });
   calm = run(calm, 2_000);
   assert.equal(calm.slots.filter(Boolean).length, calm.slots.length, 'A relaxed shop fills every spot straight away');
-  assert.ok(calm.slots.every((customer) => customer.status === 'ordered'), 'With every order taken');
+  assert.equal(calm.slots.filter(customer => customer.status === 'ordered').length, 1, 'Only the front order is taken automatically');
   assert.deepEqual([calm.waveLeft, calm.line.length, calm.lullUntil, calm.incoming.length], [0, 0, 0, 0], 'And none of the machinery of a rush');
   const refilled = run(nobody(calm), 300);
   assert.equal(refilled.slots.filter(Boolean).length, refilled.slots.length, 'One a tick, however fast they are served');

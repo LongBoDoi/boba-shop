@@ -169,4 +169,29 @@ for (let space = SHORT_FLOOR; space < 134; space++) {
 // A window that short is the screen's height less 224px: 320 tall leaves 96, on a phone with its browser's bars up.
 assert(SHORT_FLOOR <= 96, `A 320px window still has the whole button (${SHORT_FLOOR})`);
 assert.equal(askHeightFor(tileRoomIn(40)), ASK_MIN_HEIGHT, 'Past that it stops at what can be read, which is the column being past helping');
-console.log('check-prep-layout: the painting stays visible, the card fits, and one shared mat holds S/M/L on the clear worktop.');
+
+// ------------------------------------------------------- the counter's handover mat
+// A cup finished in the kitchen is carried out and stands on the painted mat beside the till until
+// the register hands it over. That painting is covered and centred too, so the thing to pin is
+// that neither the cup nor the till is cropped away, and that they do not stand on each other: a
+// drink nobody can see is a drink nobody knows to hand over, and a till under a cup cannot be read.
+const { counterRoomPlacement } = require(path.join(__dirname, '../src/counter/roomLayout.ts'));
+const { cupLayout } = require(path.join(__dirname, '../src/art/cup.ts'));
+const COUNTER_SHAPES = [
+  ['the small phone', 375, 592], ['a phone', 390, 769], ['a big phone', 414, 800],
+  ['an iPad upright', 768, 949], ['the squarest page the portrait painting gets', 540, 450],
+  ...SHAPES.map(([what, width, pageHeight]) => [`${what}, at the counter`, width, pageHeight]),
+];
+for (const [what, width, height] of COUNTER_SHAPES) {
+  const room = counterRoomPlacement(width, height, counterIsWide(width, height));
+  const { handoff: seat, register } = room;
+  const cup = cupLayout(seat.width, { straw: true, sealed: true });
+  const left = seat.x - cup.boxWidth / 2;
+  assert(left >= 0 && left + cup.boxWidth <= width, `${what}: the whole cup is on the page`);
+  assert(seat.y - cup.svgHeight >= 0 && seat.y <= height, `${what}: its straw and its base are both on the page`);
+  assert(seat.width >= 28, `${what}: the cup is big enough to be read as a cup (${seat.width.toFixed(0)}px)`);
+  assert(left > register.x + register.width || left + cup.boxWidth < register.x,
+    `${what}: the cup stands clear of the till, so neither covers the other`);
+}
+
+console.log('check-prep-layout: the painting stays visible, the card fits, one shared mat holds S/M/L on the clear worktop, and the counter\'s handover mat is never cropped.');

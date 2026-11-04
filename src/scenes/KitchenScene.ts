@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 
 import {
-  CupSize, Drink, EMPTY_DRINK, getIngredient, MAX_ICE_SCOOPS, MAX_POUR, MILK_SPLASH, POUR_RATE, SUGAR_STEPS,
+  CupSize, Drink, EMPTY_DRINK, getIngredient, MAX_ICE_SCOOPS, MILK_SPLASH, pouredAmount, SUGAR_STEPS,
 } from '../game/ingredients';
 import { GameState } from '../game/reducer';
 import { CUP_HOLDER, CUP_HOLDER_ART, ROOM_BG_SIZE } from '../art/kitchenArt';
@@ -14,11 +14,12 @@ import { playSound, setPourFill, setPouring as setPourSound } from '../sound';
 import { dispatch, store } from '../store';
 import { nudge, uiState } from '../ui-state';
 import { CupView } from '../kitchen/CupView';
-import { addTool, prepareEquipmentTextures, card, measure, roundRect, sourceImage } from '../kitchen/equipment';
+import { addTool, finishPartTexture, prepareEquipmentTextures, card, measure, roundRect, sourceImage } from '../kitchen/equipment';
 import { cupSizeFor, findDairyStation, findStation, hintFor, KitchenLayout, layoutKitchen, Station } from '../kitchen/layout';
 import { KITCHEN_TEXT_MIN } from '../kitchen/typography';
 import { DURATION, EASE } from '../kitchen/motion';
 import { cupSeatShadowTexture, cupShadowTexture, Spill, Stream } from '../kitchen/pourEffects';
+import { CUP_LID_HOLE_Y, STRAW_INSERT } from '../art/finishingArt';
 
 /**
  * The kitchen you work in — `KitchenStation.tsx`, as a Phaser scene. Page 1 of the pager.
@@ -46,10 +47,12 @@ const DEPTH = { room: 0, holder: 10, shadow: 15, streamBack: 18, cup: 20, tool: 
  * where the cup goes, and whether anything is animated getting there.
  */
 const TAP_DISTANCE = 8;
+/** How long the straw takes to go down through the lid, once it is lined up over the opening. */
+const INSERT_MS = 220;
 
 type Gesture =
   | { kind: 'cup'; startX: number; startY: number; grabX: number; grabY: number; owned: boolean }
-  | { kind: 'lid'; startX: number; startY: number }
+  | { kind: 'lid'; station: Station; startX: number; startY: number }
   | { kind: 'pour'; station: Station; enabled: boolean; startedAt: number; startX: number }
   | { kind: 'carry'; station: Station; startX: number; startY: number; distance: number; target: Phaser.GameObjects.Container }
   | { kind: 'refused'; station?: Station }
@@ -57,6 +60,9 @@ type Gesture =
   | { kind: 'pan'; startX: number; startPan: number; lastX: number; lastT: number; velocity: number };
 
 interface Placed { x: number; y: number; scale: number }
+
+/** Where a finishing part sits on the cup, in the cup's own 113x174 units. */
+interface FinishBox { x: number; y: number; width: number; height: number }
 
 export class KitchenScene extends Phaser.Scene {
   private layout: KitchenLayout | null = null;
@@ -90,7 +96,7 @@ export class KitchenScene extends Phaser.Scene {
 
   private level = 0;
   private levelTween: Phaser.Tweens.Tween | null = null;
-  private pouring: { station: Station; running: boolean } | null = null;
+  private pouring: { station: Station; running: boolean; startedAt: number; from: number } | null = null;
   private stream: Stream | null = null;
   private spill: Spill | null = null;
 
@@ -100,6 +106,17 @@ export class KitchenScene extends Phaser.Scene {
   private finishingTool = false;
   private toolCupId = -1;
   private rackCup: { view: CupView; x: number; y: number; alpha: number } | null = null;
+  /**
+   * What a tool still crossing the room has already tipped in: the drink as it was before it did,
+   * which is what the cup goes on being drawn as until the tool lands. The shop has the scoop from
+   * the dispatch exactly as it always did — what waits is the picture, so that the pearls are not
+   * in the drink while the scoop of them is still in the air.
+   */
+  private pending: { drink: Drink; cupId: number } | null = null;
+  /** A lid or a straw on its way onto the cup, and the picture it is holding back: {@link fitPart}. */
+  private fitting:
+    | { part: 'lid' | 'straw'; view: Phaser.GameObjects.Image; box: FinishBox; fromX: number; fromY: number; t: number; sunk: number }
+    | null = null;
 
   private gesture: Gesture | null = null;
   private pointerId = -1;
@@ -258,15 +275,22 @@ export class KitchenScene extends Phaser.Scene {
 
   /** Make (or remake) the cup for the drink on the mat. */
   private buildCup(relayout = false) {
-    const { cup, cupId } = store.state;
+    const { build, cup, cupId } = store.state;
     const layout = this.layout;
     if (!layout) return;
     const key = `${cupId}:${cup.size}:${layout.cupW}`;
-    if (!cup.size) {
+    // No cup yet, or one carried out to the counter: either way the mat is empty. Only an empty mat
+    // is labelled — a cup that is out at the front is spoken for, and the hint pill says where it is.
+    if (!cup.size || build.atCounter) {
+      this.pending = null;
+      this.settlePart();
       this.cup?.destroy();
       this.cup = null;
       this.cupKey = '';
-      this.showMatLabel(true);
+      // The spill lived inside the cup's container and went with it.
+      this.spill = null;
+      this.dock = null;
+      this.showMatLabel(!cup.size);
       return;
     }
     this.showMatLabel(false);
@@ -280,8 +304,8 @@ export class KitchenScene extends Phaser.Scene {
     this.cup?.destroy();
     this.cupKey = key;
     this.cup = new CupView(this, layout.cupW, layout.cupH, cup);
-    this.cup.setFinish(store.state.build.lidded, store.state.build.straw);
-    this.cup.setDrink(cup, cupId, true);
+    this.showFinish();
+    this.cup.setDrink(this.drinkShown(), cupId, true);
     this.cup.level = this.level;
     this.cup.container.setDepth(DEPTH.cup);
     this.spill?.container.destroy();
@@ -364,28 +388,44 @@ export class KitchenScene extends Phaser.Scene {
       this.pouring = null;
       this.level = state.build.fill;
       this.levelTween?.stop();
+      // Nothing in the air belongs to this cup.
+      this.pending = null;
+      this.settlePart();
     }
-    if (state.cupId !== previous.cupId || state.cup !== previous.cup) {
+    if (state.cupId !== previous.cupId || state.cup !== previous.cup
+      || state.build.atCounter !== previous.build.atCounter) {
       this.buildCup();
       this.cup?.setDrink(this.drinkShown(), state.cupId);
       this.refreshEquipment();
     }
     if (state.build.fill !== previous.build.fill || state.cupId !== previous.cupId) {
-      this.tweenLevel(state.build.fill, DURATION.base);
+      // A carton still on its way over has not splashed in yet; `settlePending` catches up for it.
+      if (!this.pending) this.tweenLevel(state.build.fill, DURATION.base);
       setPourFill(state.build.fill);
     }
     if (state.build !== previous.build) {
-      this.cup?.setFinish(state.build.lidded, state.build.straw);
+      this.showFinish();
       this.refreshEquipment();
     }
   }
 
-  /** The drink as drawn: while the cup stands under a tap, its tea is the tap's. */
+  /**
+   * The drink as drawn: while the cup stands under a tap its tea is the tap's, and whatever a tool
+   * in the air is still bringing over is not in it yet ({@link pending}).
+   */
   private drinkShown(): Drink {
-    const { cup } = store.state;
+    const cup = this.pending?.cupId === store.state.cupId ? this.pending.drink : store.state.cup;
     const docked = this.docked();
     const tap = this.pouring?.station.id ?? (docked?.kind === 'tea' ? docked.id : undefined);
     return tap && !cup.tea ? { ...cup, tea: tap } : cup;
+  }
+
+  /** The tool landed: the cup catches up with the shop, and what it was carrying drops in. */
+  private settlePending() {
+    if (!this.pending) return;
+    this.pending = null;
+    this.cup?.setDrink(this.drinkShown(), store.state.cupId);
+    if (!this.pouring?.running) this.tweenLevel(store.state.build.fill, DURATION.base);
   }
 
   private tweenLevel(to: number, duration: number, linear = false) {
@@ -430,7 +470,8 @@ export class KitchenScene extends Phaser.Scene {
         if (this.inside(rx, y, left, station.y, station.slot, Math.max(44, station.h))) return this.pressTap(station, x);
       } else if (station.kind === 'lid') {
         if (this.inside(rx, y, station.x, station.y, station.w, station.h)) {
-          this.gesture = { kind: 'lid', startX: x, startY: y };
+          this.pressStation(station, true);
+          this.gesture = { kind: 'lid', station, startX: x, startY: y };
           return;
         }
       } else if (station.kind === 'ice') {
@@ -487,6 +528,7 @@ export class KitchenScene extends Phaser.Scene {
         break;
       case 'lid':
         if (Math.hypot(x - gesture.startX, y - gesture.startY) > TAP_DISTANCE) {
+          this.pressStation(gesture.station, false);
           this.gesture = { kind: 'pan', startX: x, startPan: this.pan, lastX: x, lastT: this.time.now, velocity: 0 };
         }
         break;
@@ -517,7 +559,9 @@ export class KitchenScene extends Phaser.Scene {
     this.pointerId = -1;
     switch (gesture.kind) {
       case 'cup': return this.releaseCup();
-      case 'lid': return this.addLid();
+      case 'lid':
+        this.pressStation(gesture.station, false);
+        return this.addLid();
       case 'pour': return this.releaseTap(gesture);
       case 'carry':
         this.pressStation(gesture.station, false);
@@ -601,6 +645,8 @@ export class KitchenScene extends Phaser.Scene {
     // A tool still carrying itself to the cup is holding a dispatch: it is not a gesture, so
     // cancelGesture does not reach it.
     this.cancelTool();
+    this.settlePending();
+    this.settlePart();
     this.dropRackCup();
     this.settlePan();
     this.standCupDown();
@@ -612,6 +658,7 @@ export class KitchenScene extends Phaser.Scene {
     this.pointerId = -1;
     if (!gesture) return;
     if (gesture.kind === 'carry') this.cancelTool();
+    if (gesture.kind === 'lid') this.pressStation(gesture.station, false);
     if (gesture.kind === 'rack') this.dropRackCup();
     if (gesture.kind === 'pour' && this.pouring?.running) {
       this.tweenLevel(store.state.build.fill, DURATION.fast);
@@ -649,24 +696,111 @@ export class KitchenScene extends Phaser.Scene {
     }
   }
 
-  /** A tap takes a lid from the stack and seals the drink immediately on its holder. */
+  /**
+   * A tap takes a lid off the stack and seals the drink. The shop has the lid at once, as it has
+   * every other thing the room does; the lid itself then flies over while the cup stands itself
+   * back down to meet it, so the two settle together wherever the cup happened to be — under a
+   * tap, or dragged up to the stack. It used to be put on with no picture of it at all, and the
+   * cup snapped home from under the tap in the same frame.
+   */
   private addLid() {
     const { cup, build } = store.state;
-    const refusal = !cup.size ? 'Lấy ly và pha trà trước khi đậy nắp'
+    const refusal = this.awayMessage() ?? (!cup.size ? 'Lấy ly và pha trà trước khi đậy nắp'
       : !cup.tea ? 'Rót trà vào ly trước khi đậy nắp'
-      : build.lidded ? 'Ly đã có nắp — thêm ống hút rồi phục vụ' : null;
+      : build.lidded ? 'Ly đã có nắp — thêm ống hút rồi phục vụ' : null);
     if (refusal) {
       playSound('nudge'); nudge(refusal);
-      this.standCupDown(true);
+      this.standCupDown();
       return;
     }
     this.cancelTool();
     if (this.pouring) this.stopPour(false);
+    const stack = this.layout?.stations.find((station) => station.kind === 'lid');
+    const flight = stack ? this.fitPart('lid', stack.cx - this.pan, stack.y + stack.h / 2) : 0;
     dispatch({ type: 'LID_CUP' });
-    if (store.state.build.lidded) {
-      this.standCupDown(true);
-      playSound('cupDown');
-    }
+    if (!store.state.build.lidded) return this.settlePart();
+    this.standCupDown();
+    playSound('cupDown', flight);
+  }
+
+  // ------------------------------------------------------------------ the lid and the straw
+  /**
+   * Fly a finishing part onto the cup, and **hold the cup's own picture of it back until it
+   * lands**. The lid and the straw are the only two things in the room that *become* part of the
+   * cup, so neither can appear the instant it is dispatched, the way a scoop of pearls does: a
+   * drink already wearing its straw while the straw is still crossing the room is what the carried
+   * one landing second looked like. The shop still has them from the dispatch — what waits is the
+   * picture, which is the fresh cup's fade and the settling scoops again.
+   *
+   * It is aimed at where the cup is *this frame*, so a cup still gliding down from a tap is met
+   * rather than overtaken, and what is in the air is the same picture the cup draws for itself
+   * (`finishPartTexture`), so the swap at the end of the flight is not seen. Hands back how long
+   * it will take, which is what delays the contact sound.
+   */
+  private fitPart(part: 'lid' | 'straw', atX: number, atY: number): number {
+    const layout = this.layout;
+    if (!layout || !this.cup) return 0;
+    this.settlePart();
+    const art = finishPartTexture(this, part, layout.cupW, layout.cupH, true);
+    const fromX = atX - art.width / 2;
+    const fromY = atY - art.height / 2;
+    const fit = {
+      part,
+      view: this.add.image(fromX, fromY, art.key).setOrigin(0)
+        .setDisplaySize(art.width, art.height).setDepth(DEPTH.tool),
+      box: art.box, fromX, fromY, t: 0, sunk: 0,
+    };
+    this.fitting = fit;
+    this.showFinish();
+    const seat = this.finishSeat(art.box);
+    const travel = this.flightTime(seat.x - fromX, seat.y - fromY);
+    const sink = part === 'straw' ? INSERT_MS : 0;
+    this.tweens.add({
+      targets: fit, t: 1, duration: travel, ease: EASE,
+      onComplete: () => {
+        if (this.fitting !== fit) return;
+        if (!sink) return this.settlePart();
+        this.tweens.add({ targets: fit, sunk: 1, duration: sink, ease: EASE,
+          onComplete: () => { if (this.fitting === fit) this.settlePart(); } });
+      },
+    });
+    return travel + sink;
+  }
+
+  /**
+   * The part is the cup's now: the cup draws it from this frame on and the one in the air is let
+   * go of. Called when the flight lands, and whenever it is cut short — the cup binned, carried
+   * out to the counter, the game put down — because the picture may lag the shop but must never
+   * be left behind it.
+   */
+  private settlePart() {
+    const fit = this.fitting;
+    if (!fit) return;
+    this.fitting = null;
+    this.tweens.killTweensOf(fit);
+    fit.view.destroy();
+    this.showFinish();
+  }
+
+  /** What the cup wears: the shop's lid and straw, less whichever of them is still on its way. */
+  private showFinish() {
+    const { build } = store.state;
+    const flying = this.fitting?.part;
+    this.cup?.setFinish(build.lidded && flying !== 'lid', build.straw && flying !== 'straw');
+  }
+
+  /** Where the cup wears a part, exactly as the cup draws it: its top-left and its drawn size. */
+  private finishSeat(target: FinishBox) {
+    const layout = this.layout!;
+    const { x, y, scale } = this.cupPos;
+    const unitX = layout.cupW / CUP_ART.w * scale;
+    const unitY = layout.cupH / CUP_ART.h * scale;
+    return {
+      x: x + target.x * unitX,
+      y: y + target.y * unitY,
+      width: target.width * unitX,
+      height: target.height * unitY,
+    };
   }
 
   /** Stand the cup under a tap and leave it there, ready for the tap to be held. */
@@ -690,12 +824,15 @@ export class KitchenScene extends Phaser.Scene {
     const { cup, build } = store.state;
     const locked = build.lidded || (cup.tea !== null && cup.tea !== station.id);
     const enabled = this.docked()?.key === station.key && !locked;
-    this.gesture = { kind: 'pour', station, enabled, startedAt: performance.now(), startX: x };
+    const startedAt = performance.now();
+    this.gesture = { kind: 'pour', station, enabled, startedAt, startX: x };
     if (!enabled) return;
-    this.pouring = { station, running: true };
+    this.pouring = { station, running: true, startedAt, from: build.fill };
     setPourSound(true, this.level);
-    const room = Math.max(0.02, MAX_POUR - build.fill);
-    this.tweenLevel(MAX_POUR, (room / POUR_RATE) * 1000, true);
+    // The level is read off the clock every frame instead of tweened across the room it has: the
+    // pour stands still at the brim, which no single tween does, and this way the number the cup
+    // is drawn at and the one the release hands to `POUR` come out of the same function.
+    this.levelTween?.stop();
     this.cup?.setPouring(true);
     this.cup?.setDrink(this.drinkShown(), store.state.cupId);
     const layout = this.layout!;
@@ -715,6 +852,11 @@ export class KitchenScene extends Phaser.Scene {
       if (!cup.size) {
         playSound('nudge');
         nudge('Chạm ly S / M / L trên kệ để lấy ly trước');
+        return;
+      }
+      const away = this.awayMessage();
+      if (away) {
+        playSound('nudge'); nudge(away);
         return;
       }
       if (store.state.build.lidded) {
@@ -744,7 +886,7 @@ export class KitchenScene extends Phaser.Scene {
       return;
     }
     if (!this.pouring?.running) return;
-    const amount = ((performance.now() - gesture.startedAt) / 1000) * POUR_RATE;
+    const amount = pouredAmount(this.pouring.from, performance.now() - gesture.startedAt);
     this.stopPour(true);
     this.tweenLevel(Math.min(1, store.state.build.fill + amount), DURATION.fast);
     dispatch({ type: 'POUR', category: 'tea', optionId: station.id, amount });
@@ -765,9 +907,16 @@ export class KitchenScene extends Phaser.Scene {
   }
 
   // ------------------------------------------------------------------ carrying things to the cup
+  /** The cup has been carried out to the counter: whatever the room reaches for, it is not here. */
+  private awayMessage(): string | null {
+    return store.state.build.atCounter ? 'Ly đang chờ ở quầy — bấm máy tính tiền để trao cho khách' : null;
+  }
+
   private busyMessage(): string | null {
     const { cup } = store.state;
     const docked = this.docked();
+    const away = this.awayMessage();
+    if (away) return away;
     if (!cup.size) return 'Chạm ly S / M / L trên kệ để lấy ly trước';
     if (docked) return `Ly đang ở dưới vòi ${docked.name} — kéo ly ra trước`;
     return null;
@@ -797,7 +946,7 @@ export class KitchenScene extends Phaser.Scene {
     this.toolCupId = store.state.cupId;
     for (const tween of this.toolTweens) tween.stop();
     this.tool?.destroy();
-    const inner = this.add.container(-size / 2, -size / 2, addTool(this, station, size));
+    const inner = this.add.container(-size / 2, -size / 2, addTool(this, station, size, { w: layout.cupW, h: layout.cupH }));
     this.tool = this.add.container(0, 0, [inner]).setDepth(DEPTH.tool);
     this.toolState = {
       // The room scrolls, while carried tools follow the finger in screen coordinates.
@@ -847,6 +996,8 @@ export class KitchenScene extends Phaser.Scene {
   /** What stops this tool going into the cup, said the way the cup would say it. */
   private refuseTool(station: Station): string | null {
     const { cup, build, config } = store.state;
+    const away = this.awayMessage();
+    if (away) return away;
     if (station.kind === 'lid') return 'Chạm chồng nắp để đậy nắp ly';
     if (station.kind === 'straw') return !build.lidded ? 'Đậy nắp trước khi thêm ống hút' : build.straw ? 'Ly đã có ống hút' : null;
     if (build.lidded) return 'Ly đã đậy nắp — đổ bỏ nếu muốn pha lại';
@@ -878,11 +1029,23 @@ export class KitchenScene extends Phaser.Scene {
     if (this.toolCupId !== store.state.cupId) return this.putToolBack();
     const refusal = this.busyMessage() ?? this.refuseTool(station);
     if (refusal) return this.putToolBack(refusal);
+    if (station.kind === 'straw') {
+      // The straw does not tip in, it goes in: the one in hand is handed over to the flight that
+      // seats it in the lid, which is the same picture in the same place (see `fitPart`), and
+      // which holds the cup's own straw back until it lands.
+      const { x, y, size } = this.toolState;
+      this.cancelTool();
+      const flight = this.fitPart('straw', x + size / 2, y + size / 2);
+      dispatch({ type: 'ADD_STRAW' });
+      // Heard as it meets the lid, not as it sets off.
+      playSound('pickup', Math.max(0, flight - INSERT_MS));
+      return;
+    }
+    // Tipped in over the cup it drops in as it tips; tapped from across the room it has the room
+    // to cross first, and the cup is drawn without it until it gets there.
+    this.settlePending();
+    if (quick) this.pending = { drink: store.state.cup, cupId: store.state.cupId };
     switch (station.kind) {
-      case 'straw':
-        playSound('pickup');
-        dispatch({ type: 'ADD_STRAW' });
-        break;
       case 'topping':
         playSound('scoop');
         dispatch({ type: 'SCOOP', category: 'toppings', optionId: station.id });
@@ -922,10 +1085,10 @@ export class KitchenScene extends Phaser.Scene {
   private sendToolToCup() {
     const flier = this.tool;
     const layout = this.layout;
-    if (!flier || !layout) return;
+    // With nothing to fly, whatever it was bringing over is simply in the cup.
+    if (!flier || !layout) return this.settlePending();
     this.tool = null;
     this.toolTweens = [];
-    const finishing = this.finishingTool;
     const s = this.toolState.size;
     const to = { x: this.cupPos.x + layout.cupW / 2, y: this.cupPos.y + layout.cupH * 0.12 + s * 0.1 };
     const duration = this.flightTime(to.x - flier.x, to.y - flier.y);
@@ -935,11 +1098,16 @@ export class KitchenScene extends Phaser.Scene {
     };
     this.tweens.add({
       targets: flier, x: to.x, y: to.y, duration, ease: EASE,
-      onComplete: () => this.tweens.add({
-        targets: flier, alpha: 0, duration: 430, ease: EASE,
-        rotation: finishing ? 0 : Phaser.Math.DegToRad(118),
-        onComplete: landed,
-      }),
+      // It is over the cup: what it was carrying drops in as it tips, which is what the cup has
+      // been drawn without all the way across the room.
+      onComplete: () => {
+        this.settlePending();
+        this.tweens.add({
+          targets: flier, alpha: 0, duration: 430, ease: EASE,
+          rotation: Phaser.Math.DegToRad(118),
+          onComplete: landed,
+        });
+      },
     });
   }
 
@@ -952,7 +1120,8 @@ export class KitchenScene extends Phaser.Scene {
     for (const tween of this.toolTweens) tween.stop();
     this.toolTweens = [
       this.tweens.add({ targets: this.toolState, x: this.toolState.originX, y: this.toolState.originY, duration: DURATION.base, ease: EASE }),
-      this.tweens.add({ targets: this.toolState, show: 0, delay: DURATION.base, duration: 1 }),
+      // It fades over the last of the way back, rather than winking out once it is there.
+      this.tweens.add({ targets: this.toolState, show: 0, delay: DURATION.base * 0.55, duration: DURATION.base * 0.45, ease: EASE }),
     ];
   }
 
@@ -968,7 +1137,7 @@ export class KitchenScene extends Phaser.Scene {
     if (store.state.cup.size) {
       this.gesture = { kind: 'refused' };
       playSound('nudge');
-      nudge('Đổ bỏ ly đang pha trước khi lấy ly mới');
+      nudge(this.awayMessage() ?? 'Đổ bỏ ly đang pha trước khi lấy ly mới');
       return;
     }
     const size = cupSizeFor(this.W, this.H, stack.size);
@@ -1003,7 +1172,7 @@ export class KitchenScene extends Phaser.Scene {
     if (store.state.cup.size) {
       this.dropRackCup();
       playSound('nudge');
-      nudge('Đổ bỏ ly đang pha trước khi lấy ly mới');
+      nudge(this.awayMessage() ?? 'Đổ bỏ ly đang pha trước khi lấy ly mới');
       return;
     }
     const from = { x: rack.x, y: rack.y };
@@ -1042,6 +1211,9 @@ export class KitchenScene extends Phaser.Scene {
 
   /** Tell the HTML where the cup is on the page, for the effects that start from it. */
   private reportCup() {
+    // Out at the counter the cup is the counter's to place, and `HandoffCup` has said where it
+    // stands; clearing that here every frame would take the coins of the sale back to the kitchen.
+    if (store.state.build.atCounter) return;
     const layout = this.layout;
     // Read from where the HTML put the canvas, never from the DOM: a layout read every frame is a
     // forced layout every frame.
@@ -1074,6 +1246,11 @@ export class KitchenScene extends Phaser.Scene {
       if (this.pan <= 0 || this.pan >= layout.room.maxPan) this.panVelocity = 0;
     }
 
+    // The tap, while it is held: how full the cup is now is how long it has been open.
+    if (this.pouring?.running) {
+      this.level = this.pouring.from + pouredAmount(this.pouring.from, performance.now() - this.pouring.startedAt);
+    }
+
     // The cup.
     if (this.cup) {
       const { x, y, scale } = this.cupPos;
@@ -1099,6 +1276,24 @@ export class KitchenScene extends Phaser.Scene {
     } else {
       this.cupShadow.setVisible(false);
       this.holderFront.setVisible(false);
+    }
+
+    // A lid or a straw on its way onto the cup, aimed at where the cup is this frame. The straw
+    // then sinks through the lid, and whatever has gone below the opening is inside the cup now,
+    // so it is cropped away there: what is left when it stops is exactly what the cup draws.
+    const fit = this.fitting;
+    if (fit && this.cup) {
+      const seat = this.finishSeat(fit.box);
+      const unit = layout.cupH / CUP_ART.h * this.cupPos.scale;
+      const sink = fit.part === 'straw' ? STRAW_INSERT * unit : 0;
+      const x = fit.fromX + (seat.x - fit.fromX) * fit.t;
+      const y = fit.fromY + (seat.y - sink - fit.fromY) * fit.t + sink * fit.sunk;
+      fit.view.setPosition(x, y).setDisplaySize(seat.width, seat.height);
+      if (fit.sunk > 0) {
+        const hole = this.cupPos.y + CUP_LID_HOLE_Y * unit;
+        const shown = Phaser.Math.Clamp((hole - y) / seat.height, 0, 1);
+        fit.view.setCrop(0, 0, fit.view.frame.width, fit.view.frame.height * shown);
+      }
     }
     this.reportCup();
 

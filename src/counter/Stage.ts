@@ -1,175 +1,154 @@
 import Phaser from 'phaser';
 
-import { Departure, Feedback, GameState, patienceLeft } from '../game/reducer';
+import { Departure, Feedback, frontSlot, GameState, patienceLeft, queueSlots } from '../game/reducer';
 import { CustomerView, ownerOf, preloadShared, StageContext } from './CustomerView';
 import { FloatingText } from './FloatingText';
-import { CounterLayout } from './layout';
+import { CounterLayout, queuePosition } from './layout';
 import { LeavingView } from './LeavingView';
 import { TextureBank } from './textures';
 
-/**
- * The customers' half of `CustomerStage.tsx`: one column per slot, each holding (back to front)
- * whoever is walking off from it, whoever is standing in it, and the messages floating over it.
- * A later slot draws over an earlier one, as the original's row of `Pressable`s does, and the
- * counter's rim draws over all of them.
- *
- * `sync` is the whole of what the game's clock reaches. It is handed the state and the one before
- * it, and leans on the reducer keeping `slots`, `departures` and `feedback` the same arrays when
- * nothing in them moved: on an ordinary tick it compares a rounded patience per customer and
- * returns.
- */
 export const SLOT_DEPTH = 10;
-
-interface Column {
+interface Guest {
   root: Phaser.GameObjects.Container;
-  leaving: Phaser.GameObjects.Container;
-  active: Phaser.GameObjects.Container;
-  floating: Phaser.GameObjects.Container;
+  view: CustomerView;
+  rank: number;
+  slot: number | null;
+  walk?: Phaser.Tweens.Tween;
 }
+interface Effect<T> { root: Phaser.GameObjects.Container; view: T }
 
+/** One continuous, depth-sorted line from the entrance to the register. Storage slots stay stable. */
 export class Stage {
   private ctx: StageContext | null = null;
-  private columns: Column[] = [];
-  private customers: (CustomerView | null)[] = [];
-  private leaving = new Map<number, LeavingView>();
-  private floating = new Map<number, FloatingText>();
+  private customers = new Map<number, Guest>();
+  private leaving = new Map<number, Effect<LeavingView>>();
+  private floating = new Map<number, Effect<FloatingText>>();
+  private front: number | null = null;
 
-  constructor(private scene: Phaser.Scene, private bank: TextureBank) {
-    void preloadShared(bank);
-  }
+  constructor(private scene: Phaser.Scene, private bank: TextureBank) { void preloadShared(bank); }
 
-  /**
-   * Lay the stage out afresh for `layout`, standing everybody where they are without walking them
-   * in again. Departures and messages already under way are not replayed.
-   */
   build(layout: CounterLayout, state: GameState) {
     this.clear();
-    const ctx: StageContext = { scene: this.scene, bank: this.bank, layout };
-    this.ctx = ctx;
-    this.columns = layout.slots.map((slot, i) => {
-      const leaving = this.scene.add.container(0, 0);
-      const active = this.scene.add.container(0, 0);
-      const floating = this.scene.add.container(0, 0);
-      const root = this.scene.add.container(slot.centre, 0, [leaving, active, floating]).setDepth(SLOT_DEPTH + i);
-      return { root, leaving, active, floating };
-    });
-    this.customers = layout.slots.map(() => null);
+    this.ctx = { scene: this.scene, bank: this.bank, layout };
     this.syncCustomers(state, false);
     this.sweep(state);
   }
 
   sync(state: GameState, previous: GameState) {
     if (!this.ctx) return;
-    // Departures first: one arrives in the same state as the slot it empties, and starts from the
-    // face that customer is still showing.
     if (state.departures !== previous.departures) this.syncDepartures(state.departures, previous.departures);
-    if (state.slots !== previous.slots || state.clock !== previous.clock || state.selectedSlot !== previous.selectedSlot) {
-      this.syncCustomers(state, true);
-    }
+    if (state.slots !== previous.slots || state.line !== previous.line || state.clock !== previous.clock
+      || state.selectedSlot !== previous.selectedSlot) this.syncCustomers(state, true);
     if (state.feedback !== previous.feedback) this.syncFeedback(state.feedback, previous.feedback);
-    if (state.slots !== previous.slots || state.departures !== previous.departures) this.sweep(state);
+    if (state.slots !== previous.slots || state.line !== previous.line || state.departures !== previous.departures) this.sweep(state);
   }
 
-  destroy() {
-    this.clear();
-    this.ctx = null;
-  }
+  destroy() { this.clear(); this.ctx = null; }
 
   private syncCustomers(state: GameState, animate: boolean) {
     const ctx = this.ctx!;
-    const count = this.columns.length;
-    for (let slot = 0; slot < count; slot++) {
-      const customer = state.slots[slot] ?? null;
-      const view = this.customers[slot];
-      if (!customer) {
-        if (view) {
-          view.destroy();
-          this.customers[slot] = null;
-        }
-        continue;
-      }
-      const patience = patienceLeft(customer, state.clock);
-      const selected = slot === state.selectedSlot;
-      // The owner and not the id: a restored shop can put another face on an id, and the old face's
-      // textures are about to be swept out from under a figure that is still showing them.
-      if (view && ownerOf(view.customer) === ownerOf(customer)) {
-        view.update(customer, patience, selected);
-        continue;
-      }
-      view?.destroy();
-      this.customers[slot] = new CustomerView(ctx, this.columns[slot].active, customer, patience, selected,
-        slot < count / 2 ? -1 : 1, animate);
+    const { layout } = ctx;
+    this.front = frontSlot(state.slots);
+    const queue = [
+      ...queueSlots(state.slots).map(slot => ({ customer: state.slots[slot]!, slot })),
+      ...state.line.map(customer => ({ customer, slot: null })),
+    ];
+    const live = new Set(queue.map(({ customer }) => customer.id));
+    for (const [id, guest] of this.customers) {
+      if (live.has(id)) continue;
+      guest.walk?.remove(); guest.view.destroy(); guest.root.destroy(); this.customers.delete(id);
     }
+    queue.forEach(({ customer, slot }, rank) => {
+      let guest = this.customers.get(customer.id);
+      if (guest && ownerOf(guest.view.customer) !== ownerOf(customer)) {
+        guest.walk?.remove(); guest.view.destroy(); guest.root.destroy(); guest = undefined;
+      }
+      const destination = queuePosition(layout, rank);
+      const target = { x: destination.x, y: destination.feet - layout.room.queueY * destination.scale,
+        scaleX: destination.scale, scaleY: destination.scale, alpha: 1 };
+      const waiting = rank !== 0 || slot === null;
+      if (!guest) {
+        const root = this.scene.add.container(target.x, target.y).setScale(destination.scale);
+        const view = new CustomerView(ctx, root, customer, waiting ? 1 : patienceLeft(customer, state.clock),
+          slot === state.selectedSlot, 0, false);
+        guest = { root, view, rank: -1, slot };
+        this.customers.set(customer.id, guest);
+        if (animate) root.setPosition(layout.room.doorX, layout.room.doorY - layout.room.queueY * 0.43)
+          .setScale(0.43).setAlpha(0);
+      } else guest.view.update(customer, waiting ? 1 : patienceLeft(customer, state.clock), slot === state.selectedSlot);
+      guest.view.setWaiting(waiting);
+      guest.slot = slot;
+      guest.root.setDepth(SLOT_DEPTH + 100 - rank);
+      if (guest.rank !== rank) {
+        guest.walk?.remove();
+        if (animate) guest.walk = this.scene.tweens.add({ targets: guest.root, ...target,
+          duration: guest.rank < 0 ? 950 : 650, ease: 'Sine.easeInOut' });
+        else guest.root.setPosition(target.x, target.y).setScale(destination.scale);
+        guest.rank = rank;
+      }
+    });
   }
 
   private syncDepartures(departures: Departure[], previous: Departure[]) {
     const ctx = this.ctx!;
-    const seen = new Set(previous.map((d) => d.id));
-    const live = new Set(departures.map((d) => d.id));
-    for (const [id, view] of this.leaving) {
-      if (!live.has(id)) {
-        view.destroy();
-        this.leaving.delete(id);
-      }
+    const seen = new Set(previous.map(d => d.id)), live = new Set(departures.map(d => d.id));
+    for (const [id, effect] of this.leaving) if (!live.has(id)) {
+      effect.view.destroy(); effect.root.destroy(); this.leaving.delete(id);
     }
     for (const departure of departures) {
       if (seen.has(departure.id) || this.leaving.has(departure.id)) continue;
-      const column = this.columns[departure.slot];
-      if (!column) continue;
-      // Start from the face they had at the counter while the one they leave with is drawn.
-      const standing = this.customers.find((view) => view?.customer.id === departure.customer.id);
-      const startKey = standing?.currentFigureKey() ?? null;
-      this.leaving.set(departure.id, new LeavingView(ctx, column.leaving, departure, startKey));
+      const guest = this.customers.get(departure.customer.id);
+      const root = this.scene.add.container(guest?.root.x ?? ctx.layout.room.queueX, guest?.root.y ?? 0)
+        .setScale(guest?.root.scaleX ?? 1).setDepth(SLOT_DEPTH + 101);
+      const view = new LeavingView(ctx, root, departure, guest?.view.currentFigureKey() ?? null);
+      this.leaving.set(departure.id, { root, view });
     }
   }
 
   private syncFeedback(feedback: Feedback[], previous: Feedback[]) {
     const ctx = this.ctx!;
-    const seen = new Set(previous.map((f) => f.id));
-    const live = new Set(feedback.map((f) => f.id));
-    for (const [id, view] of this.floating) {
-      if (!live.has(id)) {
-        view.destroy();
-        this.floating.delete(id);
-      }
+    const seen = new Set(previous.map(f => f.id)), live = new Set(feedback.map(f => f.id));
+    for (const [id, effect] of this.floating) if (!live.has(id)) {
+      effect.view.destroy(); effect.root.destroy(); this.floating.delete(id);
     }
     for (const item of feedback) {
-      if (seen.has(item.id) || this.floating.has(item.id)) continue;
-      const column = this.columns[item.slot];
-      if (!column) continue;
-      this.floating.set(item.id, new FloatingText(ctx, column.floating, item, () => {
-        this.floating.get(item.id)?.destroy();
-        this.floating.delete(item.id);
-      }));
+      if (seen.has(item.id) || this.floating.has(item.id) || (item.tone === 'say' && item.slot !== this.front)) continue;
+      const root = this.scene.add.container(ctx.layout.room.queueX + ctx.layout.metrics.charWidth * 0.82, 0)
+        .setDepth(SLOT_DEPTH + 102);
+      const view = new FloatingText(ctx, root, item, () => {
+        const effect = this.floating.get(item.id);
+        effect?.view.destroy(); effect?.root.destroy(); this.floating.delete(item.id);
+      });
+      this.floating.set(item.id, { root, view });
     }
   }
 
-  /** Let go of the textures of everyone who is neither at the counter nor walking away from it. */
   private sweep(state: GameState) {
     const live = new Set<string>();
-    for (const customer of state.slots) if (customer) live.add(ownerOf(customer));
+    for (const customer of [...state.slots, ...state.line]) if (customer) live.add(ownerOf(customer));
     for (const departure of state.departures) live.add(ownerOf(departure.customer));
-    for (const owner of this.bank.owners()) {
-      if (owner.startsWith('c:') && !live.has(owner)) this.bank.release(owner);
-    }
+    for (const owner of this.bank.owners()) if (owner.startsWith('c:') && !live.has(owner)) this.bank.release(owner);
   }
 
-  /** Which slot a point on the stage is in, if any. */
+  /** Waiting customers are scenery, never alternate service targets. */
   slotAt(x: number, y: number): number | null {
     const layout = this.ctx?.layout;
-    if (!layout || y < 0 || y > layout.stageHeight) return null;
-    const index = layout.slots.findIndex((slot) => x >= slot.left && x < slot.left + slot.width);
-    return index < 0 ? null : index;
+    if (!layout || this.front === null) return null;
+    const guest = [...this.customers.values()].find(item => item.slot === this.front);
+    if (!guest || guest.walk?.isPlaying()) return null;
+    const { charWidth, charHeight } = layout.metrics;
+    const figure = Math.abs(x - layout.room.queueX) <= Math.max(22, charWidth / 2)
+      && y >= layout.room.queueY - charHeight && y <= layout.room.queueY + 8;
+    const bubble = Math.abs(x - (layout.room.queueX + charWidth * 0.82)) <= 32
+      && y >= layout.stageHeight - layout.metrics.bubbleBottom - 74
+      && y <= layout.stageHeight - layout.metrics.bubbleBottom + 8;
+    return figure || bubble ? this.front : null;
   }
 
   private clear() {
-    for (const view of this.customers) view?.destroy();
-    for (const view of this.leaving.values()) view.destroy();
-    for (const view of this.floating.values()) view.destroy();
-    this.customers = [];
-    this.leaving.clear();
-    this.floating.clear();
-    for (const column of this.columns) column.root.destroy();
-    this.columns = [];
+    for (const guest of this.customers.values()) { guest.walk?.remove(); guest.view.destroy(); guest.root.destroy(); }
+    for (const effect of this.leaving.values()) { effect.view.destroy(); effect.root.destroy(); }
+    for (const effect of this.floating.values()) { effect.view.destroy(); effect.root.destroy(); }
+    this.customers.clear(); this.leaving.clear(); this.floating.clear(); this.front = null;
   }
 }

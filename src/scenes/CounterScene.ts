@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 
-import { GameState } from '../game/reducer';
+import { frontSlot, GameState } from '../game/reducer';
 import { colors } from '../art/theme';
 import { Backdrop } from '../counter/Backdrop';
 import { CounterLayout, layoutCounter } from '../counter/layout';
@@ -14,11 +14,10 @@ import { uiState } from '../ui-state';
 
 /**
  * The counter: customers waiting, and the one tap that takes their order. Page 0 of the pager —
- * `CounterPage.tsx` and `CustomerStage.tsx` as a Phaser scene.
+ * The painted cafe and the live customer queue as a Phaser scene.
  *
- * The page is the stage (the shop's wall, the customers, the counter's rim) over the barista's
- * side of the counter. Every picture on it is an SVG rasterised once into a texture; what moves is
- * moved by tweens, and the game's clock only ever reaches a comparison of each customer's rounded
+ * The room is one painted texture. Customer figures and bubbles are SVGs rasterised once;
+ * what moves is moved by tweens, and the game's clock only reaches each customer's rounded
  * patience against the one already showing (see `Stage`).
  *
  * Input is the page's own: a tap on a customer takes their order or opens their ticket, and a
@@ -55,7 +54,7 @@ export class CounterScene extends Phaser.Scene {
     // The page's floor, under the counter top, is the camera's own colour.
     this.cameras.main.setBackgroundColor(colors.floor);
     this.bank = new TextureBank(this);
-    this.backdrop = new Backdrop(this, this.bank);
+    this.backdrop = new Backdrop(this);
     this.stage = new Stage(this, this.bank);
 
     const offStore = store.subscribe((state, previous) => this.onState(state, previous));
@@ -89,11 +88,6 @@ export class CounterScene extends Phaser.Scene {
     this.place();
   }
 
-  /** The clouds are the only thing that moves on its own, and only while the counter is in view. */
-  update(_time: number, delta: number) {
-    if (uiState.value.pageOffset < 1) this.backdrop.drift(delta);
-  }
-
   // ================================================================== layout
   private place() {
     const { pager, pageOffset } = uiState.value;
@@ -110,17 +104,13 @@ export class CounterScene extends Phaser.Scene {
     const key = `${width}x${height}:${window.innerWidth}x${window.innerHeight}:${slots}`;
     if (key === this.layoutKey) return;
     const layout = layoutCounter(width, height, window.innerWidth, window.innerHeight, slots);
-    const was = this.layout;
     this.layoutKey = key;
     this.layout = layout;
-    if (!was || was.width !== layout.width || was.stageHeight !== layout.stageHeight || was.floorHeight !== layout.floorHeight) {
-      this.backdrop.build(layout, store.state.gear);
-    }
+    this.backdrop.build(layout);
     this.stage.build(layout, store.state);
   }
 
   private onState(state: GameState, previous: GameState) {
-    if (state.gear !== previous.gear && this.layout) this.backdrop.furnish(this.layout, state.gear);
     if (state.slots.length !== previous.slots.length) {
       this.relayout();
       return;
@@ -191,7 +181,7 @@ export class CounterScene extends Phaser.Scene {
   /** `takeOrder` / `focusTicket` in `GameScreen.tsx`. */
   private tapSlot(slot: number) {
     const customer = store.state.slots[slot];
-    if (!customer) return;
+    if (!customer || slot !== frontSlot(store.state.slots)) return;
     if (customer.status === 'requesting') {
       playSound('order');
       dispatch({ type: 'TAKE_ORDER', slot });

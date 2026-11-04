@@ -1,5 +1,5 @@
 import { ARRIVAL_LINES, CustomerKind, CustomerLook, generateLook, generateLookOf, kindOf, NAMES } from './customers';
-import { BOARD_SLOT, gearItem } from './gear';
+import { gearItem } from './gear';
 import {
   Drink,
   CupSize,
@@ -143,11 +143,18 @@ export interface CupBuild {
   sugarPumps: number;
   lidded: boolean;
   straw: boolean;
+  /**
+   * The finished cup has been carried out of the kitchen and stands on the counter's mat, waiting
+   * to be handed over at the till. It is where the cup *is*, which is why it lives here beside the
+   * lid and the straw rather than in the UI: the kitchen's mat is empty while it is true, nothing
+   * can be added to it or taken out for a new one, and `SERVE` is refused until it is.
+   */
+  atCounter: boolean;
   /** Legacy machine state; old saves return the unfinished drink to its holder. */
   inLidder: boolean;
 }
 
-const EMPTY_BUILD: CupBuild = { fill: 0, spilled: false, iceScoops: 0, sugarPumps: 0, lidded: false, straw: false, inLidder: false };
+const EMPTY_BUILD: CupBuild = { fill: 0, spilled: false, iceScoops: 0, sugarPumps: 0, lidded: false, straw: false, atCounter: false, inLidder: false };
 
 export interface DayStats {
   served: number;
@@ -264,6 +271,8 @@ export type GameAction =
   | { type: 'UNLOAD_LIDDER' }
   | { type: 'ADD_STRAW' }
   | { type: 'CLEAR_CUP' }
+  /** Carry the finished cup out to the counter, where the till hands it over. Refused unless `canCarryOut`. */
+  | { type: 'CARRY_OUT' }
   | { type: 'SERVE' }
   /** Stay open another round. Refused unless `canExtend`. */
   | { type: 'EXTEND_SHIFT' }
@@ -373,7 +382,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
     case 'ASK_AGAIN':
       return isActive(state) ? askAgain(state, action.slot) : state;
     case 'SELECT_SLOT':
-      return isActive(state) && state.slots[action.slot]?.status === 'ordered'
+      return isActive(state) && action.slot === frontSlot(state.slots) && state.slots[action.slot]?.status === 'ordered'
         ? { ...state, selectedSlot: action.slot }
         : state;
     case 'PICK_CUP':
@@ -403,6 +412,8 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         ? { ...state, build: { ...state.build, straw: true } } : state;
     case 'CLEAR_CUP':
       return isActive(state) ? clearCup(state) : state;
+    case 'CARRY_OUT':
+      return isActive(state) && canCarryOut(state) ? { ...state, build: { ...state.build, atCounter: true } } : state;
     case 'SERVE':
       return isActive(state) ? serve(state) : state;
     case 'EXTEND_SHIFT':
@@ -453,11 +464,40 @@ function canAddIngredients(state: GameState): boolean {
   return isActive(state) && Boolean(state.cup.size) && !state.build.lidded && !state.build.inLidder;
 }
 
-/** Shared by the serve button and reducer so unfinished cups cannot bypass the station. */
-export function canServe(state: GameState): boolean {
+/** Stable storage slots are not queue positions. Customer ids increase in arrival order. */
+export function queueSlots(slots: (Customer | null)[]): number[] {
+  return slots.flatMap((customer, slot) => customer ? [slot] : [])
+    .sort((a, b) => slots[a]!.id - slots[b]!.id);
+}
+
+/** Only the first arrival can order, be selected, or receive a drink. */
+export function frontSlot(slots: (Customer | null)[]): number | null {
+  return queueSlots(slots)[0] ?? null;
+}
+
+/**
+ * A finished cup, and the customer it was made for still at the front of the counter waiting for
+ * it. Both ends of the handover ask this — the serve button in the kitchen and the till on the
+ * counter — so that an unfinished cup cannot bypass the station at either end.
+ */
+function readyToHandOver(state: GameState): boolean {
   const customer = state.selectedSlot === null ? null : state.slots[state.selectedSlot];
-  return Boolean(customer?.status === 'ordered' && state.cup.size && state.cup.tea
+  return Boolean(state.selectedSlot === frontSlot(state.slots) && customer?.status === 'ordered' && state.cup.size && state.cup.tea
     && state.build.lidded && state.build.straw && !state.build.inLidder);
+}
+
+/** Whether the cup can be carried out of the kitchen: finished, and not already out there. */
+export function canCarryOut(state: GameState): boolean {
+  return readyToHandOver(state) && !state.build.atCounter;
+}
+
+/**
+ * Whether the till can hand the drink over. The cup has to be *at* the counter: serving is the
+ * second half of a handover that starts in the kitchen, and the shop's state says which half it is
+ * in. Shared by the register and the reducer, so neither can serve a cup that is still on the mat.
+ */
+export function canServe(state: GameState): boolean {
+  return readyToHandOver(state) && state.build.atCounter;
 }
 
 /**
@@ -502,8 +542,16 @@ function tick(state: GameState, dt: number): GameState {
   let { incoming, lost, lullUntil, nextId, nextSpawnAt, overtime, regulars, waveLeft } = state;
   let missed = 0;
 
+  const front = frontSlot(slots);
   slots.forEach((customer, slot) => {
     if (!customer) return;
+    // Waiting behind the active guest must not consume their service/order deadline.
+    // Keep legacy already-taken orders intact, but freeze them until their turn too.
+    if (slot !== front) {
+      slots[slot] = { ...customer, arrivedAt: customer.arrivedAt + dt,
+        orderedAt: customer.orderedAt === null ? null : customer.orderedAt + dt };
+      return;
+    }
     const waited =
       customer.status === 'requesting'
         ? clock - customer.arrivedAt
@@ -572,7 +620,7 @@ function tick(state: GameState, dt: number): GameState {
    */
   const toCounter = (customer: Customer, spot: number) => {
     // Nobody has to come over for this one: the relaxed shop takes every order, the board one spot's.
-    const ordered = auto || (spot === BOARD_SLOT && state.gear.includes('board'));
+    const ordered = frontSlot(slots) === null && (auto || state.gear.includes('board'));
     slots[spot] = {
       ...customer,
       ...patienceFor(state, customer.look, { rounds: customer.lateRound ?? 0 }),
@@ -637,6 +685,11 @@ function tick(state: GameState, dt: number): GameState {
     }
   }
 
+  const head = frontSlot(slots);
+  if (head !== null && slots[head]!.status === 'requesting' && (auto || state.gear.includes('board'))) {
+    slots[head] = { ...slots[head]!, status: 'ordered', orderedAt: clock };
+  }
+
   const dayOver = !isOpen && departures.length === 0 && waveLeft === 0 && line.length === 0
     && slots.every((customer) => customer === null);
   // This tick is the only one that ends the day, so the jar cannot be paid twice.
@@ -698,19 +751,9 @@ function unchanged<T>(before: readonly T[], after: T[]): T[] {
  * Keep the current selection if that customer still has an open order, else pick whoever
  * has been waiting longest for their drink. Only `ordered` customers can be selected.
  */
-function resolveSelection(slots: (Customer | null)[], current: number | null): number | null {
-  if (current !== null && slots[current]?.status === 'ordered') return current;
-  let best: number | null = null;
-  let bestOrderedAt = Infinity;
-  for (let slot = 0; slot < slots.length; slot++) {
-    const customer = slots[slot];
-    const orderedAt = customer?.queuedAt ?? customer?.orderedAt ?? 0;
-    if (customer?.status === 'ordered' && orderedAt < bestOrderedAt) {
-      best = slot;
-      bestOrderedAt = orderedAt;
-    }
-  }
-  return best;
+function resolveSelection(slots: (Customer | null)[], _current: number | null): number | null {
+  const front = frontSlot(slots);
+  return front !== null && slots[front]?.status === 'ordered' ? front : null;
 }
 
 /**
@@ -724,7 +767,13 @@ function resolveSelection(slots: (Customer | null)[], current: number | null): n
  */
 function setMode(state: GameState, mode: GameMode): GameState {
   if (mode === state.mode) return state;
-  const slots = state.slots.map((customer) => customer && changeShop(state, customer, mode));
+  const front = frontSlot(state.slots);
+  const slots = state.slots.map((customer, slot) => {
+    if (!customer) return null;
+    const changed = changeShop(state, customer, mode);
+    return slot !== front && customer.status === 'requesting'
+      ? { ...changed, status: 'requesting' as const, orderedAt: null } : changed;
+  });
   return {
     ...state,
     mode,
@@ -759,13 +808,13 @@ function changeShop(state: GameState, customer: Customer, mode: GameMode): Custo
 /** Take a waiting customer's order: reveal the recipe as a ticket and start the serve timer. */
 function takeOrder(state: GameState, slot: number): GameState {
   const customer = state.slots[slot];
-  if (!customer || customer.status !== 'requesting') return state;
+  if (slot !== frontSlot(state.slots) || !customer || customer.status !== 'requesting') return state;
   const slots = [...state.slots];
   slots[slot] = { ...customer, status: 'ordered', orderedAt: state.clock };
   return {
     ...state,
     slots,
-    selectedSlot: state.selectedSlot ?? slot,
+    selectedSlot: slot,
     nextId: state.nextId + 1,
     feedback: [
       ...hushed(state.feedback, slot),
@@ -780,7 +829,7 @@ function takeOrder(state: GameState, slot: number): GameState {
  */
 function askAgain(state: GameState, slot: number): GameState {
   const customer = state.slots[slot];
-  if (customer?.status !== 'ordered' || customer.recall !== 'blank') return state;
+  if (slot !== frontSlot(state.slots) || customer?.status !== 'ordered' || customer.recall !== 'blank') return state;
   const slots = [...state.slots];
   slots[slot] = { ...customer, recall: 'asked' };
   return { ...state, slots };

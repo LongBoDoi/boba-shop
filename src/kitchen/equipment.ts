@@ -5,8 +5,9 @@ import { TOPPING_SCOOP_ART, TOPPING_SCOOPS } from '../art/toppingArt';
 import { equipmentFrame, paintEquipment, PaintedEquipmentId } from '../art/equipmentArt';
 import { bakeCanvas, tex } from '../game/view';
 import { Station } from './layout';
-import { REFERENCE_CUP } from '../art/referenceCupArt';
-import { paintStraw } from '../art/finishingArt';
+import { REFERENCE_CUP, REFERENCE_CUP_PARTS } from '../art/referenceCupArt';
+import { INSERTED_STRAW_BOX, paintInsertedStraw, paintLid, paintStraw } from '../art/finishingArt';
+import { CUP_ART } from '../art/cupGeometry';
 
 /** One topping's scoopful, as a frame of its atlas. */
 export function scoopFrame(scene: Phaser.Scene, id: string): string | null {
@@ -84,18 +85,44 @@ export async function prepareEquipmentTextures(scene: Phaser.Scene): Promise<voi
 }
 
 /**
+ * A finishing part — a lid, a straw — baked at exactly the size the cup wears it, in the cup's own
+ * 113x174 units. What flies onto the cup and what the cup then draws for itself are the same
+ * picture at the same size, which is what lets the swap at the end of the flight go unseen, the
+ * way the rack's cup is handed over where the rack's one stood.
+ */
+export function finishPartTexture(scene: Phaser.Scene, part: 'lid' | 'straw', cupW: number, cupH: number, fitted = false) {
+  // A straw on its way in is painted as the cup will wear it — leaning through the lid, and long
+  // enough to reach the floor — so that the two line up exactly when it lands. One carried in the
+  // hand is the plain straw it still is, drawn in the same box so that letting go of it over the
+  // cup swaps one for the other where it stands.
+  const box = part === 'straw' ? INSERTED_STRAW_BOX : REFERENCE_CUP_PARTS[part].target;
+  const width = box.width * cupW / CUP_ART.w;
+  const height = box.height * cupH / CUP_ART.h;
+  const key = bakeCanvas(scene, `finish-part:${part}:${fitted}:${width.toFixed(1)}x${height.toFixed(1)}`, width, height, (c) => {
+    c.scale(width / box.width, height / box.height);
+    c.translate(-box.x, -box.y);
+    const source = sourceImage(scene, REFERENCE_CUP);
+    if (part === 'lid') paintLid(c, source);
+    else if (!fitted) paintStraw(c, source);
+    else {
+      paintInsertedStraw(c, source, 'outside');
+      paintInsertedStraw(c, source, 'inside');
+    }
+  });
+  return { key, width, height, box };
+}
+
+/**
  * What a station puts in your hand — a scoopful, milk, a spoon of sugar or foam —
  * laid out in a `size`×`size` box from its top-left, as `Tool` in KitchenStation.
  */
-export function addTool(scene: Phaser.Scene, station: Station, size: number): Phaser.GameObjects.GameObject[] {
+export function addTool(scene: Phaser.Scene, station: Station, size: number, cup: { w: number; h: number }): Phaser.GameObjects.GameObject[] {
   const S = size;
+  // The straw is held at the size the cup wears it and centred on the box, so that letting go of
+  // it over the cup hands its flight the same picture in the same place.
   if (station.kind === 'straw') {
-    const key = bakeCanvas(scene, `finish-tool:${station.kind}:${S}`, S, S, (c) => {
-      c.scale(S / 210, S / 210);
-      c.translate(48, 100);
-      paintStraw(c, sourceImage(scene, REFERENCE_CUP));
-    });
-    return [scene.add.image(0, 0, key).setOrigin(0).setDisplaySize(S, S)];
+    const { key, width, height } = finishPartTexture(scene, 'straw', cup.w, cup.h);
+    return [scene.add.image((S - width) / 2, (S - height) / 2, key).setOrigin(0).setDisplaySize(width, height)];
   }
   if (station.kind === 'sugar') {
     return [scene.add.image(0, 0, tex(SUGAR_SCOOP)).setOrigin(0)

@@ -6,7 +6,7 @@ require.extensions['.ts'] = (m, file) => m._compile(ts.transpileModule(fs.readFi
   compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 }, fileName: file,
 }).outputText, file);
 
-const { createInitialState, gameReducer: reduce, canServe } = require('../src/game/reducer.ts');
+const { createInitialState, gameReducer: reduce, canCarryOut, canServe } = require('../src/game/reducer.ts');
 const { parseGame, serializeGame } = require('../src/game/save.ts');
 const { layoutKitchen, findStation } = require('../src/kitchen/layout.ts');
 let state = reduce(createInitialState(441), { type: 'START_DAY', day: 1 });
@@ -55,12 +55,17 @@ for (const action of [
 ]) assert.equal(reduce(state, action), state, 'Ingredients cannot pass through the lid');
 state = reduce(state, { type: 'ADD_STRAW' });
 assert.equal(reduce(state, { type: 'ADD_STRAW' }), state, 'A cup takes one straw');
-assert.equal(canServe(state), true);
+// Finished, so it can leave the kitchen — but it is served at the counter, once it is there.
+assert.equal(canCarryOut(state), true);
+assert.equal(canServe(state), false);
 assert.equal(parseGame(serializeGame(state)).build.straw, true, 'Finished cups survive reload');
 for (const mutate of [s => s.build.straw = 'yes', s => s.build.lidded = false, s => s.cup.tea = null]) {
   const raw = JSON.parse(serializeGame(state)); mutate(raw);
   assert.equal(parseGame(JSON.stringify(raw)), null, 'Impossible finishing states are refused');
 }
+state = reduce(state, { type: 'CARRY_OUT' });
+assert.equal(canServe(state), true, 'Out at the counter, the till can hand it over');
+assert.equal(parseGame(serializeGame(state)).build.atCounter, true, 'And a reload leaves it standing there');
 for (const type of ['SERVE', 'CLEAR_CUP', 'START_DAY']) {
   const cleared = reduce(state, { type, day: 2 });
   assert.equal(cleared.cup.size, null);

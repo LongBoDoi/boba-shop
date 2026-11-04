@@ -50,7 +50,7 @@ try {
       orderedAt: status === 'ordered' ? state.clock : null, ...patienceFor(state, FACES[kind], { rounds }),
       ...(late ? { lateRound: rounds } : {}),
     };
-    return { ...state, slots, selectedSlot: status === 'ordered' ? slot : state.selectedSlot };
+    return { ...state, slots, nextId: Math.max(state.nextId, 200), selectedSlot: status === 'ordered' ? slot : state.selectedSlot };
   }
 
   const tick = (state, dt) => gameReducer(state, { type: 'TICK', dt });
@@ -60,7 +60,7 @@ try {
   function hand(state, { tea = 'black', size = 'M', amount = 0.6 } = {}) {
     let cup = gameReducer(state, { type: 'PICK_CUP', size });
     cup = gameReducer(cup, { type: 'POUR', category: 'tea', optionId: tea, amount });
-    for (const type of ['LID_CUP', 'ADD_STRAW', 'SERVE']) cup = gameReducer(cup, { type });
+    for (const type of ['LID_CUP', 'ADD_STRAW', 'CARRY_OUT', 'SERVE']) cup = gameReducer(cup, { type });
     return cup;
   }
 
@@ -311,7 +311,7 @@ try {
 
   // ------------------------------------------------------------------ the menu, and the next day
   // Someone served and someone still waiting, so that there is money to lose and a shift to resume.
-  const filled = () => hand(seat(jarred(), 'plain', { slot: 1 }));
+  const filled = () => hand({ ...seat(jarred(), 'plain', { slot: 1 }), selectedSlot: 0 });
   const midOvertime = filled();
   assert.ok(midOvertime.overtime.jar > 0, 'There is money in the jar');
   const putDown = gameReducer(midOvertime, { type: 'GO_TO_TITLE' });
@@ -483,18 +483,20 @@ try {
     return { ...state, slots: state.slots.map((customer, slot) => (slot === free ? null : customer)) };
   };
   const atBoard = arrive(onlySpot(BOARD_SLOT, ['board']));
-  assert.equal(atBoard.customer.status, 'ordered', 'A customer arriving at the board has ordered');
-  assert.equal(atBoard.customer.orderedAt, atBoard.state.clock, 'And their serve timer starts as they arrive');
+  assert.equal(atBoard.customer.status, 'requesting', 'A new arrival waits behind the active customer even with the board');
+  assert.equal(atBoard.customer.orderedAt, null, 'So their serve timer has not started yet either');
   assert.equal(BOARD_SLOT, 0, 'It stands at the first spot');
   const lateBoard = arrive({ ...onlySpot(BOARD_SLOT, ['board']), overtime: { ...NO_OVERTIME, rounds: 1 } });
-  assert.equal(lateBoard.customer.status, 'ordered', 'And it works just the same past a press');
+  assert.equal(lateBoard.customer.status, 'requesting', 'Overtime also keeps one active customer');
   const elsewhere = arrive(onlySpot(BOARD_SLOT + 1, ['board']));
   assert.equal(elsewhere.customer.status, 'requesting', 'Any other spot is taken by hand');
   assert.equal(elsewhere.customer.orderedAt, null, 'As ever');
   const noBoard = arrive(onlySpot(BOARD_SLOT, []));
   assert.equal(noBoard.customer.status, 'requesting', 'And without the board so is that one');
   const relaxedBoard = arrive(onlySpot(BOARD_SLOT + 1, ['board'], 'relaxed'));
-  assert.equal(relaxedBoard.customer.status, 'ordered', 'A relaxed shop takes every order with or without it');
+  assert.equal(relaxedBoard.customer.status, 'requesting', 'Relaxed mode also waits for the front');
+  const promoted = tick({ ...atBoard.state, slots: atBoard.state.slots.map(c => c?.id === atBoard.customer.id ? c : null) }, 100);
+  assert.equal(promoted.slots[BOARD_SLOT].status, 'ordered', 'The board takes the next order when that customer reaches the front');
   assert.equal(gameReducer(atBoard.state, { type: 'TAKE_ORDER', slot: BOARD_SLOT }), atBoard.state, 'And there is no order at the board left to take');
 
   // What the wall shows, and what its texture is keyed by.

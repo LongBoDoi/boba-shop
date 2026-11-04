@@ -45,14 +45,14 @@ try {
       id: 100 + slot, look: FACES[kind], name: 'Lan', order: TEA, status, arrivedAt: state.clock,
       orderedAt: status === 'ordered' ? orderedAt : null, ...patienceFor(state, FACES[kind]),
     };
-    return { ...state, slots, selectedSlot: status === 'ordered' ? slot : state.selectedSlot };
+    return { ...state, slots, nextId: Math.max(state.nextId, 200), selectedSlot: status === 'ordered' ? slot : state.selectedSlot };
   }
 
   /** Make the customer in `selectedSlot` a cup of `tea` and hand it over. */
   function hand(state, { tea = 'black', amount = 0.6, size = 'M' } = {}) {
     let cup = gameReducer(state, { type: 'PICK_CUP', size });
     cup = gameReducer(cup, { type: 'POUR', category: 'tea', optionId: tea, amount });
-    for (const type of ['LID_CUP', 'ADD_STRAW', 'SERVE']) cup = gameReducer(cup, { type });
+    for (const type of ['LID_CUP', 'ADD_STRAW', 'CARRY_OUT', 'SERVE']) cup = gameReducer(cup, { type });
     return cup;
   }
 
@@ -222,7 +222,7 @@ try {
   const baseline = patienceFor(calmed, FACES.plain);
   for (const customer of calmed.slots) {
     assert.deepEqual({ orderPatienceMs: customer.orderPatienceMs, patienceMs: customer.patienceMs }, baseline, 'No patience difference survives the switch');
-    assert.equal(customer.status, 'ordered', 'And every order is taken');
+    assert.equal(customer.status, customer.id === 102 ? 'requesting' : 'ordered', 'Waiting customers keep their place; previously taken orders survive');
   }
   assert.equal(calmed.slots[0].patienceMs / mixed.slots[0].patienceMs, 1 / KIND_PATIENCE.shipper, 'The half-patience shipper is gone');
   // An elder's wait is the one that gets shorter, so one who has already outwaited the new limit
@@ -306,7 +306,7 @@ try {
     });
   }
   assert.ok(spoken >= 2, 'More than one customer came and spoke');
-  const firstSlot = arriving.slots.findIndex(Boolean);
+  const firstSlot = arriving.slots.reduce((best, c, i) => c && (best < 0 || c.id < arriving.slots[best].id) ? i : best, -1);
   const otherSlot = arriving.slots.findIndex((customer, slot) => customer && slot !== firstSlot);
   assert.ok(firstSlot >= 0 && otherSlot >= 0, 'Two are at the counter together');
   const talking = {
@@ -331,7 +331,7 @@ try {
   const servedSlot = cupWaiting.selectedSlot;
   assert.equal(cupWaiting.feedback.filter((item) => item.tone === 'say').length, 2, 'Two are still mid-sentence');
   assert.ok(cupWaiting.feedback.some((item) => item.tone === 'say' && item.slot === servedSlot), 'One of them the customer next up');
-  const midSentence = gameReducer(cupWaiting, { type: 'SERVE' });
+  const midSentence = gameReducer(gameReducer(cupWaiting, { type: 'CARRY_OUT' }), { type: 'SERVE' });
   assert.deepEqual(midSentence.feedback.filter((item) => item.slot === servedSlot).map((item) => item.tone).filter((tone) => tone === 'say'), [],
     'The cup hushes them, rather than leaving their line up beside what it paid');
   assert.equal(midSentence.feedback.filter((item) => item.slot === servedSlot).length, 1, 'One chip at that spot');

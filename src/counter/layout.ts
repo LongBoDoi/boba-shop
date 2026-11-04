@@ -1,14 +1,10 @@
 /**
- * Where everything on the counter page goes — the arithmetic of `GameScreen.tsx` (how tall the
- * stage is), `CounterPage.tsx` (the stage, then the counter top under it) and `CustomerStage.tsx`
- * (the slots, the figures and their bubbles), kept as plain numbers so the scene only places.
- *
- * All in CSS pixels, from the page's top-left.
+ * Customers, bubbles and register measured against the cafe painting.
+ * All positions are CSS pixels from the page's top-left.
  */
 
-/** The counter's rim along the bottom of the stage, which the customers stand behind. */
-export const COUNTER_HEIGHT = 44;
-/** Customers stand raised so the counter hides their waist, not their shoulders. */
+import { counterRoomPlacement } from './roomLayout';
+/** Space below the figures' feet within the logical customer stage. */
 export const FIGURE_LIFT = 14;
 /** The cup drawn in an ordered customer's bubble. */
 export const BUBBLE_CUP = 26;
@@ -21,27 +17,12 @@ export function isWideLayout(width: number, height: number) {
   return width >= 560 && width > height * 1.15;
 }
 
-/**
- * The stage's height (`GameScreen.tsx`). Upright it is a share of the window; sideways it is
- * measured off the page, because a share of a short window leaves the customers crowded under the
- * ceiling with half the page bare counter below them.
- */
-export function stageHeightFor(windowHeight: number, pageHeight: number, wide: boolean) {
-  return wide && pageHeight > 0
-    ? Math.round(Math.max(260, pageHeight * 0.58))
-    : Math.round(Math.min(360, Math.max(240, windowHeight * 0.44)));
-}
-
-/**
- * Character size for a stage (`stageMetrics` in `CustomerStage.tsx`). The 108 is a phone's; a
- * wide stage sizes its figures off its own height instead, and the slot width and the stage's
- * headroom still have the last word.
- */
+/** Standing figures leave headroom for their order bubbles, even on short phones. */
 export function stageMetrics(width: number, height: number, slotCount: number, wide = false) {
   const slotWidth = width / slotCount;
-  const cap = wide ? Math.min(170, Math.max(108, height * 0.42)) : 108;
-  const charWidth = Math.min(cap, slotWidth * 0.8, (height - 76) / 1.2);
-  const charHeight = charWidth * 1.2;
+  const cap = wide ? 112 : 92;
+  const charWidth = Math.min(cap, slotWidth * 0.78, Math.max(40, (height - 94) / 1.76));
+  const charHeight = charWidth * 1.76;
   const bubbleBottom = charHeight * 0.86 + FIGURE_LIFT;
   const bubbleCenterY = height - bubbleBottom - 26;
   return { slotWidth, charWidth, charHeight, bubbleBottom, bubbleCenterY };
@@ -54,29 +35,41 @@ export interface CounterLayout {
   width: number;
   height: number;
   wide: boolean;
-  /** The stage: backdrop, customers and the counter's rim, from the top of the page. */
+  /** Logical customer stage ending just below the queue mat. */
   stageHeight: number;
-  /** The counter top fills the rest of the page under the stage. */
+  /** Foreground room below the customers. */
   floorHeight: number;
+  room: ReturnType<typeof counterRoomPlacement>;
   metrics: StageMetrics;
-  /** Each slot's left edge and width; a slot is the whole height of the stage, and its tap target. */
+  /** Each customer's horizontal tap range. Stage.slotAt limits it to figure/bubble height. */
   slots: { left: number; width: number; centre: number }[];
 }
 
 export function layoutCounter(width: number, height: number, windowWidth: number, windowHeight: number, slotCount: number): CounterLayout {
   const wide = isWideLayout(windowWidth, windowHeight);
-  const stageHeight = stageHeightFor(windowHeight, height, wide);
+  const room = counterRoomPlacement(width, height, wide);
+  const stageHeight = room.queueY + FIGURE_LIFT;
   const count = Math.max(1, slotCount);
-  const metrics = stageMetrics(width, stageHeight, count, wide);
-  // Sideways the customers keep a slot's worth of elbow room and queue in the middle, rather than
-  // standing a room apart at either end of an empty counter.
-  const slotWidth = wide ? Math.min(width / count, metrics.charWidth * 1.6) : width / count;
-  const start = wide ? (width - slotWidth * count) / 2 : 0;
-  const slots = Array.from({ length: count }, (_, i) => {
-    const left = start + i * slotWidth;
-    return { left, width: slotWidth, centre: left + slotWidth / 2 };
-  });
-  return { width, height, wide, stageHeight, floorHeight: Math.max(0, height - stageHeight), metrics, slots };
+  const queueWidth = Math.min(width * 0.74, wide ? 300 : 230);
+  const metrics = stageMetrics(queueWidth, stageHeight, 1, wide);
+  // Scale the standing figure with the painted room; never stretch it with queue length.
+  metrics.charWidth = Math.min(wide ? 96 : 90, (wide ? 186 : 178) * room.scale);
+  metrics.charHeight = metrics.charWidth * 1.76;
+  metrics.bubbleBottom = metrics.charHeight * 0.86 + FIGURE_LIFT;
+  metrics.bubbleCenterY = stageHeight - metrics.bubbleBottom - 26;
+  const slots = Array.from({ length: count }, () => ({
+    left: room.queueX - queueWidth / 2, width: queueWidth, centre: room.queueX,
+  }));
+  return { width, height, wide, stageHeight, floorHeight: Math.max(0, height - stageHeight), room, metrics, slots };
+}
+
+/** Feet follow the same straight aisle; perspective compresses each successive place. */
+export function queuePosition(layout: CounterLayout, rank: number) {
+  const distance = Math.pow(0.63, rank);
+  const scale = 0.43 + 0.57 * distance;
+  const { room } = layout;
+  return { x: room.doorX + (room.queueX - room.doorX) * distance,
+    feet: room.doorY + (room.queueY - room.doorY) * distance, scale };
 }
 
 /** The least room between a floating chip and the edge of the stage. */

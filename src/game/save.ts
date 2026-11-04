@@ -21,6 +21,7 @@ import {
   DEFAULT_AUDIO,
   GameMode,
   GameState,
+  frontSlot,
   NO_OVERTIME,
   Overtime,
   Phase,
@@ -202,6 +203,9 @@ export function parseGame(json: string | null | undefined): GameState | null {
   }
   if ((build.lidded && !cup.tea) || (build.straw && !build.lidded)) return null;
   if (build.inLidder && (!cup.tea || build.lidded || build.straw)) return null;
+  // Only a finished cup is ever out at the counter. One that is not could neither be served nor
+  // carried out again, so it is refused with the rest rather than left standing there unservable.
+  if (build.atCounter && !build.straw) return null;
 
   // The machine was replaced by a lid stack. Restore old in-progress cups on the holder.
   build.inLidder = false;
@@ -209,7 +213,7 @@ export function parseGame(json: string | null | undefined): GameState | null {
   // Only a customer whose order has been taken can be the selected one. If that customer has since
   // gone, the next tick picks whoever has been waiting longest for their drink.
   const selected = int(save.selectedSlot, 0, slots.length - 1);
-  const selectedSlot = selected !== null && slots[selected]?.status === 'ordered' ? selected : null;
+  const selectedSlot = selected !== null && selected === frontSlot(slots) && slots[selected]?.status === 'ordered' ? selected : null;
 
   return {
     phase,
@@ -497,9 +501,13 @@ function parseBuild(raw: unknown): CupBuild | null {
   const lidded = value.lidded === undefined ? false : value.lidded;
   const straw = value.straw === undefined ? false : value.straw;
   const inLidder = value.inLidder === undefined ? false : value.inLidder;
+  // A cup carried out to the counter is kept there: a save made mid-handover reopens with the drink
+  // still standing on the till, which is where the player left it.
+  const atCounter = value.atCounter === undefined ? false : value.atCounter;
   if (typeof lidded !== 'boolean' || typeof straw !== 'boolean' || typeof inLidder !== 'boolean') return null;
+  if (typeof atCounter !== 'boolean') return null;
   if (fill === null || iceScoops === null || sugarPumps === null) return null;
-  return { fill, spilled: value.spilled, iceScoops, sugarPumps, lidded, straw, inLidder };
+  return { fill, spilled: value.spilled, iceScoops, sugarPumps, lidded, straw, atCounter, inLidder };
 }
 
 function parseStats(raw: unknown): DayStats | null {

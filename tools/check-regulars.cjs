@@ -66,8 +66,8 @@ try {
   function hand(state, { size = 'M', tea = 'black', amount = 0.6 } = {}) {
     let cup = gameReducer(state, { type: 'PICK_CUP', size });
     cup = gameReducer(cup, { type: 'POUR', category: 'tea', optionId: tea, amount });
-    for (const type of ['LID_CUP', 'ADD_STRAW']) cup = gameReducer(cup, { type });
-    assert.ok(canServe(cup), 'The cup is ready');
+    for (const type of ['LID_CUP', 'ADD_STRAW', 'CARRY_OUT']) cup = gameReducer(cup, { type });
+    assert.ok(canServe(cup), 'The cup is ready, and out at the counter where the till can take it');
     return gameReducer(cup, { type: 'SERVE' });
   }
   const asked = (state, slot = 0) => gameReducer(state, { type: 'ASK_AGAIN', slot });
@@ -291,7 +291,9 @@ try {
   let easy = gameReducer(opened(3), { type: 'SET_MODE', mode: 'relaxed' });
   easy = until(easy, theRegular);
   assert.equal(theRegular(easy).regularId, 'thu', 'A relaxed shop has regulars too');
-  assert.equal(theRegular(easy).status, 'ordered', 'With the order taken for them');
+  assert.equal(theRegular(easy).status, 'requesting', 'Regulars also wait behind earlier arrivals');
+  const onlyRegular = { ...easy, slots: easy.slots.map(c => c?.regularId ? c : null) };
+  assert.equal(theRegular(gameReducer(onlyRegular, { type: 'TICK', dt: 100 })).status, 'ordered', 'Their relaxed order is taken when they reach the front');
   assert.ok(easy.clock >= REGULAR_AT * late(3), 'At the same point in the day');
   let easyAgain = gameReducer({ ...opened(4), regulars: { thu: memory({ usual: USUAL, visits: 2, lastDay: 1 }) } }, { type: 'SET_MODE', mode: 'relaxed' });
   easyAgain = until(easyAgain, theRegular);
@@ -592,7 +594,7 @@ try {
   assert.match(bookPage, /\{waiting \? \(\s+<div class="book-note">[\s\S]*\) : \(\s+<div class="book-usual">/, 'And keeps that one back');
   assert.match(read('ui/App.tsx'), /uiState\.set\(\{ settings: false, book: false \}\);/, 'It does not follow the player to another screen');
   // A restored shop can hand an id to another face, and sharing a figure with one froze the canvas for good.
-  assert.match(read('counter/Stage.ts'), /if \(view && ownerOf\(view\.customer\) === ownerOf\(customer\)\) \{/, 'A figure is only reused for the same face');
+  assert.match(read('counter/Stage.ts'), /if \(guest && ownerOf\(guest\.view\.customer\) !== ownerOf\(customer\)\) \{/, 'A figure is only reused for the same face');
   assert.match(read('counter/FloatingText.ts'), /chipShift\(layout\.slots\[feedback\.slot\]\?\.centre \?\? 0, width, layout\.width\)/, 'A chip knows where the edge of the stage is');
   assert.match(read('counter/FloatingText.ts'), /scene\.add\.container\(shift, top, \[chip, text\]\)/, 'And stands by it');
 

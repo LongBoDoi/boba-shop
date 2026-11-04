@@ -10,22 +10,30 @@ export interface CharacterOptions {
   width: number;
   /** Crop to the head for avatars. */
   headOnly?: boolean;
+  /** Standing in the cafe queue, with legs and a contact shadow on the floor. */
+  fullBody?: boolean;
 }
 
 const INK = '#2B1B17';
 
 /** The drawing's size for a given width: 100×120 whole, 60×62 cropped to the head. */
-export function characterSize(width: number, headOnly?: boolean): { width: number; height: number } {
-  return { width, height: headOnly ? width * (62 / 60) : width * 1.2 };
+export function characterSize(width: number, headOnly?: boolean, fullBody = false): { width: number; height: number } {
+  return { width, height: headOnly ? width * (62 / 60) : width * (fullBody ? 1.76 : 1.2) };
 }
 
 /** A customer drawn in a 100×120 box: shoulders at the bottom, head centred at (50, 52). */
 export function characterSvg(look: CustomerLook, opts: CharacterOptions): string {
-  const { mood, blinking, width, headOnly } = opts;
-  const viewBox = headOnly ? '20 18 60 62' : '0 0 100 120';
-  const { height } = characterSize(width, headOnly);
+  const { mood, blinking, width, headOnly, fullBody } = opts;
+  const viewBox = headOnly ? '20 18 60 62' : fullBody ? '0 0 100 176' : '0 0 100 120';
+  const { height } = characterSize(width, headOnly, fullBody);
   const skinShade = shade(look.skin, -18);
   let body = '';
+  if (fullBody && !headOnly) {
+    body += '<ellipse cx="50" cy="171" rx="32" ry="4" fill="#745538" opacity=".2"/>' +
+      '<path d="M29 122H71L68 162H54L50 139L46 162H32Z" fill="#656B64" stroke="#50544E" stroke-width="1.3"/>' +
+      '<path d="M32 158H46V168H24Q23 161 32 158ZM54 158H68Q77 161 76 168H54Z" fill="#73533C"/>' +
+      '<path d="M25 168H46M54 168H75" stroke="#E3C8A5" stroke-width="2" stroke-linecap="round"/>';
+  }
 
   // Long hair falls behind the shoulders.
   if (look.hairStyle === 'long') {
@@ -35,7 +43,9 @@ export function characterSvg(look: CustomerLook, opts: CharacterOptions): string
   if (!headOnly) {
     body +=
       '<g>' +
-      `<path d="M12 120 C12 94 28 82 50 82 C72 82 88 94 88 120 Z" fill="${look.shirt}"/>` +
+      (fullBody
+        ? `<path d="M29 88Q50 77 71 88L82 117L72 122L68 104L72 130Q50 135 28 130L32 104L28 122L18 117Z" fill="${look.shirt}" stroke="${shade(look.shirt, -25)}" stroke-width="1"/><path d="M19 117L28 120L27 128Q22 136 18 128ZM72 120L81 117L82 128Q77 136 73 128Z" fill="${look.skin}"/><path d="M33 127Q50 130 67 127" fill="none" stroke="${shade(look.shirt, -18)}" stroke-width="1.5"/>`
+        : `<path d="M12 120 C12 94 28 82 50 82 C72 82 88 94 88 120 Z" fill="${look.shirt}"/>`) +
       `<path d="M40 83 L50 96 L60 83" fill="none" stroke="${shade(look.shirt, -25)}" stroke-width="2.5" stroke-linejoin="round"/>` +
       `<rect x="43" y="70" width="14" height="14" rx="5" fill="${skinShade}"/>` +
       '</g>';

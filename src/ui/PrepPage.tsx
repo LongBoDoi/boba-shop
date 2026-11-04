@@ -3,7 +3,8 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'preact/ho
 
 import { kitchenActionIconSvg } from '../art/kitchenEquipment';
 import { setKitchenRect } from '../game/host';
-import { canServe as cupCanServe } from '../game/reducer';
+import { goToPage } from '../game/pager';
+import { canCarryOut } from '../game/reducer';
 import { shallow, useGame, useUi } from '../hooks';
 import { playSound } from '../sound';
 import { dispatch } from '../store';
@@ -159,30 +160,42 @@ function ClearButton({ layout }: { layout: PrepLayout }) {
   );
 }
 
+/**
+ * The end of the drink's time in the kitchen: it does not serve, it **carries the cup out to the
+ * counter** and takes the player with it. The drink is handed over at the till, by the register on
+ * the counter page — see `CounterPage.tsx` — so this button's whole job is the journey.
+ */
 function ServeButton({ layout }: { layout: PrepLayout }) {
-  const { label, canServe } = useGame((state) => {
+  const { label, ready } = useGame((state) => {
     const customer = state.selectedSlot === null ? null : state.slots[state.selectedSlot];
-    const label = !customer
-      ? 'Chọn order để pha'
-      : !state.cup.size
-        ? 'Lấy ly đúng cỡ từ kệ'
-        : !state.cup.tea
-          ? 'Rót trà vào ly'
-          : !state.build.lidded
-            ? 'Chạm chồng nắp để đậy nắp ➜'
-            : !state.build.straw
-              ? 'Thêm ống hút bên cạnh chồng nắp ➜'
-              : `Phục vụ ${customer.name} ➜`;
-    return { label, canServe: cupCanServe(state) };
+    const label = state.build.atCounter
+      ? 'Ly đang chờ ở quầy ➜'
+      : !customer
+        ? 'Chọn order để pha'
+        : !state.cup.size
+          ? 'Lấy ly đúng cỡ từ kệ'
+          : !state.cup.tea
+            ? 'Rót trà vào ly'
+            : !state.build.lidded
+              ? 'Chạm chồng nắp để đậy nắp ➜'
+              : !state.build.straw
+                ? 'Thêm ống hút bên cạnh chồng nắp ➜'
+                : `Mang ra quầy cho ${customer.name} ➜`;
+    return { label, ready: canCarryOut(state) };
   }, shallow);
   const icon = useMemo(() => kitchenActionIconSvg('cup'), []);
   return (
     <button
       type="button"
       class={`prep-serve live ${layout === 'column' ? 'wide' : ''} ${layout === 'band' ? 'band' : ''}`}
-      disabled={!canServe}
+      disabled={!ready}
       aria-label={label}
-      onClick={() => dispatch({ type: 'SERVE' })}
+      onClick={() => {
+        // The shop has the cup at the counter before anything moves; the slide and the flight that
+        // follow are only the picture of it. The cue is `sound.ts`'s, off the same change of state.
+        dispatch({ type: 'CARRY_OUT' });
+        goToPage(0, false);
+      }}
     >
       <Svg markup={icon} />
       <span class="prep-serve-text">{label}</span>

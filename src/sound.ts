@@ -1,6 +1,6 @@
 import { initAudio, playSound, setAudioSettings, setGamePaused, setMusic } from './audio/audio';
 import { MusicId } from './audio/sounds';
-import { COIN_FLIGHT_MS, COIN_START_MS } from './game/effectTiming';
+import { CARRY_MS, COIN_FLIGHT_MS, COIN_START_MS } from './game/effectTiming';
 import { GameState, Outcome, Phase } from './game/reducer';
 import { leftContent } from './game/rules';
 import { store } from './store';
@@ -51,6 +51,12 @@ export function startSound() {
       && highestCustomer(state) > highestCustomer(previous)) playSound('customer');
     // Over the brim, once per ruined drink.
     if (!previous.build.spilled && state.build.spilled) playSound('spill');
+    // The finished cup carried out to the counter: lifted off the mat here, set down on the till
+    // there, a flight later. See `CARRY_MS` and `HandoffCup`.
+    if (!previous.build.atCounter && state.build.atCounter) {
+      playSound('cupPickup');
+      playSound('cupDown', CARRY_MS);
+    }
   };
   sync(store.state, null);
   store.subscribe(sync);

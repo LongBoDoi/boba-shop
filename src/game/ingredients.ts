@@ -174,8 +174,35 @@ export function asksFor(drink: Drink, category: CategoryId): boolean {
 
 /** How much of the cup one second of holding a spigot pours. */
 export const POUR_RATE = 0.55;
+/**
+ * How long the tea stands at the brim before it goes over.
+ *
+ * Without it a full cup is unpourable, and the arithmetic says so: a cup fills in 1.8 s, the meter
+ * calls it `Đầy` for its last eighth, and it spills 36 ms after reaching the rim — shorter than
+ * anyone's reaction to *seeing* it reach the rim, so aiming for a full cup meant letting go before
+ * it looked full and guessing by how much. Reported as exactly that: "really difficult to pour tea
+ * to full level as most of the time I would make it overflow." So the pour pauses at the rim: let
+ * go inside this window and the cup is exactly full, keep holding and it spills as it always did.
+ */
+export const BRIM_HOLD_MS = 520;
 /** Holding this long past the brim is pure waste; the tea keeps running over until then. */
 export const MAX_POUR = 2.2;
+
+/**
+ * What a tap held for `heldMs` over a cup holding `fill` has poured into it: the rate, with the
+ * pause at the brim, and never more than the cup can waste. The kitchen draws the level from this
+ * and hands the same number to `POUR`, so what the cup shows and what the shop is told agree —
+ * which is also what keeps the hold out of the reducer: holding through it pours exactly the room
+ * that was left, so `pour` sees a cup filled to the brim and nothing spilt.
+ */
+export function pouredAmount(fill: number, heldMs: number): number {
+  const room = Math.max(0, 1 - fill);
+  const poured = Math.max(0, heldMs / 1000) * POUR_RATE;
+  if (poured <= room) return poured;
+  const over = poured - room - (BRIM_HOLD_MS / 1000) * POUR_RATE;
+  return Math.min(Math.max(0, MAX_POUR - fill), room + Math.max(0, over));
+}
+
 /** Tipping a carton of milk into the cup adds this much — leave it room, or it goes over. */
 export const MILK_SPLASH = 0.18;
 

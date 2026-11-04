@@ -21,7 +21,7 @@ try {
     { type: 'POUR', category: 'milk', optionId: 'whole', amount: 0.18 },
     { type: 'SCOOP', category: 'toppings', optionId: 'pearls' },
     { type: 'SCOOP', category: 'foam', optionId: 'cheese' },
-    { type: 'ICE_SCOOP' }, { type: 'SUGAR_PUMP' }, { type: 'SERVE' }, { type: 'CLEAR_CUP' },
+    { type: 'ICE_SCOOP' }, { type: 'SUGAR_PUMP' }, { type: 'CARRY_OUT' }, { type: 'SERVE' }, { type: 'CLEAR_CUP' },
   ]) assert.equal(gameReducer(bench, action), bench, `${action.type} cannot act on an absent cup`);
   for (const size of ['XL', '', null, undefined]) {
     assert.equal(gameReducer(bench, { type: 'PICK_CUP', size }), bench, 'Only S, M and L cups can be picked');
@@ -76,6 +76,7 @@ try {
       state = gameReducer(state, { type: 'POUR', category: 'tea', optionId: 'black', amount: 0.6 });
       state = gameReducer(state, { type: 'LID_CUP' });
       state = gameReducer(state, { type: 'ADD_STRAW' });
+      state = gameReducer(state, { type: 'CARRY_OUT' });
       const served = gameReducer(state, { type: 'SERVE' });
       assert.equal(served.cup.size, null, 'Serving does not spawn a replacement');
       assert.equal(served.stats.perfect, chosen === size ? 1 : 0);

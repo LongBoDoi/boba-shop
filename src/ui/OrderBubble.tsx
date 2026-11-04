@@ -20,7 +20,7 @@ import {
 } from '../game/ingredients';
 import { DayConfig } from '../game/levels';
 import { categoryMatches, evaluateDrink } from '../game/orders';
-import { Customer, patienceLeft } from '../game/reducer';
+import { Customer, frontSlot, patienceLeft } from '../game/reducer';
 import { orderVisible } from '../game/regulars';
 import { lullGroup, lullPreview, USUAL_MAX_TILES } from '../game/rules';
 import {
@@ -43,7 +43,9 @@ export interface Ticket {
 
 /** The taken orders, in counter order — how `GameScreen` builds `tickets`. */
 export function ticketsOf(slots: (Customer | null)[]): Ticket[] {
-  return slots.flatMap((customer, slot) => (customer && customer.status === 'ordered' ? [{ slot, customer }] : []));
+  const slot = frontSlot(slots);
+  const customer = slot === null ? null : slots[slot];
+  return slot !== null && customer?.status === 'ordered' ? [{ slot, customer }] : [];
 }
 
 /**

@@ -66,6 +66,7 @@ try {
     }
     cup = gameReducer(cup, { type: 'LID_CUP' });
     cup = gameReducer(cup, { type: 'ADD_STRAW' });
+    cup = gameReducer(cup, { type: 'CARRY_OUT' });
     return gameReducer(cup, { type: 'SERVE' });
   };
   const servedBefore = finish(state);

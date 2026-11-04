@@ -437,7 +437,8 @@ src/updates/            keeping an installed app current: manifest.ts (what a bu
 src/scenes/             PreloadScene (the artwork, before the shop opens), CounterScene, KitchenScene
 src/counter/            the customer stage: backdrop, customers, floating text, layout
 src/kitchen/            the room you work in: layout, equipment, the cup and its painter, pours
-src/ui/                 the HTML over the canvas: App, TitleScreen, GameScreen, PrepPage, Hud,
+src/ui/                 the HTML over the canvas: App, TitleScreen, GameScreen, PrepPage,
+                        CounterPage (the register, and the cup waiting on it), Hud,
                         OrderBubble, PourMeter, OpeningSign, SettingsSheet, RegularBook (Sổ khách),
                         DayEndScreen, Effects, LoadingScreen, responsive.ts (the three prep layouts),
                         ui.css
@@ -1167,7 +1168,9 @@ of that mechanic needs. What cuts across them:
   where the wall is, and whether a knob does nothing. It cannot say whether the game is fun.
 - **The slower player's third star held.** Sloppy, chained from a new shop, 27.7 three-star days of
   30, which is what the build before any of this got. That is the bar for decision 5, and the
-  thing to re-measure after moving anything.
+  thing to re-measure after moving anything. Handing the drink over at the till spent the whole of
+  the margin above it: the same chain measured 28.7 days before that change and 27.7 after, which
+  sits on the bar and not under it. There is nothing left to spend on another tap in the loop.
 - **The wall is steep, though better than it was.** At 1.25× the sloppy timing, 60–72% three-star
   days on days 12 and 30, against 39% before any of this. At 1.5×, 19–39% against 12%.
 - **Noticing a customer from the kitchen matters and is not new.** On days 12 and 30 the third star
@@ -1295,6 +1298,27 @@ pan: it is the one thing that belongs to the player's hand.
   `onComplete` — two quick taps put one ingredient in the cup. `sendToolToCup` is the fix and the
   reason it is written the way it is: the sprite is cut loose with its own tweens and forgotten,
   so the next grab builds a fresh one rather than stealing it out of the sky.
+- **What a tool is carrying is not in the cup until the tool is over it.** The rule above does not
+  bend — the shop has the scoop from the dispatch, and nothing waits on the flight — but the
+  *picture* of it does: `pending` in `KitchenScene` keeps the drink as it was until the tool lands,
+  and `drinkShown()` is the one place that answers what the cup is drawn as. Without it the pearls
+  were in the drink while the scoop of them was still crossing the room, and a splash of milk
+  raised the level from the other side of the kitchen. A tool *dragged* over the cup holds nothing
+  back, because it is already there and the tipping is what pours it in. Tapping a second station
+  lands the first one's picture at once rather than queueing it, so two things in the air can
+  never leave the cup behind the shop; so do the cup being binned, carried out, or the game put
+  down (`settlePending`).
+- **The lid and the straw do not go in, they are fitted on**, so they are held back the same way
+  and by the same reasoning (`fitPart`, `showFinish`, and `settlePart` for every way a flight can
+  be cut short). A tapped lid lifts off its stack while the cup stands itself down to meet it, so
+  the two settle together wherever the cup happened to be — under a tap, or dragged up to the
+  stack. A straw lines up over the lid and sinks through it, and whatever has passed the opening
+  is cropped away, because that length of it is inside the cup now and the cup draws its own.
+  Both are baked from the cup's own artwork at the size the cup wears them
+  (`finishPartTexture`, and `INSERTED_STRAW_BOX` so the straw matches down to its lean), which is
+  what lets the swap at the end of the flight go unseen — the trick the rack's cup is handed over
+  with. The straw used to be drawn in the cup the moment it was dispatched, with the carried one
+  still flying in to meet it, and the lid had no picture of it at all.
 - **`TAP_DISTANCE` (8px) is the only thing between the quick way and a drag.** The tool is in hand
   from the press either way — a press that shows nothing reads as a station that cannot be picked
   up, which is exactly how it was reported — and what the release does is the only difference:
@@ -1314,6 +1338,22 @@ pan: it is the one thing that belongs to the player's hand.
   while it is half off the edge of the room **slides the wall into place first** (`panForDock`),
   because a cup fetched to it would otherwise hang off the same edge, reading a meter nobody can
   see; the cup is aimed at where the wall is *going*, so the two travel together.
+- **The pour stands still at the brim, for `BRIM_HOLD_MS` (520 ms), before it goes over.** Without
+  that a full cup cannot be poured on purpose, and the arithmetic says why: at `POUR_RATE` a cup
+  fills in 1.8 s, the meter calls it Đầy for its last eighth, and it spilt **36 ms** after reaching
+  the rim — shorter than anyone's reaction to *seeing* it reach the rim, so the only way to hit full
+  was to let go before it looked full and guess by how much. Reported as exactly that: pouring to
+  full "most of the time I would make it overflow". The brim hold gives the player about 750 ms of
+  a cup that is drawn and labelled full, and holding on past it still spills, so the penalty is
+  where it was. `pouredAmount(fill, heldMs)` in `ingredients.ts` is the whole rule — the rate, the
+  pause, and `MAX_POUR` as the ceiling — and the kitchen both draws the level from it and hands
+  what it returns to `POUR`, so the cup and the shop cannot disagree. That is also what keeps the
+  hold out of the reducer: holding through it pours exactly the room that was left, so `pour` sees
+  a brim-full cup and nothing spilt, and `spilled` is still simply "more than fitted". The level
+  under a running tap is therefore read off the clock every frame rather than tweened across the
+  room it has, because no single tween stands still in the middle. (`tools/sim`'s bot pours by
+  amount rather than by holding, so its own timing model is a hold short of the truth only for the
+  rare pour it sends over the brim.)
 - **Everything else is carried to the cup.** The topping containers, the ice machine's scoop, the
   sugar jar, the milk cartons and the cream dispensers are dragged or tapped: what is in hand follows
   the finger above everything else, and on release either tips into the cup (`SCOOP` / `ICE_SCOOP`
@@ -1347,6 +1387,47 @@ pan: it is the one thing that belongs to the player's hand.
 A drink can be served once tea has been chosen by pouring any positive amount. Serving and tips do
 not depend on how full the cup is; overflow still marks a messy drink.
 
+### Handing the drink over
+
+**The kitchen does not serve anybody. It carries the cup out to the counter, and the till hands it
+over.** The prep page's big button is now `Mang ra quầy cho {name} ➜`: it dispatches `CARRY_OUT`
+and slides the pager to the counter, where the drink stands on the painted mat beside the register
+until the player presses it. That press is the sale.
+
+- **`CupBuild.atCounter` is where the cup is**, which is why it lives beside the lid and the straw
+  rather than in the UI. While it is true the kitchen's mat is empty, nothing can be tipped in,
+  no new cup comes off the rack (every one of those refusals answers `Ly đang chờ ở quầy…`), and
+  the hint pill says where the drink went. It rides in the save, so a shop put down mid-handover
+  reopens with the cup still on the till.
+- **`canCarryOut` and `canServe` are the two halves of one question** (`readyToHandOver`: a
+  finished cup, and the customer it was made for still at the front). Neither end can do the
+  other's job — `SERVE` on a cup still in the kitchen is refused by the reducer, not only by a
+  disabled button, which is what keeps the counter the only place a drink is sold.
+- **The shop has the cup at the counter before anything moves.** The press dispatches and *then*
+  slides the page, as everything else in the room does; the cup's flight is the picture of it.
+  `HandoffCup` in `CounterPage.tsx` draws the cup where the mat is and, on the frame it appears,
+  animates it in from wherever the kitchen's cup last stood (`uiState.cupScreen`) across the page
+  slide, so the two read as one movement. It then **says where it now stands**, so the coins of
+  the sale spring from the till rather than from a kitchen the cup has left. `CARRY_MS` (600 ms,
+  in `effectTiming.ts`) is that flight and the delay on the `cupDown` cue alike.
+- **The mat is measured off the painting** (`handoff` in `counter/roomLayout.ts`: the centre, the
+  line the cup's base stands on, and how wide the cup is drawn), so it keeps the room's own scale
+  and pans and crops with it. `check-prep-layout.cjs` holds it to being wholly on screen, and
+  clear of the till, at every shape the game is played at — on a 568-wide phone on its side the
+  cup is 34px, which is the floor it is pinned against.
+- **A customer who gives up leaves the cup standing there.** It is still a drink: whoever is next
+  can be given it, or it goes in the kitchen's bin, which is the one way out and is deliberately
+  left enabled. Nothing is thrown away on the player's behalf.
+- **What it costs, from the bot** (HEAD with only this change, n=150 a cell): a serve is two taps
+  and a page slide instead of one tap, which is about **−8% drinks a shift and −9% takings**.
+  Skilled keeps three stars on every day measured; the slower player's three-star month goes from
+  **28.7 to 27.7 days of 30**, which lands on the bar in "What the bot found" rather than under it
+  — the whole of the margin, spent on one tap, so the next thing added to the loop has to pay for
+  itself somewhere. The board, the last thing the till can buy, slips from day 24 to day 26 and is
+  still owned by day 30 in every shop. The bot's `serve` step is where the cost is modelled
+  (`tap + MACHINE.slide`, then a `handover` tap on the counter page); if the handover is ever made
+  cheaper for the player, that step is what has to change with it.
+
 ### The pour meter
 
 A small horizontal meter floats beneath the order card while the cup is docked (`ui/PourMeter.tsx`)
@@ -1362,6 +1443,11 @@ read as a gap the bar never closed.
 `floor(level * 4)`, which called a cup a quarter full "Cạn" — dry — and only ever said "Đầy" at
 exactly 1, so a held tap ran from "Gần đầy" straight to "Tràn ly!" without passing through full.
 The bands are their own list, and "Đầy" covers the last eighth, where the cup is drawn brim-full.
+
+**The meter says Đầy through the brim hold**, and only turns Tràn ly! when the tea actually goes
+over. It needs no rule of its own for that: it reads the level the kitchen draws, and that level
+stands at exactly 1 for as long as the pour pauses there. So the label is the cue the hold exists
+to give — measured in a browser at 390x844, Đầy from 1.65 s to 2.40 s of a held tap, then Tràn ly!
 
 ### Ice in the cup
 
@@ -1763,6 +1849,16 @@ sprites over them. Finishing uses a painted lid stack, with no moving machine or
 
 ## Conventions
 
+The counter/order screen now uses the painted cafe in `assets/counter/cafe-portrait.png` and
+`cafe-landscape.png`, with one continuous image per orientation. `counter/roomLayout.ts` is the
+shared pure geometry for the painting, customer queue and live register. Customers stand on the
+queue mat using the full-body character variant. The register takes the next order, then opens
+the kitchen once all waiting customers have ordered; direct customer taps and swipes still work.
+It is also where a drink is handed over, and that comes first: with a cup waiting on the mat the
+register reads `Trao ly` and presses to `SERVE` — see "Handing the drink over".
+Keep image imports out of the pure layout module. See [counter artwork](docs/counter-cafe.md)
+for generation prompts and the optional browser interaction check.
+
 - **Vietnamese UI text** everywhere, including the labels a screen reader would read. Money always
   goes through `formatMoney`.
 - **Calm motion** (the user asked for this explicitly): short, eased, no springs or bounce, no
@@ -1896,8 +1992,9 @@ sprites over them. Finishing uses a painted lid stack, with no moving machine or
 ### Tap-to-lid stack
 
 The clear cat-ear lid stack replaces the lidding machine within the unified background painting.
-Tapping it dispatches `LID_CUP` immediately and returns the cup to its holder. There is no
-loading movement or press timer. Tea is required; a straw still follows the lid. Old saves
+Tapping it dispatches `LID_CUP` immediately; the lid then flies from the stack onto the cup while
+the cup glides back to its holder to meet it, and the cup wears it when the flight lands (see "The
+room you work in"). There is no loading movement or press timer. Tea is required; a straw still follows the lid. Old saves
 with `inLidder` return unfinished to the holder after validation. Legacy machine actions
 remain reducer-compatible, but no player interaction or simulator route uses them.
 See `docs/lidding-station.md` for art provenance and validation.

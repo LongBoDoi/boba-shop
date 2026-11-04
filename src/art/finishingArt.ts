@@ -8,6 +8,29 @@ export const insertedStrawX = (y: number) => 56.5 + (y - CUP_LID_HOLE_Y) * STRAW
 /** Only the far arc of the sealing ring belongs behind the cream. */
 export const CUP_LID_REAR_RING = 'M8 15C26 -2 88 -2 105 15L104 20C85 8 28 8 9 20Z';
 
+/**
+ * How far the straw drops as it is pushed through the lid: the length of tube that ends up below
+ * the opening, which is everything of it the cup draws for itself from the inside.
+ */
+export const STRAW_INSERT = REFERENCE_CUP_PARTS.straw.target.height
+  - (CUP_LID_HOLE_Y - REFERENCE_CUP_PARTS.straw.target.y);
+
+/**
+ * The box the straw fills once it is in the cup, in the cup's own units: the extended tube, and
+ * wide enough for its lean. A straw flying onto the cup is painted into this and lands on it, so
+ * that what is in the air and what the cup draws are the same picture down to the lean.
+ */
+export const INSERTED_STRAW_BOX = (() => {
+  const { target } = REFERENCE_CUP_PARTS.straw;
+  const left = insertedStrawX(target.y) - target.width / 2;
+  return {
+    x: left,
+    y: target.y,
+    width: insertedStrawX(CUP_STRAW_BOTTOM) + target.width / 2 - left,
+    height: CUP_STRAW_BOTTOM - target.y,
+  };
+})();
+
 export function paintLid(c: CanvasRenderingContext2D, source: CanvasImageSource, layer: 'whole' | 'rear' | 'front' = 'whole') {
   c.save();
   if (layer === 'rear') c.clip(new Path2D(CUP_LID_REAR_RING));

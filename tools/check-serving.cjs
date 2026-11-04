@@ -15,7 +15,7 @@ require.extensions['.ts'] = (module, filename) => {
 };
 
 try {
-  const { canAfford, createInitialState, gameReducer } = require(path.join(__dirname, '../src/game/reducer.ts'));
+  const { canAfford, canCarryOut, canServe, createInitialState, gameReducer } = require(path.join(__dirname, '../src/game/reducer.ts'));
   const { drinkPrice, evaluateDrink, generateOrder } = require(path.join(__dirname, '../src/game/orders.ts'));
   const { createRng } = require(path.join(__dirname, '../src/game/random.ts'));
   const { getDayConfig, describeUnlocks } = require(path.join(__dirname, '../src/game/levels.ts'));
@@ -154,7 +154,9 @@ try {
     return state;
   }
 
-  const finishCup = (state) => gameReducer(gameReducer(state, { type: 'LID_CUP' }), { type: 'ADD_STRAW' });
+  /** Lid, straw — and out to the counter, which is everything a cup needs before the till will take it. */
+  const finishCup = (state) => ['LID_CUP', 'ADD_STRAW', 'CARRY_OUT']
+    .reduce((cup, type) => gameReducer(cup, { type }), state);
 
   const makeCup = (amount) => buildCup(ordered, recipe, amount);
 
@@ -204,6 +206,103 @@ try {
   assert.equal(overflow.stats.served, 1, 'An overflowing cup can be served');
   assert.equal(overflow.stats.tips, 0, 'Overflow still loses its tip');
   assert.equal(overflow.coins, Math.ceil(drinkPrice(recipe) / 2), 'Overflow retains the existing spill penalty');
+
+  // ------------------------------------------------------------------ out to the counter
+  // Serving is a handover in two halves: the kitchen carries the finished cup out to the counter,
+  // and the till hands it over. The shop's state says which half it is in, so neither end can do
+  // the other's job — and a cup standing at the front is out of the kitchen's reach entirely.
+  const made = makeCup(0.6);
+  const lidded = gameReducer(made, { type: 'LID_CUP' });
+  const ready = gameReducer(lidded, { type: 'ADD_STRAW' });
+  assert.equal(canCarryOut(lidded), false, 'A cup without its straw is not finished, so it stays in the kitchen');
+  assert.equal(canCarryOut(ready), true, 'A finished cup can be carried out');
+  assert.equal(canServe(ready), false, 'But the till has nothing yet');
+  assert.equal(gameReducer(ready, { type: 'SERVE' }), ready, 'And serving it from the kitchen is refused');
+  const carried = gameReducer(ready, { type: 'CARRY_OUT' });
+  assert.equal(carried.build.atCounter, true, 'Carrying it out is the whole of what that press does');
+  assert.deepEqual(carried.cup, ready.cup, 'The drink itself is untouched by the journey');
+  assert.equal(carried.cupId, ready.cupId, 'It is the same cup, in another place');
+  assert.equal(canServe(carried), true, 'Now the till can hand it over');
+  assert.equal(canCarryOut(carried), false, 'And it cannot be carried out twice');
+  assert.equal(gameReducer(carried, { type: 'CARRY_OUT' }), carried, 'A second press changes nothing');
+  assert.equal(gameReducer(gameReducer(carried, { type: 'SET_PAUSED', paused: true }), { type: 'SERVE' }).build.atCounter, true,
+    'Nothing is handed over while the shop is paused');
+  // The kitchen has nothing to work on while the cup is out at the front.
+  for (const action of [
+    { type: 'PICK_CUP', size: 'M' }, { type: 'POUR', category: 'tea', optionId: 'black', amount: 0.1 },
+    { type: 'SCOOP', category: 'toppings', optionId: 'pearls' }, { type: 'ICE_SCOOP' }, { type: 'SUGAR_PUMP' },
+    { type: 'LID_CUP' }, { type: 'ADD_STRAW' },
+  ]) assert.equal(gameReducer(carried, action), carried, `${action.type} cannot reach a cup that is out at the counter`);
+  const handedOver = gameReducer(carried, { type: 'SERVE' });
+  assert.equal(handedOver.stats.served, 1, 'The till serves it');
+  assert.equal(handedOver.build.atCounter, false, 'And the counter is clear again');
+  assert.equal(handedOver.cup.size, null, 'With an empty mat behind it');
+  assert.equal(handedOver.coins, gameReducer(finishCup(makeCup(0.6)), { type: 'SERVE' }).coins,
+    'Going the long way round pays exactly what it always did');
+  // Whoever it was made for can give up while it stands there. The drink is still a drink: it goes
+  // to whoever is next or into the bin, and the bin is the way out either way.
+  const abandoned = { ...carried, slots: carried.slots.map(() => null), selectedSlot: null };
+  assert.equal(canServe(abandoned), false, 'With nobody at the counter there is nobody to give it to');
+  const binned = gameReducer(abandoned, { type: 'CLEAR_CUP' });
+  assert.equal(binned.cup.size, null, 'Throwing it away still empties the mat');
+  assert.equal(binned.build.atCounter, false, 'And takes it off the counter');
+  assert.equal(binned.discarded.drink.tea, carried.cup.tea, 'The tossed cup is the one that was standing there');
+  // It survives being put down mid-handover: the save says where the cup is, as it says what is in it.
+  assert.equal(parseGame(serializeGame(carried)).build.atCounter, true, 'A cup at the counter is still there on reload');
+  const resumed = gameReducer(parseGame(serializeGame(carried)), { type: 'SET_PAUSED', paused: false });
+  assert.equal(canServe(resumed), true, 'And the till picks up where it left off');
+  for (const mutate of [
+    (raw) => { raw.build.atCounter = 'yes'; },
+    (raw) => { raw.build.straw = false; },
+    (raw) => { raw.build.lidded = false; raw.build.straw = false; },
+  ]) {
+    const raw = JSON.parse(serializeGame(carried));
+    mutate(raw);
+    assert.equal(parseGame(JSON.stringify(raw)), null, 'Only a finished cup can be out at the counter');
+  }
+  const legacy = JSON.parse(serializeGame(ready));
+  delete legacy.build.atCounter;
+  assert.equal(parseGame(JSON.stringify(legacy)).build.atCounter, false, 'A save from before the counter had a mat opens in the kitchen');
+
+  // ------------------------------------------------------------------ pouring to the brim
+  // The tap is held by hand, so what matters is not only what spills but whether a player can stop
+  // before it does. `pouredAmount` is the whole of that: the rate up to the rim, then a pause there
+  // long enough to react to, then the overflow the penalty is for.
+  const { BRIM_HOLD_MS, MAX_POUR, POUR_RATE, pouredAmount } = require(path.join(__dirname, '../src/game/ingredients.ts'));
+  const toFill = (from, to) => ((to - from) / POUR_RATE) * 1000;
+  assert.equal(pouredAmount(0, 0), 0, 'A tap not yet open has poured nothing');
+  assert.ok(Math.abs(pouredAmount(0, 1000) - POUR_RATE) < 1e-9, 'Short of the rim it is the rate and nothing else');
+  assert.ok(Math.abs(pouredAmount(0.5, toFill(0.5, 0.9)) - 0.4) < 1e-9, 'Topping a cup up is the rate too');
+  for (const from of [0, 0.3, 0.75, 0.95]) {
+    const held = toFill(from, 1);
+    assert.ok(Math.abs(pouredAmount(from, held) - (1 - from)) < 1e-9, 'The rim is reached when the rate says');
+    assert.ok(Math.abs(pouredAmount(from, held + BRIM_HOLD_MS) - (1 - from)) < 1e-9,
+      'Letting go anywhere inside the hold pours exactly the room there was');
+    assert.ok(pouredAmount(from, held + BRIM_HOLD_MS + 1000) > 1 - from, 'Keeping hold of it still goes over');
+    assert.ok(pouredAmount(from, 60_000) <= MAX_POUR - from + 1e-9, 'And wastes no more than a cup can waste');
+  }
+  let was = -1;
+  for (let held = 0; held <= 6000; held += 25) {
+    const poured = pouredAmount(0, held);
+    assert.ok(poured >= was, 'Holding longer never pours less');
+    was = poured;
+  }
+  // The window a player actually has: from the cup being drawn and labelled full (the meter's
+  // `Đầy` band opens at 0.88) to the first drop that counts as a spill. Reaction to seeing it is
+  // ~250 ms, and before the hold this window was 255 ms, which is why a full cup could not be
+  // poured on purpose.
+  const brimWindow = toFill(0.88, 1.02) + BRIM_HOLD_MS;
+  assert.ok(brimWindow > 600, `A full cup can be aimed at: ${Math.round(brimWindow)} ms of it`);
+  const brim = gameReducer(makeCup(0), { type: 'POUR', category: 'tea', optionId: recipe.tea, amount: pouredAmount(0, toFill(0, 1) + BRIM_HOLD_MS) });
+  assert.equal(brim.build.fill, 1, 'A tap held through the brim hold fills the cup');
+  assert.equal(brim.build.spilled, false, 'And nothing is spilt, so the drink keeps its tip');
+  const went = gameReducer(makeCup(0), { type: 'POUR', category: 'tea', optionId: recipe.tea, amount: pouredAmount(0, toFill(0, 1) + BRIM_HOLD_MS + 500) });
+  assert.equal(went.build.fill, 1, 'A tap held on past the hold still only fits a cupful');
+  assert.equal(went.build.spilled, true, 'But it spills, as it always did, so the penalty is still reachable');
+  // A fresh press on a cup already at the brim starts the hold again, which is the same rule read
+  // from the other end: the tea is standing at the rim either way.
+  assert.equal(pouredAmount(1, BRIM_HOLD_MS), 0, 'Pouring into a full cup is held at the rim too');
+  assert.ok(pouredAmount(1, BRIM_HOLD_MS + 1000) > 0.02, 'And goes over if it is held there');
   // The three newest toppings, played through on a day whose orders may hold two of them.
   for (const [optionId, day] of [['redbean', 6], ['aloe', 7], ['crystal', 8]]) {
     assert.ok(getDayConfig(1).options.toppings.includes(optionId), 'Every topping is available from day one');
@@ -267,7 +366,7 @@ try {
   const short = { ...closing, money: price - 1 };
   assert.equal(gameReducer(short, { type: 'BUY_GEAR', id: 'plant' }), short, 'And one unit short buys nothing');
 
-  console.log('Passed: tiny pours serve; fill-independent payment and tips; tea/order guards; overflow behavior; the whole menu open on day one; what an order asks for and leaves out; toppings saved and served; money earned, carried and spent.');
+  console.log('Passed: tiny pours serve; fill-independent payment and tips; tea/order guards; overflow behavior; the pause at the brim; the cup carried out to the till; the whole menu open on day one; what an order asks for and leaves out; toppings saved and served; money earned, carried and spent.');
 } finally {
   if (previousLoader) require.extensions['.ts'] = previousLoader;
   else delete require.extensions['.ts'];

@@ -25,6 +25,12 @@ Lidding now takes one tap, with no machine loading or press delay. The `machine`
 column remains for comparison with historical baselines and is zero for new runs; the old
 `lidHop` option has no effect. Historical baseline files are unchanged.
 
+**Serving is two taps and a page slide**, since the drink is handed over at the counter: the
+`serve` step carries the finished cup out (a tap, plus `MACHINE.slide`, and the bot is on the
+counter page afterwards) and a `handover` step taps the till. It costs about 8% of the drinks a
+shift and 9% of the takings against the one-tap serve the baseline files were measured with, so
+every number in `baseline/` reads that much high; see "Handing the drink over" in `CLAUDE.md`.
+
 `bot.cjs` is the bot, `shop.cjs` chains one shop through the days for `run5.cjs` and `tune.cjs`, and
 `load.cjs` does the loading.
 

@@ -249,6 +249,7 @@ export function findStation(stations: Station[], x: number, y: number, cupW: num
 }
 
 export function hintFor(cup: Drink, docked?: Station, build?: CupBuild): string {
+  if (build?.atCounter) return 'Ly đã mang ra quầy — bấm máy tính tiền để trao cho khách';
   if (!cup.size) return 'Vuốt ngang để tìm kệ, chọn ly đúng cỡ khách gọi';
   if (build?.straw) return 'Đã đậy nắp và thêm ống hút — sẵn sàng phục vụ';
   if (build?.lidded) return 'Thêm ống hút từ hộp bên cạnh chồng nắp';
