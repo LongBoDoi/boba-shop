@@ -1895,6 +1895,11 @@ and pale brows. `CustomerLook` keeps its legacy `skin`/`hair`/`hairStyle` keys s
 seeded generation and rules remain compatible. Do not rename those fields just to change artwork.
 The painter maps them to fur and coat patterns; regulars retain distinct recognizable coats.
 Head-only crops include both ears and chin; standing cats keep the established 100×176 bounds.
+`counter/CatFigure.ts` animates eight cached body layers (art/character.ts `part` option), with
+head textures for mood/blink and rear head/shirt textures for exits. `catMotion.ts` supplies the
+walk cycle, breathing, glances, occasional resting-paw pose and tail motion. Frame updates move
+joints only; never regenerate SVGs or upload textures per animation frame. See
+[cat animation](docs/customer-animation.md) for lifecycle and browser checks.
 
 The counter/order screen now uses the painted cafe in `assets/counter/cafe-cats-raised-portrait.png` and
 `cafe-cats-raised-landscape.png`, with one continuous image per orientation. `counter/roomLayout.ts` is the
@@ -1920,7 +1925,9 @@ for generation prompts and the optional browser interaction check.
 - **Calm motion** (the user asked for this explicitly): short, eased, no springs or bounce, no
   shaking, no looping movement near the play area. The durations and easings are in
   `src/ui/motion.ts` (CSS) and `src/kitchen/motion.ts` (tweens); the only loops are the slow window
-  clouds and the faint tea-surface shimmer. Keep it that way unless asked.
+  clouds and the faint tea-surface shimmer. The user subsequently requested lively cat customers:
+  articulated walking, idle breathing/poses and tails are an explicit exception. They freeze on
+  pause; reduced-motion users get still idle poses. Keep unrelated UI motion calm.
 - The opening sign at the start of each day closes **only** via its "Bắt đầu" button (no timer, no
   tap-outside), and it scrolls, so however long it gets that button can be reached.
 - **A rule value is a named constant in `src/game/rules.ts`**, and a modifier lands in `patienceFor`

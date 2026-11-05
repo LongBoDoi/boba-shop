@@ -26,6 +26,8 @@ export interface UiState {
   /** Fonts, the save and the artwork, 0–1, until the shop can open. */
   loading: number;
   ready: boolean;
+  /** The front cat has physically reached the counter and can interact with the register. */
+  counterReady: boolean;
   /** 0 = counter, 1 = kitchen. Where the pager is resting. */
   page: 0 | 1;
   /** Where the pager is drawn right now, 0–1, including mid-swipe and mid-animation. */
@@ -63,6 +65,7 @@ type Listener = (ui: UiState, previous: UiState) => void;
 let ui: UiState = {
   loading: 0,
   ready: false,
+  counterReady: false,
   page: 0,
   pageOffset: 0,
   opening: false,

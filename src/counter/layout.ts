@@ -69,11 +69,17 @@ export function queuePosition(layout: CounterLayout, rank: number) {
   const distance = Math.pow(0.63, rank);
   // The landscape painting has a much shorter aisle: its doorway figures stay larger so the
   // line recedes above the front guest instead of disappearing behind their head.
-  const doorScale = layout.wide ? 0.52 : 0.26;
+  const doorScale = layout.wide ? 0.52 : 0.42;
   const scale = doorScale + (1 - doorScale) * distance;
   const { room } = layout;
   return { x: room.doorX + (room.queueX - room.doorX) * distance,
     feet: room.doorY + (room.queueY - room.doorY) * distance, scale };
+}
+
+/** The inverse of queuePosition: moving guests and floor props share the same depth plane. */
+export function queueDepth(layout: CounterLayout, feet: number) {
+  const distance = Math.max(.001, (feet - layout.room.doorY) / (layout.room.queueY - layout.room.doorY));
+  return 110 - Math.log(distance) / Math.log(.63);
 }
 
 /** The least room between a floating chip and the edge of the stage. */

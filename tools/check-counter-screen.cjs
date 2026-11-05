@@ -23,6 +23,15 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
           }
         });
         await page.waitForTimeout(1200);
+        // Settle the longer doorway choreography in visual time without burning service patience.
+        await page.evaluate(async () => {
+          const stage = __shop.game().scene.getScene("counter").stage;
+          for (let i = 0; i < 1600; i++) {
+            if (![...stage.customers.values()].some(g => g.walk?.phase && g.walk.isPlaying())) break;
+            stage.updateMotion(50, false, true);
+            if (i % 20 === 0) await new Promise(resolve => setTimeout(resolve, 0));
+          }
+        });
         await page.waitForFunction(() => [...__shop.game().scene.getScene('counter').stage.customers.values()].every(g => !g.walk?.isPlaying()));
       };
       const customerPoint = async rank => page.evaluate(rank => {

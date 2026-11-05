@@ -26,6 +26,7 @@ export const CounterPage = memo(function CounterPage({ width, height, wide }: {
 }) {
   const root = useRef<HTMLDivElement>(null);
   const opening = useUi(ui => ui.opening);
+  const counterReady = useUi(ui => ui.counterReady);
   const { requesting, ordered, serving, name, running } = useGame(state => {
     const front = frontSlot(state.slots);
     return {
@@ -52,19 +53,19 @@ export const CounterPage = memo(function CounterPage({ width, height, wide }: {
     apply();
     return uiState.subscribe((ui, was) => { if (ui.pageOffset !== was.pageOffset) apply(); });
   }, [width]);
-  const action = serving ? 'Trao ly' : requesting ? 'Nhận đơn' : ordered ? 'Pha chế' : 'Xin chào';
+  const action = !counterReady ? 'Xin chào' : serving ? 'Trao ly' : requesting ? 'Nhận đơn' : ordered ? 'Pha chế' : 'Xin chào';
   const detail = serving ? `Cho ${name}`
     : requesting ? `${requesting} khách chờ` : ordered ? `${ordered} đơn đã nhận` : 'Mời bạn gọi món';
   return <div ref={root} class="counter-register-layer" style={{ width, height }}>
     {waiting && <HandoffCup key={cupId} drink={waiting} seat={handoff} />}
     <button type="button" class={`counter-register ${serving ? 'ready' : ''}`}
       aria-label={serving ? `Trao ly cho ${name}` : requesting ? `Nhận đơn, ${requesting} khách đang chờ` : action}
-      disabled={!running || opening || (!serving && !requesting && !ordered)}
+      disabled={!running || opening || !counterReady || (!serving && !requesting && !ordered)}
       style={{ left: Math.max(0, register.x), top: register.y - Math.max(0, 44 - register.height) / 2,
         width: register.width + Math.min(0, register.x), height: Math.max(44, register.height),
         fontSize: Math.max(12, Math.min(18, register.width * 0.155)) }}
       onClick={() => {
-        if (uiState.value.pageOffset !== 0 || uiState.value.opening || store.state.paused) return;
+        if (uiState.value.pageOffset !== 0 || uiState.value.opening || !uiState.value.counterReady || store.state.paused) return;
         // The till hands over whatever is standing on the mat before it takes anything else on.
         if (cupCanServe(store.state)) { dispatch({ type: 'SERVE' }); return; }
         const slot = frontSlot(store.state.slots);

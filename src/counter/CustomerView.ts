@@ -2,25 +2,26 @@ import Phaser from 'phaser';
 
 import { Customer } from '../game/reducer';
 import { orderVisible } from '../game/regulars';
-import { characterSvg, Mood } from '../art/character';
+import { Mood } from '../art/character';
+import { CatFigure } from './CatFigure';
+import { ownerOf } from './identity';
 import { cupLayout, cupSvg } from '../art/cup';
 import { bubblePointerColor, bubblePointerSvg, orderPadSvg, patienceRingColor, patienceRingSvg } from '../art/icons';
-import { n } from '../art/svg';
 import { addText } from '../game/view';
 import { BUBBLE_TONE, BubbleTone, bubbleSvg, SIZE_TAG, sizeTagSvg, TAIL_DROP } from './art';
-import { BUBBLE, BUBBLE_CUP, bubbleSize, bubbleStack, CounterLayout, FIGURE_LIFT, PAD_SIZE } from './layout';
+import { BUBBLE, BUBBLE_CUP, bubbleSize, bubbleStack, CounterLayout, PAD_SIZE } from './layout';
 import { SHARED, TextureBank } from './textures';
+export { ownerOf } from './identity';
 
 /**
- * A customer at the counter (`ActiveCustomer` in `CustomerStage.tsx`): the figure, which walks in
- * from the nearer side and fades up, and the speech bubble over it, which follows half a second
- * later — the order pad while they wait to be asked, their drink once the order is taken. A usual
+ * The customer's articulated cat and speech bubble: an order pad while they wait to be asked,
+ * their drink once the order is taken. A usual
  * stays a pad after that, until it is asked for: the cup in the bubble is the whole of the answer.
  * The ring on the bubble is their patience; their face follows it (happy, neutral, angry), and they blink.
  *
- * Every picture here is a texture drawn once. The clock only reaches `update`, which compares the
+ * Every layer is a texture drawn once. The service clock only reaches `update`, which compares the
  * rounded patience, the status and the highlight against what is already showing and swaps a
- * texture when one of them actually moved.
+ * texture when one of them actually moved. `updateMotion` advances the separate visual rig.
  */
 export interface StageContext {
   scene: Phaser.Scene;
@@ -30,27 +31,8 @@ export interface StageContext {
 
 const NONE = '__DEFAULT';
 
-/** Who owns a customer's textures: the id plus the look, since a restored shop can reuse an id. */
-export function ownerOf(customer: Customer): string {
-  const { skin, hair, hairStyle, shirt, accessory } = customer.look;
-  return `c:${customer.id}:${skin}${hair}${hairStyle}${shirt}${accessory}`;
-}
-
 export function moodFor(patience: number): Mood {
   return patience > 0.6 ? 'happy' : patience > 0.3 ? 'neutral' : 'angry';
-}
-
-/** The figure in a mood, at the stage's size. Resolves the texture key, or null if it was dropped. */
-export function figureTexture(ctx: StageContext, customer: Customer, mood: Mood, blinking: boolean): Promise<string | null> {
-  const { charWidth, charHeight } = ctx.layout.metrics;
-  const owner = ownerOf(customer);
-  const key = `${owner}:standing:${mood}${blinking ? ':blink' : ''}:${n(charWidth)}`;
-  return ctx.bank.get(owner, key, () => characterSvg(customer.look, { mood, blinking, width: charWidth, fullBody: true }), charWidth, charHeight);
-}
-
-export function figureKeyIfReady(ctx: StageContext, customer: Customer, mood: Mood, blinking: boolean): string | null {
-  const key = `${ownerOf(customer)}:standing:${mood}${blinking ? ':blink' : ''}:${n(ctx.layout.metrics.charWidth)}`;
-  return ctx.bank.has(key) ? key : null;
 }
 
 /** The patience ring at a fiftieth (`patienceLeft` already rounds to one): 51 shared textures. */
@@ -116,7 +98,8 @@ export function setBaseline(text: Phaser.GameObjects.Text, x: number, baseline: 
 
 export class CustomerView {
   customer: Customer;
-  private figure: Phaser.GameObjects.Image;
+  readonly figure: CatFigure;
+  private ownsFigure = true;
   private bubble: Phaser.GameObjects.Container;
   private pointer: Phaser.GameObjects.Image;
   private body: Phaser.GameObjects.Image;
@@ -125,27 +108,24 @@ export class CustomerView {
 
   private patience = -1;
   private mood: Mood = 'happy';
-  private blinking = false;
   private tone: BubbleTone | null = null;
   private pad: boolean | null = null;
-  private tweens: Phaser.Tweens.Tween[] = [];
-  private blinkTimer: Phaser.Time.TimerEvent | null = null;
   private bubbleY: number;
 
   constructor(private ctx: StageContext, parent: Phaser.GameObjects.Container, customer: Customer,
-    patience: number, selected: boolean, enterFrom: number, animate: boolean) {
+    patience: number, selected: boolean) {
     const { scene, layout } = ctx;
     const { metrics, stageHeight } = layout;
     this.customer = customer;
 
-    this.figure = scene.add.image(0, stageHeight - FIGURE_LIFT, NONE).setOrigin(0.5, 1).setVisible(false);
+    this.figure = new CatFigure(ctx, parent, customer, moodFor(patience));
     this.bubbleY = stageHeight - metrics.bubbleBottom;
     this.bubble = scene.add.container(Math.max(56, metrics.charWidth * 0.82), this.bubbleY);
     this.pointer = scene.add.image(0, 0, NONE).setOrigin(0.5, 0).setVisible(false);
     this.body = scene.add.image(0, 0, NONE).setOrigin(0.5, 0).setVisible(false);
     this.ring = scene.add.image(0, 0, NONE).setOrigin(0, 0).setVisible(false);
     this.bubble.add([this.pointer, this.body, this.ring]);
-    parent.add([this.figure, this.bubble]);
+    parent.add(this.bubble);
 
     // The drink in the bubble is wanted the moment the order is taken: draw it now.
     if (orderVisible(customer)) {
@@ -155,28 +135,11 @@ export class CustomerView {
     }
 
     this.update(customer, patience, selected);
-    this.scheduleBlink();
-
-    if (animate) {
-      const walk = { t: 0 };
-      const step = () => {
-        this.figure.x = (1 - walk.t) * enterFrom * metrics.slotWidth * 0.5;
-        this.figure.alpha = walk.t;
-      };
-      step();
-      this.tweens.push(scene.tweens.add({ targets: walk, t: 1, duration: 600, ease: 'Cubic.easeOut', onUpdate: step }));
-      const pop = { t: 0 };
-      const rise = () => {
-        this.bubble.alpha = pop.t;
-        this.bubble.y = this.bubbleY + (1 - pop.t) * 6;
-      };
-      rise();
-      this.tweens.push(scene.tweens.add({ targets: pop, t: 1, delay: 500, duration: 250, ease: 'Cubic.easeOut', onUpdate: rise }));
-    }
   }
 
   /** The clock and the shop, as of now. Touches nothing that has not changed. */
   update(customer: Customer, patience: number, selected: boolean) {
+    if (this.customer.status === 'requesting' && customer.status === 'ordered') this.figure.acknowledge();
     this.customer = customer;
     const requesting = customer.status === 'requesting';
     const pad = requesting || !orderVisible(customer);
@@ -210,15 +173,9 @@ export class CustomerView {
       apply(this.ring, this.ctx.bank.has(key) ? key : ringTexture(this.ctx.bank, patience), 20, 20,
         () => ringKey(this.patience) === key);
       const mood = moodFor(patience);
-      if (mood !== this.mood || !this.figure.visible) {
+      if (mood !== this.mood) {
         this.mood = mood;
-        this.showFigure();
-        // Draw the next face down before it is needed, so the change lands on the frame it should.
-        const next = mood === 'happy' ? 'neutral' : mood === 'neutral' ? 'angry' : null;
-        if (next) {
-          void figureTexture(this.ctx, customer, next, false);
-          void figureTexture(this.ctx, customer, next, true);
-        }
+        this.figure.setMood(mood);
       }
     }
   }
@@ -228,54 +185,15 @@ export class CustomerView {
     this.bubble.setVisible(!waiting);
   }
 
-  /** The texture showing right now, for a departure to start from while its own face is drawn. */
-  currentFigureKey(): string | null {
-    return this.figure.visible ? this.figure.texture.key : null;
-  }
+  setWalking(walking: boolean) { this.figure.setWalking(walking); }
+  updateMotion(delta: number, reduced: boolean) { this.figure.update(delta, reduced); }
+
+  /** Carry the live rig into the exit so its pose and textures do not pop on handover. */
+  detachFigure() { this.ownsFigure = false; return this.figure; }
 
   destroy() {
-    for (const tween of this.tweens) tween.remove();
-    this.tweens = [];
-    this.blinkTimer?.remove();
-    this.figure.destroy();
+    if (this.ownsFigure) this.figure.destroy();
     this.bubble.destroy();
-  }
-
-  /** Ask for this mood's face (open and blinking) and show it as soon as either is there. */
-  private showFigure() {
-    this.refreshFigure();
-    const mood = this.mood;
-    for (const blinking of [false, true]) {
-      void figureTexture(this.ctx, this.customer, mood, blinking).then(() => {
-        if (this.mood === mood) this.refreshFigure();
-      });
-    }
-  }
-
-  /** The face for the mood and the blink as they are now, or the mood's other eyes if only those are in. */
-  private refreshFigure() {
-    if (!this.figure.active) return;
-    const key = figureKeyIfReady(this.ctx, this.customer, this.mood, this.blinking)
-      ?? figureKeyIfReady(this.ctx, this.customer, this.mood, !this.blinking);
-    if (!key || (this.figure.visible && this.figure.texture.key === key)) return;
-    const { charWidth, charHeight } = this.ctx.layout.metrics;
-    this.figure.setTexture(key).setDisplaySize(charWidth, charHeight).setVisible(true);
-  }
-
-  /** `useBlink`: every two to four and a half seconds, the eyes close for 140ms. */
-  private scheduleBlink() {
-    this.blinkTimer = this.ctx.scene.time.delayedCall(2000 + Math.random() * 2600, () => {
-      this.setBlink(true);
-      this.blinkTimer = this.ctx.scene.time.delayedCall(140, () => {
-        this.setBlink(false);
-        this.scheduleBlink();
-      });
-    });
-  }
-
-  private setBlink(blinking: boolean) {
-    this.blinking = blinking;
-    this.refreshFigure();
   }
 
   /** The pad, or the ordered drink with its size tag. */

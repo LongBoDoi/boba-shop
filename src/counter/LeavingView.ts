@@ -6,89 +6,128 @@ import { leftContent } from '../game/rules';
 import { Mood } from '../art/character';
 import { cupLayout, cupSvg } from '../art/cup';
 import { risingHeartSvg, steamPuffSvg } from '../art/icons';
-import { n } from '../art/svg';
-import { apply, figureTexture, ownerOf, StageContext } from './CustomerView';
-import { FIGURE_LIFT } from './layout';
+import { apply, ownerOf, StageContext } from './CustomerView';
+import { CatFigure } from './CatFigure';
+import { queueDepth } from './layout';
+import { Doorway } from './Doorway';
 import { SHARED } from './textures';
 
-/**
- * A customer walking off (`LeavingCustomer` in `CustomerStage.tsx`): they pause long enough for
- * their reaction to be seen, then step away and fade — left, back out of the door, with a drink
- * they liked; right, with one they didn't or none at all. A delighted one gives off a heart and an
- * unhappy one a puff of steam, which rises and fades once.
- */
-const NONE = '__DEFAULT';
-
+/** A reaction, a turn into the aisle, and a walk to the door. The visual outlives the sale event. */
 export class LeavingView {
-  private root: Phaser.GameObjects.Container;
-  private tweens: Phaser.Tweens.Tween[] = [];
+  private figure: CatFigure;
+  private elapsed = 0;
+  private done = false;
+  phase = 'reaction';
+  private phaseTime = 0;
+  private start: { x: number; feet: number; scale: number };
+  private reaction?: Phaser.GameObjects.Image;
+  private reactionY = 0;
 
-  constructor(ctx: StageContext, parent: Phaser.GameObjects.Container, readonly departure: Departure, startKey: string | null) {
+  constructor(private ctx: StageContext, private parent: Phaser.GameObjects.Container,
+    readonly departure: Departure, figure: CatFigure | undefined, private door: Doorway, private onDone: () => void) {
     const { scene, bank, layout } = ctx;
-    const { charWidth, charHeight, slotWidth } = layout.metrics;
     const { outcome, drink, customer } = departure;
     const happy = leftContent(departure);
-    // A shipper who ran out of time has another delivery to get to, and no quarrel with the shop. An
-    // office worker handed something nearly right takes it unimpressed, and does not pay for it.
     const unbothered = (outcome === 'timeout' && kindOf(customer.look) === 'shipper') || (outcome === 'close' && !happy);
     const mood: Mood = outcome === 'perfect' ? 'delighted' : happy ? 'happy' : unbothered ? 'neutral' : 'angry';
-
-    // The figure's own box, as the `Animated.View` it is drawn in.
-    const top = layout.stageHeight - FIGURE_LIFT - charHeight;
-    const left = -charWidth / 2;
-    this.root = scene.add.container(0, 0);
-    parent.add(this.root);
-
-    const figure = scene.add.image(left, top, startKey ?? NONE).setOrigin(0).setVisible(Boolean(startKey));
-    if (startKey) figure.setDisplaySize(charWidth, charHeight);
-    apply(figure, figureTexture(ctx, customer, mood, false), charWidth, charHeight);
-    this.root.add(figure);
+    this.start = { x: parent.x, feet: parent.y + layout.room.queueY * parent.scaleX, scale: parent.scaleX };
+    this.figure = figure ?? new CatFigure(ctx, parent, customer, mood);
+    parent.add(this.figure.root);
+    this.figure.setWalking(false);
+    this.figure.setMood(mood);
+    this.figure.acknowledge();
 
     if (drink) {
-      const width = charWidth * 0.26;
+      const width = 26;
       const box = cupLayout(width, { straw: true, sealed: true });
-      const owner = ownerOf(customer);
-      const cup = scene.add.image(left + charWidth + 2 - width - box.originX, top + charHeight * 0.5 - box.originY, NONE)
+      const cup = scene.add.image(-width * .5 - box.originX, 6 - box.svgHeight, '__DEFAULT')
         .setOrigin(0).setVisible(false);
-      apply(cup, bank.get(owner, `${owner}:held:${departure.id}:${n(width)}`,
-        () => cupSvg(drink, { width, backgroundColor: 'transparent', straw: true, sealed: true, tapered: false }),
-        box.svgWidth, box.svgHeight), box.svgWidth, box.svgHeight);
-      this.root.add(cup);
+      const owner = ownerOf(customer);
+      const raster = layout.metrics.charWidth / 100;
+      apply(cup, bank.get(owner, `${owner}:held:${departure.id}:${layout.metrics.charWidth.toFixed(2)}`,
+        () => cupSvg(drink, { width: width * raster, backgroundColor: 'transparent', straw: true, sealed: true, tapered: false }),
+        box.svgWidth * raster, box.svgHeight * raster), box.svgWidth, box.svgHeight);
+      this.figure.hand.add(cup);
+      this.figure.holdDrink();
     }
 
     const rising = outcome === 'perfect' ? 'heart' : !happy && !unbothered ? 'steam' : null;
     if (rising) {
       const size = rising === 'heart' ? { width: 18, height: 16 } : { width: 24, height: 14 };
-      const y = top + charHeight * 0.05;
-      const image = scene.add.image(left + charWidth * (rising === 'heart' ? 0.62 : 0.68), y, NONE).setOrigin(0).setVisible(false);
-      image.alpha = 0;
-      apply(image, bank.get(SHARED, `counter:${rising}`, rising === 'heart' ? risingHeartSvg : steamPuffSvg, size.width, size.height),
-        size.width, size.height);
-      this.root.add(image);
-      const progress = { t: 0 };
-      this.tweens.push(scene.tweens.add({
-        targets: progress, t: 1, duration: 1100, ease: 'Cubic.easeOut',
-        onUpdate: () => {
-          const t = progress.t;
-          image.alpha = t < 0.2 ? t / 0.2 : t < 0.7 ? 1 : 1 - (t - 0.7) / 0.3;
-          image.y = y - t * 24;
-        },
-      }));
+      this.reactionY = layout.room.queueY - layout.metrics.charHeight * .95;
+      const image = scene.add.image(layout.metrics.charWidth * .18, this.reactionY, '__DEFAULT').setOrigin(0).setVisible(false);
+      apply(image, bank.get(SHARED, `counter:${rising}`, rising === 'heart' ? risingHeartSvg : steamPuffSvg,
+        size.width, size.height), size.width, size.height);
+      parent.add(image);
+      this.reaction = image;
     }
+  }
 
-    const exit = { t: 0 };
-    this.tweens.push(scene.tweens.add({
-      targets: exit, t: 1, delay: 550, duration: 600, ease: 'Cubic.easeInOut',
-      onUpdate: () => {
-        this.root.alpha = 1 - exit.t;
-        this.root.x = exit.t * (happy ? -1 : 1) * slotWidth * 0.5;
-      },
-    }));
+  private next(phase: string) { this.phase = phase; this.phaseTime = 0; }
+
+  updateMotion(delta: number, reduced: boolean) {
+    if (this.done) return;
+    const dt = Math.min(delta, 50); this.elapsed += dt; this.phaseTime += dt;
+    const { layout } = this.ctx, p = this.door.placement;
+    const id = -this.departure.id;
+    const waitX = p.x - layout.metrics.charWidth * p.scale * .55;
+    const insideY = p.thresholdY + 28 * layout.room.scale;
+    const place = (x: number, feet: number, scale: number, outside = false) => {
+      this.parent.setPosition(x, feet - layout.room.queueY * scale).setScale(scale)
+        .setDepth(outside ? 2 : queueDepth(layout, feet) + .1);
+    };
+    this.figure.setWalking(false);
+    if (this.phase === 'reaction' && this.phaseTime >= 500) {
+      this.figure.faceAway(true); this.next('turning');
+    } else if (this.phase === 'turning' && this.phaseTime >= 1400) {
+      this.next('aisle');
+    } else if (this.phase === 'aisle') {
+      const t = Math.min(1, this.phaseTime / 5800), ease = t * t * (3 - 2 * t);
+      const side = -Math.min(layout.metrics.charWidth * .65, layout.width * .16);
+      place(this.start.x + (waitX - this.start.x) * ease + side * Math.sin(t * Math.PI),
+        this.start.feet + (insideY - this.start.feet) * ease,
+        this.start.scale + (p.scale - this.start.scale) * ease);
+      this.figure.setWalking(true);
+      if (t === 1) this.next('waiting');
+    } else if (this.phase === 'waiting') {
+      if (this.door.request(id)) { this.figure.setFacing(-90); this.next('handleApproach'); }
+    } else if (this.phase === 'handleApproach') {
+      const t = Math.min(1, this.phaseTime / 1100);
+      place(waitX + (p.handleX - waitX) * t, insideY, p.scale);
+      this.figure.setWalking(true);
+      if (t === 1) { this.figure.faceAway(true); this.next('handle'); }
+    } else if (this.phase === 'handle') {
+      this.figure.reachDoor(true);
+      if (this.phaseTime >= 1000) { this.door.open(id); this.next('opening'); }
+    } else if (this.phase === 'opening') {
+      if (this.door.isOpen(id)) { this.figure.reachDoor(false); this.next('crossing'); }
+    } else if (this.phase === 'crossing') {
+      const t = Math.min(1, this.phaseTime / 1500);
+      const x = p.handleX + (p.passageX - p.handleX) * Math.min(1, t * 2);
+      const feet = insideY + (p.outsideY - insideY) * t;
+      const outside = t > .58;
+      if (outside) this.parent.setMask(this.door.outsideMask);
+      place(x, feet, p.scale * (1 - .08 * t), outside);
+      this.figure.setWalking(true);
+      if (t === 1) { this.figure.setFacing(90); this.next('outside'); }
+    } else if (this.phase === 'outside') {
+      const t = Math.min(1, this.phaseTime / 1900);
+      place(p.passageX + (p.hiddenX - p.passageX) * t, p.outsideY, p.scale * .92, true);
+      this.figure.setWalking(true);
+      if (t === 1) { this.door.release(id); this.done = true; this.onDone(); return; }
+    }
+    this.figure.update(delta, reduced);
+    if (this.reaction) {
+      const reaction = Math.min(1, this.elapsed / 950);
+      this.reaction.setY(this.reactionY - reaction * 20).setAlpha(Math.sin(reaction * Math.PI));
+    }
   }
 
   destroy() {
-    for (const tween of this.tweens) tween.remove();
-    this.tweens = [];
-    this.root.destroy();
+    this.done = true;
+    this.door.release(-this.departure.id);
+    this.parent.clearMask();
+    this.figure.destroy();
+    this.reaction?.destroy();
   }
 }

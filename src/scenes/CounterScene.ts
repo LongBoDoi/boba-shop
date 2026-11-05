@@ -16,8 +16,8 @@ import { uiState } from '../ui-state';
  * The counter: customers waiting, and the one tap that takes their order. Page 0 of the pager —
  * The painted cafe and the live customer queue as a Phaser scene.
  *
- * The room is one painted texture. Customer figures and bubbles are SVGs rasterised once;
- * what moves is moved by tweens, and the game's clock only reaches each customer's rounded
+ * The room is one painted texture. Cat rig layers and bubbles are SVGs rasterised once;
+ * frame updates animate joints, travel is tweened, and the game's clock only reaches each customer's rounded
  * patience against the one already showing (see `Stage`).
  *
  * Input is the page's own: a tap on a customer takes their order or opens their ticket, and a
@@ -45,6 +45,7 @@ export class CounterScene extends Phaser.Scene {
   private layout: CounterLayout | null = null;
   private layoutKey = '';
   private gesture: Gesture | null = null;
+  private reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
 
   constructor() {
     super('counter');
@@ -123,6 +124,19 @@ export class CounterScene extends Phaser.Scene {
   private running() {
     const { phase, paused } = store.state;
     return phase === 'playing' && !paused && !uiState.value.opening;
+  }
+
+  update(_time: number, delta: number) {
+    if (!this.stage) return;
+    const running = this.running() && !document.hidden;
+    // Pause travel and facial/body motion together. Invisible idle rigs need no frame work;
+    // departures still finish while preparing the next drink so their textures can be released.
+    this.tweens.timeScale = running ? 1 : 0;
+    if (running) this.stage.updateMotion(delta, this.reducedMotion.matches, uiState.value.pageOffset < 1);
+    else if (store.state.phase === 'dayEnd' && !document.hidden) {
+      // Finish and release the final departing rig even if the results card opened mid-walk.
+      this.stage.updateMotion(delta, this.reducedMotion.matches, false);
+    }
   }
 
   private onDown(pointer: Phaser.Input.Pointer) {
