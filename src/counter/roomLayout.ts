@@ -1,23 +1,28 @@
 /** Measurements of the two cafe paintings; pure data so layout checks need no image loader. */
 const ROOMS = {
-  portrait: { width: 982, height: 1602, queueY: 1080, doorY: 439,
-    register: { x: 28, y: 880, width: 188, height: 130 },
-    handoff: { y: 1158, width: 96 } },
-  landscape: { width: 1944, height: 809, queueY: 744, doorY: 328,
-    register: { x: 287, y: 525, width: 163, height: 77 },
-    handoff: { y: 662, width: 112 } },
+  portrait: { width: 982, height: 1602, counterY: 844, queueY: 950, doorY: 505,
+    register: { x: 69, y: 800, width: 130, height: 97 },
+    handoff: { y: 984, width: 100 } },
+  landscape: { width: 1945, height: 809, counterY: 412, queueY: 520, doorY: 325,
+    register: { x: 282, y: 390, width: 148, height: 85 },
+    handoff: { y: 542, width: 112 } },
 };
 
 export function counterRoomPlacement(width: number, height: number, wide: boolean) {
   const orientation = wide ? 'landscape' : 'portrait';
   const art = ROOMS[orientation];
-  const scale = Math.max(width / art.width, height / art.height);
-  const x = (width - art.width * scale) / 2;
-  const y = (height - art.height * scale) / 2;
+  // Fit the entire width: tall phones must not crop the register or the drinks at the sides.
+  // Anchor the table near halfway down; only surplus ceiling is cropped on shorter displays.
+  // Tall displays continue the plain lower cabinet instead of zooming into the whole room.
+  const scale = width / art.width;
+  const x = 0;
+  const y = Math.min(0, height * 0.5 - art.counterY * scale);
   // The doorway, both mats and queue share the painting's vertical centerline. Using the
-  // viewport's center directly keeps cover-cropping symmetric and avoids independent x offsets.
+  // viewport's center directly avoids independent x offsets.
   const centerX = width / 2;
-  return { orientation, x, y, scale, width: art.width * scale, height: art.height * scale,
+  return { orientation, x, y, scale, width, height: art.height * scale,
+    counterY: y + art.counterY * scale,
+    cabinetExtension: Math.max(0, height - (y + art.height * scale)),
     queueY: y + art.queueY * scale, queueX: centerX,
     doorX: centerX, doorY: y + art.doorY * scale,
     register: { x: x + art.register.x * scale, y: y + art.register.y * scale,

@@ -154,14 +154,19 @@ section('Counter page reconstruction (compare ref-counter.png below its HUD)');
 
 // ------------------------------------------------------------------ characters
 
-section('Characters — every hair style × mood (width 80)');
+section('Cat customers — every saved coat identity × mood (width 80)');
 for (const look of LOOKS) {
   for (const mood of MOODS) cell(characterSvg(look, { mood, width: 80 }), `${look.hairStyle} / ${look.accessory} / ${mood}`);
 }
-section('Characters — blinking, headOnly');
+section('Cat customers — blinking, headOnly');
 for (const look of LOOKS) {
   cell(characterSvg(look, { mood: 'happy', blinking: true, width: 80 }), `${look.hairStyle} blinking`);
   cell(characterSvg(look, { mood: 'neutral', width: 40, headOnly: true }), `${look.hairStyle} headOnly 40 (${characterSize(40, true).height.toFixed(1)}h)`);
+}
+
+section('Cat customers — standing queue figures');
+for (const look of LOOKS) {
+  cell(characterSvg(look, { mood: 'happy', width: 100, fullBody: true }), `${look.hairStyle} standing`);
 }
 
 // ------------------------------------------------------------------ cups

@@ -913,7 +913,7 @@ and who can I afford to lose?
   😤, and he walks off without the angry face or the steam. This is load-bearing rather than kind.
   With shippers counted as misses a slow player's three-star days fell to about a third, and "who
   can I afford to lose?" stopped having an answer.
-- **`elder`, balding.** 1.6× patience, and no tip.
+- **`elder`, silver cat with pale brows (saved as `balding`).** 1.6× patience, and no tip.
 - **`office`, glasses.** 0.85× patience, `OFFICE_BONUS` on a perfect cup poured neatly, and **a
   `close` pays 0**. It still counts as `served` (see "The shop's money"). `leftContent` is what says a
   customer went off pleased, so the mood, the steam and the cue do not argue with the `Chưa đúng
@@ -1888,11 +1888,24 @@ sprites over them. Finishing uses a painted lid stack, with no moving machine or
 
 ## Conventions
 
-The counter/order screen now uses the painted cafe in `assets/counter/cafe-cats-portrait.png` and
-`cafe-cats-landscape.png`, with one continuous image per orientation. `counter/roomLayout.ts` is the
-shared pure geometry for the painting, customer queue and live register. Doorway, queue and
+All customers are illustrated cats, drawn by `art/character.ts` for the queue, order avatars,
+regular book and title screen. Warm fur gradients, coat markings, cheek tufts, paws and curled
+tails share the cafe palette. Delivery caps and glasses remain kind cues; elders have silver fur
+and pale brows. `CustomerLook` keeps its legacy `skin`/`hair`/`hairStyle` keys so saved identities,
+seeded generation and rules remain compatible. Do not rename those fields just to change artwork.
+The painter maps them to fur and coat patterns; regulars retain distinct recognizable coats.
+Head-only crops include both ears and chin; standing cats keep the established 100×176 bounds.
+
+The counter/order screen now uses the painted cafe in `assets/counter/cafe-cats-raised-portrait.png` and
+`cafe-cats-raised-landscape.png`, with one continuous image per orientation. `counter/roomLayout.ts` is the
+shared pure geometry for the painting, customer queue and live register. It fits the whole width,
+anchors the tabletop near half the page height, and extends only the plain cabinet grain on
+tall phones; no horizontal cover crop. See [raised counter](docs/counter-raised.md). Doorway, queue and
 serving cup share `width / 2`; see [centered artwork](docs/counter-symmetry.md). Customers stand on the
-central aisle from the rear entrance to the queue mat using the full-body character variant.
+central aisle from the rear entrance up to the counter using the full-body character variant.
+The front figure is larger at this closer viewpoint. `counter/foreground.ts` defines the counter
+and prop silhouettes; `Backdrop` bakes an overlay from the original painting once, covering
+the lower body without altering the artwork. The same silhouettes exclude hidden hit areas.
 Only the front customer can order, be selected or receive a drink. `queueSlots` / `frontSlot`
 keep storage slots stable while ordering customers by arrival id. Waiting slot deadlines pause;
 the overflow line retains its existing wait limit. The register takes the front order, then opens

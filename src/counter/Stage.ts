@@ -116,12 +116,13 @@ export class Stage {
     }
     for (const item of feedback) {
       if (seen.has(item.id) || this.floating.has(item.id) || (item.tone === 'say' && item.slot !== this.front)) continue;
-      const root = this.scene.add.container(ctx.layout.room.queueX + Math.max(56, ctx.layout.metrics.charWidth * 0.82), 0)
+      const anchorX = ctx.layout.room.queueX + Math.max(56, ctx.layout.metrics.charWidth * 0.82);
+      const root = this.scene.add.container(anchorX, 0)
         .setDepth(SLOT_DEPTH + 102);
       const view = new FloatingText(ctx, root, item, () => {
         const effect = this.floating.get(item.id);
         effect?.view.destroy(); effect?.root.destroy(); this.floating.delete(item.id);
-      });
+      }, anchorX);
       this.floating.set(item.id, { root, view });
     }
   }

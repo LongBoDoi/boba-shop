@@ -53,9 +53,10 @@ export function layoutCounter(width: number, height: number, windowWidth: number
   const queueWidth = Math.min(width * 0.74, wide ? 300 : 230);
   const metrics = stageMetrics(queueWidth, stageHeight, 1, wide);
   // Scale the standing figure with the painted room; never stretch it with queue length.
-  metrics.charWidth = (wide ? 200 : 300) * room.scale;
+  metrics.charWidth = (wide ? 170 : 260) * room.scale;
   metrics.charHeight = metrics.charWidth * 1.76;
-  metrics.bubbleBottom = metrics.charHeight * 0.86 + FIGURE_LIFT;
+  // The close customer speaks beside their face, clear of the waiting heads behind them.
+  metrics.bubbleBottom = metrics.charHeight * 0.60 + FIGURE_LIFT;
   metrics.bubbleCenterY = stageHeight - metrics.bubbleBottom - 26;
   const slots = Array.from({ length: count }, () => ({
     left: room.queueX - queueWidth / 2, width: queueWidth, centre: room.queueX,
@@ -66,7 +67,9 @@ export function layoutCounter(width: number, height: number, windowWidth: number
 /** Feet follow the same straight aisle; perspective compresses each successive place. */
 export function queuePosition(layout: CounterLayout, rank: number) {
   const distance = Math.pow(0.63, rank);
-  const doorScale = layout.wide ? 0.28 : 0.26;
+  // The landscape painting has a much shorter aisle: its doorway figures stay larger so the
+  // line recedes above the front guest instead of disappearing behind their head.
+  const doorScale = layout.wide ? 0.52 : 0.26;
   const scale = doorScale + (1 - doorScale) * distance;
   const { room } = layout;
   return { x: room.doorX + (room.queueX - room.doorX) * distance,

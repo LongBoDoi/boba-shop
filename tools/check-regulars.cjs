@@ -595,7 +595,7 @@ try {
   assert.match(read('ui/App.tsx'), /uiState\.set\(\{ settings: false, book: false \}\);/, 'It does not follow the player to another screen');
   // A restored shop can hand an id to another face, and sharing a figure with one froze the canvas for good.
   assert.match(read('counter/Stage.ts'), /if \(guest && ownerOf\(guest\.view\.customer\) !== ownerOf\(customer\)\) \{/, 'A figure is only reused for the same face');
-  assert.match(read('counter/FloatingText.ts'), /chipShift\(layout\.slots\[feedback\.slot\]\?\.centre \?\? 0, width, layout\.width\)/, 'A chip knows where the edge of the stage is');
+  assert.match(read('counter/FloatingText.ts'), /chipShift\(anchorX \?\? layout\.slots\[feedback\.slot\]\?\.centre \?\? 0, width, layout\.width\)/, 'A chip knows where the edge of the stage is');
   assert.match(read('counter/FloatingText.ts'), /scene\.add\.container\(shift, top, \[chip, text\]\)/, 'And stands by it');
 
   console.log('check-regulars: who comes and when, the usual, seats and groups, Hỏi lại, the streak, the sign, the book, and a visit saved and played on.');

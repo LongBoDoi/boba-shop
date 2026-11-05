@@ -1,6 +1,6 @@
 # Single-file cafe queue
 
-The [centered artwork revision](counter-symmetry.md) now supplies the active backgrounds.
+The [raised counter revision](counter-raised.md) now supplies the active backgrounds.
 The queue behavior below remains in use.
 
 The active paintings add a central glass main entrance and a clear aisle to the order mat.
@@ -14,11 +14,20 @@ the generated files were copied unchanged into the project.
 
 Source directory: `/Users/dev/.codex/generated_images/01a13e8f-a6f5-7171-9278-add319e78a23/`.
 
-`roomLayout.ts` measures the entrance and queue mat in painting coordinates. `queuePosition`
+`roomLayout.ts` measures the entrance and counter service position in painting coordinates. `queuePosition`
 places feet on one straight perspective line. `Stage` maintains customer views by id so the
 same guest walks forward when their rank changes, including the overflow line. Rear figures
 draw first; only the front figure has an order bubble and accepts taps. New guests walk from
 the doorway. Resize lays out the current line without replaying arrivals.
+
+The front guest stands at the counter, with the logical foot line at y=950
+in portrait and y=520 in landscape. Figure widths are 260/170 source pixels respectively;
+scale recedes to 0.26/0.52 at the doorway (the landscape aisle is shorter). The counter and menu stand overlap the lower body.
+`Backdrop` clips a copy of the original painting into `foreground.ts` silhouettes once per
+orientation and draws it above the figures, preserving the source pixels. Hit testing uses
+those same silhouettes so a tap on the table or menu cannot select an occluded customer.
+Order bubbles sit beside the closer customer's face; feedback is clamped against its actual
+screen anchor. The raised-counter revision updates both paintings and their silhouettes together.
 
 `queueSlots` / `frontSlot` order stable storage slots by monotonically increasing customer id.
 TAKE_ORDER, SELECT_SLOT, ASK_AGAIN and serving reject anyone behind the head. The register and

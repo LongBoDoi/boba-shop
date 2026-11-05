@@ -1,6 +1,6 @@
-/** A customer, as SVG markup. */
+/** Warm illustrated cat guests, shared by the queue, tickets, book and title. */
 import type { CustomerLook } from '../game/customers';
-import { shade, svgDoc } from './svg';
+import { blend, shade, svgDoc, uid } from './svg';
 
 export type Mood = 'delighted' | 'happy' | 'neutral' | 'angry';
 
@@ -8,153 +8,146 @@ export interface CharacterOptions {
   mood: Mood;
   blinking?: boolean;
   width: number;
-  /** Crop to the head for avatars. */
+  /** Crop to the ears and cheeks for avatars. */
   headOnly?: boolean;
-  /** Standing in the cafe queue, with legs and a contact shadow on the floor. */
+  /** Standing in the cafe queue, with paws and a contact shadow on the floor. */
   fullBody?: boolean;
 }
 
-const INK = '#2B1B17';
+const INK = '#654737';
+const FACE = 'M22 39Q19 24 22 11Q24 6 29 10L40 22Q50 19 61 22L73 10Q78 6 80 12Q83 25 79 39Q86 48 83 60L87 63L82 65L84 69L78 70Q74 84 50 85Q27 84 22 70L16 69L18 65L13 63L17 59Q14 48 22 39Z';
 
-/** The drawing's size for a given width: 100×120 whole, 60×62 cropped to the head. */
+/** Retain the established scene bounds so feet, occlusion and touch targets stay aligned. */
 export function characterSize(width: number, headOnly?: boolean, fullBody = false): { width: number; height: number } {
   return { width, height: headOnly ? width * (62 / 60) : width * (fullBody ? 1.76 : 1.2) };
 }
 
-/** A customer drawn in a 100×120 box: shoulders at the bottom, head centred at (50, 52). */
-export function characterSvg(look: CustomerLook, opts: CharacterOptions): string {
-  const { mood, blinking, width, headOnly, fullBody } = opts;
-  const viewBox = headOnly ? '20 18 60 62' : fullBody ? '0 0 100 176' : '0 0 100 120';
-  const { height } = characterSize(width, headOnly, fullBody);
-  const skinShade = shade(look.skin, -18);
-  let body = '';
-  if (fullBody && !headOnly) {
-    body += '<ellipse cx="50" cy="171" rx="32" ry="4" fill="#745538" opacity=".2"/>' +
-      '<path d="M29 122H71L68 162H54L50 139L46 162H32Z" fill="#656B64" stroke="#50544E" stroke-width="1.3"/>' +
-      '<path d="M32 158H46V168H24Q23 161 32 158ZM54 158H68Q77 161 76 168H54Z" fill="#73533C"/>' +
-      '<path d="M25 168H46M54 168H75" stroke="#E3C8A5" stroke-width="2" stroke-linecap="round"/>';
-  }
-
-  // Long hair falls behind the shoulders.
-  if (look.hairStyle === 'long') {
-    body += `<path d="M22 56 C20 30 36 22 50 22 C64 22 80 30 78 56 L82 100 L18 100 Z" fill="${look.hair}"/>`;
-  }
-
-  if (!headOnly) {
-    body +=
-      '<g>' +
-      (fullBody
-        ? `<path d="M29 88Q50 77 71 88L82 117L72 122L68 104L72 130Q50 135 28 130L32 104L28 122L18 117Z" fill="${look.shirt}" stroke="${shade(look.shirt, -25)}" stroke-width="1"/><path d="M19 117L28 120L27 128Q22 136 18 128ZM72 120L81 117L82 128Q77 136 73 128Z" fill="${look.skin}"/><path d="M33 127Q50 130 67 127" fill="none" stroke="${shade(look.shirt, -18)}" stroke-width="1.5"/>`
-        : `<path d="M12 120 C12 94 28 82 50 82 C72 82 88 94 88 120 Z" fill="${look.shirt}"/>`) +
-      `<path d="M40 83 L50 96 L60 83" fill="none" stroke="${shade(look.shirt, -25)}" stroke-width="2.5" stroke-linejoin="round"/>` +
-      `<rect x="43" y="70" width="14" height="14" rx="5" fill="${skinShade}"/>` +
-      '</g>';
-  }
-
-  body +=
-    `<circle cx="24.5" cy="55" r="5.5" fill="${skinShade}"/>` +
-    `<circle cx="75.5" cy="55" r="5.5" fill="${skinShade}"/>` +
-    `<circle cx="50" cy="52" r="26" fill="${look.skin}"/>`;
-
-  body += hair(look);
-
-  if (mood === 'happy' || mood === 'delighted') {
-    body +=
-      '<ellipse cx="35" cy="62" rx="5" ry="3.2" fill="#FF7FA0" opacity="0.45"/>' +
-      '<ellipse cx="65" cy="62" rx="5" ry="3.2" fill="#FF7FA0" opacity="0.45"/>';
-  }
-  if (mood === 'angry') body += '<circle cx="50" cy="52" r="26" fill="#FF4D4D" opacity="0.18"/>';
-
-  body += eyes(mood, blinking);
-  body += mouth(mood);
-
-  if (look.accessory === 'glasses') {
-    body +=
-      `<g fill="none" stroke="${INK}" stroke-width="1.8">` +
-      '<circle cx="40" cy="54" r="7"/><circle cx="60" cy="54" r="7"/><path d="M47 54 L53 54"/>' +
-      '</g>';
-  }
-  if (look.accessory === 'bow') {
-    body +=
-      '<g>' +
-      '<path d="M62 28 L72 22 L72 34 Z M62 28 L52 22 L52 34 Z" fill="#FF6F9C"/>' +
-      '<circle cx="62" cy="28" r="3" fill="#E0507F"/>' +
-      '</g>';
-  }
-
-  if (mood === 'angry') {
-    body += '<path d="M70 30 L76 30 M73 27 L73 33 M68 34 L71 31 M75 31 L78 34" stroke="#E5534B" stroke-width="2" stroke-linecap="round"/>';
-  }
-
-  return svgDoc(width, height, body, viewBox);
+/** The saved human-era look fields remain stable identities; the painter interprets them as coats. */
+function coat(look: CustomerLook) {
+  const silver = look.hair === '#9A9A9A' || look.hair === '#A8A8A8' || look.hairStyle === 'balding';
+  const cream = blend('#FFF2D9', look.skin, .12);
+  const ginger = blend('#DEA467', look.skin, .18);
+  const dark = blend(look.hair, '#887466', .48);
+  const base = silver ? '#B9B5A9' : look.hairStyle === 'bun' ? dark
+    : look.hairStyle === 'bob' || look.hairStyle === 'long' ? cream : ginger;
+  return { base, cream, marking: silver ? '#7D8079' : look.hairStyle === 'bob' ? '#B97B49' : shade(base, -28),
+    outline: blend(base, INK, .75), dark };
 }
 
-function hair(look: CustomerLook): string {
-  const fill = look.hair;
-  switch (look.hairStyle) {
-    case 'short':
-      return `<path d="M23 52 C20 28 36 20 52 21 C68 22 82 32 77 52 C74 42 64 35 50 35 C37 35 28 42 23 52 Z" fill="${fill}"/>`;
-    case 'bob':
-    case 'long':
-      return `<path d="M22 66 C17 34 33 21 50 21 C67 21 83 34 78 66 L72 66 C73 50 66 37 50 37 C34 37 27 50 28 66 Z" fill="${fill}"/>`;
-    case 'bun':
-      return (
-        `<g fill="${fill}">` +
-        '<circle cx="50" cy="19" r="10"/>' +
-        '<path d="M23 52 C20 30 36 23 50 23 C64 23 80 30 77 52 C73 41 63 36 50 36 C37 36 27 41 23 52 Z"/>' +
-        '</g>'
-      );
-    case 'spiky':
-      return `<path d="M23 50 L24 32 L32 36 L34 22 L42 31 L48 18 L54 30 L62 20 L66 33 L74 26 L75 38 L78 48 C72 40 62 36 50 36 C38 36 29 41 23 50 Z" fill="${fill}"/>`;
-    case 'cap':
-      return (
-        '<g>' +
-        `<path d="M23 44 C23 26 36 20 50 20 C64 20 77 26 77 44 Z" fill="${shade(look.shirt, -20)}"/>` +
-        `<path d="M50 40 L88 40 C88 46 80 47 70 46 L50 45 Z" fill="${shade(look.shirt, -35)}"/>` +
-        `<circle cx="50" cy="21" r="2.5" fill="${shade(look.shirt, -35)}"/>` +
-        '</g>'
-      );
-    case 'balding':
-      return (
-        `<g fill="${fill}">` +
-        '<path d="M24 56 C22 44 25 38 30 36 C29 44 30 50 31 56 Z"/>' +
-        '<path d="M76 56 C78 44 75 38 70 36 C71 44 70 50 69 56 Z"/>' +
-        '</g>'
-      );
+export function characterSvg(look: CustomerLook, opts: CharacterOptions): string {
+  const { mood, blinking, width, headOnly, fullBody } = opts;
+  const { height } = characterSize(width, headOnly, fullBody);
+  const c = coat(look);
+  const fur = uid('cat-fur'), muzzle = uid('cat-cream'), cloth = uid('cat-knit');
+  const ear = uid('cat-ear'), head = uid('cat-head');
+  const shirt = blend(look.shirt, '#CBB38C', .3);
+  let out = `<defs>
+    <radialGradient id="${fur}" cx="32%" cy="24%" r="82%"><stop stop-color="${shade(c.base, 32)}"/><stop offset=".58" stop-color="${c.base}"/><stop offset="1" stop-color="${shade(c.base, -20)}"/></radialGradient>
+    <radialGradient id="${muzzle}" cx="38%" cy="20%" r="85%"><stop stop-color="#FFFAEB"/><stop offset=".72" stop-color="${c.cream}"/><stop offset="1" stop-color="#DAC4A2"/></radialGradient>
+    <linearGradient id="${cloth}" x1="0" y1="0" x2="1" y2=".8"><stop stop-color="${shade(shirt, 24)}"/><stop offset=".5" stop-color="${shirt}"/><stop offset="1" stop-color="${shade(shirt, -22)}"/></linearGradient>
+    <linearGradient id="${ear}" x1="0" y1="0" x2=".7" y2="1"><stop stop-color="#BF8670"/><stop offset="1" stop-color="#EDBEA5"/></linearGradient>
+    <clipPath id="${head}"><path d="${FACE}"/></clipPath>
+  </defs><g stroke-linecap="round" stroke-linejoin="round">`;
+
+  if (!headOnly) {
+    if (fullBody) {
+      // A curled tail sits behind the body, and both soft paws touch the same floor plane.
+      out += `<ellipse cx="51" cy="170" rx="33" ry="4.2" fill="#6C4D31" opacity=".17"/>
+        <ellipse cx="50" cy="169.5" rx="23" ry="2" fill="#6C4D31" opacity=".12"/>
+        <path d="M68 146C91 152 96 130 88 119C83 112 77 117 81 123C87 133 81 142 71 132" fill="url(#${fur})" stroke="${c.outline}" stroke-width="1.5"/>
+        <path d="M87 126L91 125M87 133L92 134M82 139L85 143" fill="none" stroke="${c.marking}" stroke-width="3"/>
+        <path d="M29 127Q50 120 71 127L69 158Q77 161 73 168Q65 172 54 168L50 146L46 168Q35 172 26 168Q22 161 31 158Z" fill="url(#${fur})" stroke="${c.outline}" stroke-width="1.4"/>
+        <path d="M29 158Q38 154 46 159L45 167Q35 170 27 167Q24 162 29 158ZM55 159Q64 155 70 159Q76 163 72 167Q63 170 55 167Z" fill="url(#${muzzle})"/>
+        <path d="M32 163V166M38 163V167M61 163V167M67 163V166" stroke="${c.outline}" opacity=".5" fill="none"/>`;
+    }
+    out += `<path d="M31 84Q50 78 69 84Q80 90 83 113L74 118L71 110L74 134Q51 140 26 134L29 110L26 118L17 113Q20 91 31 84Z" fill="url(#${cloth})" stroke="${shade(shirt, -38)}" stroke-width="1.4"/>
+      <path d="M21 114L28 117L27 126Q25 132 20 129Q15 127 18 119ZM73 117L80 114L83 121Q85 129 78 130Q73 129 73 124Z" fill="url(#${fur})" stroke="${c.outline}" stroke-width="1.1"/>
+      <path d="M20 124L20 127M24 124L24 128M77 124L77 128M81 123L81 126" stroke="${c.outline}" opacity=".5"/>
+      <path d="M34 86Q50 100 66 86L63 94Q50 105 37 94Z" fill="${shade(shirt, -15)}"/>
+      <path d="M36 89Q50 100 64 89M30 130Q50 134 70 130" fill="none" stroke="${shade(shirt, 38)}" stroke-width="1.6"/>
+      <path d="M31 101L30 121M69 101L70 121" fill="none" stroke="${shade(shirt, -28)}" opacity=".35"/>
+      <path d="M45 107Q50 110 55 107L55 117Q50 121 45 117Z" fill="${shade(shirt, 30)}" stroke="${shade(shirt, -18)}" stroke-width=".7"/>
+      <path d="M50 115V112Q45 108 47 108Q50 108 50 112Q51 108 54 109Q54 112 50 113" fill="#FFF0CD"/>
+      <g stroke="${shade(shirt, 35)}" stroke-width=".65" opacity=".5">`;
+    for (let i = 0; i < 9; i++) out += `<path d="M${32 + i * 4} 126l1 2l1-2"/>`;
+    out += '</g>';
   }
-  return '';
+
+  // One continuous silhouette keeps ears, cheek tufts and the face from looking pasted together.
+  out += `<path d="${FACE}" fill="url(#${fur})" stroke="${c.outline}" stroke-width="1.6"/>
+    <g clip-path="url(#${head})">${markings(look, c.marking, c.dark)}
+    <path d="M24 13Q23 26 26 34L35 26Z M76 13Q79 26 75 34L65 26Z" fill="url(#${ear})"/>
+    <path d="M25 16L27 28L31 26M75 16L73 28L69 26" fill="none" stroke="#F9D8BD" stroke-width="1.4" opacity=".7"/>
+    <path d="M26 69Q31 62 37 64Q50 57 63 64Q70 62 75 69Q72 82 50 83Q29 82 26 69Z" fill="url(#${muzzle})"/>
+    <path d="M23 39Q19 50 22 56M29 24L34 27M39 26L44 25M56 25L60 26M73 40L77 44" stroke="${shade(c.base, 65)}" opacity=".62" stroke-width="1.5" fill="none"/>
+    <path d="M20 61L24 60M23 65L27 63M76 60L80 61M73 64L78 66M36 77L39 78M62 78L65 77" stroke="${c.marking}" opacity=".32" stroke-width=".8" fill="none"/>
+    </g>`;
+
+  out += `<ellipse cx="29" cy="63" rx="6" ry="3.2" fill="#D98E72" opacity="${mood === 'happy' || mood === 'delighted' ? '.36' : '.17'}"/>
+    <ellipse cx="71" cy="63" rx="6" ry="3.2" fill="#D98E72" opacity="${mood === 'happy' || mood === 'delighted' ? '.36' : '.17'}"/>`;
+  out += eyes(mood, blinking);
+  out += `<path d="M46.5 63Q50 61.5 53.5 63Q53 65 50 66.5Q47 65 46.5 63Z" fill="#AD7566" stroke="#7C5143" stroke-width=".7"/>
+    <path d="M48 63.5H50" stroke="#F7C7AF" stroke-width=".9"/>`;
+  out += mouth(mood);
+  out += `<g fill="none" stroke="${c.outline}" stroke-width=".8" opacity=".7">
+    <path d="M30 66L18 63M30 69L16 69M70 66L82 63M70 69L84 69"/>
+    <path d="M35 66h.2M38 68h.2M65 66h-.2M62 68h-.2" stroke-width="1.3"/></g>`;
+
+  if (look.hairStyle === 'balding') {
+    out += `<path d="M31 47Q37 44 42 46M58 46Q63 44 69 47" fill="none" stroke="#FFF6DE" stroke-width="2.7"/>
+      <path d="M27 58l3 1M70 59l3-1" fill="none" stroke="${c.outline}" opacity=".5" stroke-width=".8"/>`;
+  }
+  if (look.accessory === 'glasses') {
+    out += `<g fill="none" stroke="#86613E" stroke-width="1.35"><ellipse cx="37" cy="55" rx="10" ry="9"/><ellipse cx="63" cy="55" rx="10" ry="9"/><path d="M47 54Q50 52 53 54M27 52L21 49M73 52L79 49"/></g>
+      <path d="M30 52Q31 48 35 48M56 52Q57 48 61 48" fill="none" stroke="#FFF7D9" stroke-width="1.2" opacity=".8"/>`;
+  }
+  if (look.hairStyle === 'cap') {
+    out += `<path d="M28 32Q29 17 49 17Q68 17 72 33Z" fill="url(#${cloth})" stroke="${shade(shirt, -40)}" stroke-width="1.3"/>
+      <path d="M50 19Q57 24 57 32M33 29Q49 25 66 29" fill="none" stroke="${shade(shirt, 35)}" stroke-width="1.1"/>
+      <path d="M28 32Q47 28 71 32L79 36Q76 42 64 39L37 36Z" fill="${shade(shirt, -14)}" stroke="${shade(shirt, -40)}" stroke-width="1.2"/>
+      <path d="M33 32Q53 30 69 33" fill="none" stroke="${shade(shirt, 48)}"/>
+      <ellipse cx="49" cy="17" rx="2.4" ry="1.5" fill="${shade(shirt, -30)}"/>`;
+  } else if (look.accessory === 'bow') {
+    out += `<path d="M69 30Q57 18 58 28L59 35Q62 38 69 32Q80 38 80 32L79 25Q77 21 69 30Z" fill="#CC886F" stroke="#955F4C" stroke-width="1"/>
+      <path d="M61 27L66 30M73 30L77 27" stroke="#F6C5A5" fill="none"/>
+      <circle cx="69" cy="31" r="3" fill="#E6A28A" stroke="#955F4C" stroke-width=".8"/>`;
+  }
+  out += '</g>';
+  return svgDoc(width, height, out, headOnly ? '8 0 84 86.8' : fullBody ? '0 0 100 176' : '0 0 100 120');
+}
+
+function markings(look: CustomerLook, color: string, dark: string): string {
+  if (look.hairStyle === 'bun') {
+    return '<path d="M50 28Q47 46 38 55Q30 60 25 70Q35 84 50 84Q68 83 76 70Q68 58 61 55Q53 46 50 28Z" fill="#F9EDD6"/>';
+  }
+  if (look.hairStyle === 'bob') {
+    return `<path d="M17 7Q41 5 44 29Q46 46 33 49Q17 48 14 38Z" fill="${color}"/><path d="M68 9Q88 6 88 32Q83 49 68 45Q60 40 66 29Z" fill="${dark}"/>`;
+  }
+  if (look.hairStyle === 'long') {
+    return `<path d="M16 11Q33 9 38 28L28 40L17 37ZM63 27Q68 12 83 11L84 36L72 40Z" fill="${color}" opacity=".6"/>
+      <path d="M39 31L42 34M46 28L49 32M55 29L57 32" stroke="${color}" stroke-width="1" opacity=".4"/>`;
+  }
+  return `<g fill="${color}" opacity=".8"><path d="M39 24Q42 26 45 39Q39 37 37 27ZM47 22L53 22L50 38Q46 30 47 22ZM58 24L64 26Q60 36 55 39Z"/>
+    <path d="M16 45Q25 45 29 50Q22 51 17 49ZM15 54Q24 53 29 58L17 58ZM84 45Q75 45 71 50Q78 51 83 49ZM85 54Q76 53 71 58L83 58Z"/></g>`;
 }
 
 function eyes(mood: Mood, blinking?: boolean): string {
   if (blinking || mood === 'delighted') {
-    // Closed eyes: flat lines for a blink, happy arcs when delighted.
-    const d = mood === 'delighted' ? 'M36 56 Q40 50 44 56 M56 56 Q60 50 64 56' : 'M36 55 L44 55 M56 55 L64 55';
-    return `<path d="${d}" stroke="${INK}" stroke-width="2.6" stroke-linecap="round" fill="none"/>`;
+    const d = mood === 'delighted' ? 'M32 56Q37 48 42 56M58 56Q63 48 68 56' : 'M32 55Q37 58 42 55M58 55Q63 58 68 55';
+    return `<path d="${d}" fill="none" stroke="#49382C" stroke-width="2.1"/>`;
   }
-  let out =
-    '<g>' +
-    `<circle cx="40" cy="54" r="3.4" fill="${INK}"/>` +
-    `<circle cx="60" cy="54" r="3.4" fill="${INK}"/>` +
-    '<circle cx="41.2" cy="52.8" r="1.1" fill="#FFFFFF"/>' +
-    '<circle cx="61.2" cy="52.8" r="1.1" fill="#FFFFFF"/>';
-  if (mood === 'angry') {
-    out += `<path d="M34 45 L45 49 M66 45 L55 49" stroke="${INK}" stroke-width="2.6" stroke-linecap="round"/>`;
-  }
-  if (mood === 'neutral') {
-    out += `<path d="M35 46.5 L45 46.5 M55 46.5 L65 46.5" stroke="${INK}" stroke-width="2" stroke-linecap="round"/>`;
-  }
-  return `${out}</g>`;
+  let out = '<g fill="#49382C"><ellipse cx="37" cy="54.5" rx="3.5" ry="4.8"/><ellipse cx="63" cy="54.5" rx="3.5" ry="4.8"/></g>' +
+    '<g fill="#B28C54"><ellipse cx="37" cy="56.6" rx="2" ry="1.3"/><ellipse cx="63" cy="56.6" rx="2" ry="1.3"/></g>' +
+    '<g fill="#FFF8E5"><circle cx="36" cy="52.7" r="1.3"/><circle cx="62" cy="52.7" r="1.3"/></g>';
+  if (mood === 'angry') out += '<path d="M31 48L42 51M58 51L69 48" fill="none" stroke="#674B38" stroke-width="2"/>';
+  if (mood === 'neutral') out += '<path d="M33 48L41 48M59 48L67 48" fill="none" stroke="#674B38" stroke-width="1.2"/>';
+  return out;
 }
 
 function mouth(mood: Mood): string {
-  switch (mood) {
-    case 'delighted':
-      return `<path d="M41 63 Q50 63 59 63 Q58 73 50 73 Q42 73 41 63 Z" fill="#B8323F" stroke="${INK}" stroke-width="1.5" stroke-linejoin="round"/>`;
-    case 'happy':
-      return `<path d="M42 64 Q50 71 58 64" stroke="${INK}" stroke-width="2.4" stroke-linecap="round" fill="none"/>`;
-    case 'neutral':
-      return `<path d="M44 66 L56 66" stroke="${INK}" stroke-width="2.4" stroke-linecap="round"/>`;
-    case 'angry':
-      return `<path d="M42 69 Q50 62 58 69" stroke="${INK}" stroke-width="2.4" stroke-linecap="round" fill="none"/>`;
-  }
+  const open = mood === 'delighted' ? '<path d="M43 70Q50 73 57 70Q56 78 50 78Q44 78 43 70Z" fill="#825344"/><path d="M46 76Q50 72 54 76" fill="#D89583"/>' : '';
+  const d = mood === 'angry' ? 'M50 67V70M42 73Q45 68 50 70Q55 68 58 73'
+    : mood === 'neutral' ? 'M50 67V70M44 71Q48 73 50 70Q52 73 56 71'
+    : 'M50 67V70M41 69Q44 75 50 70Q56 75 59 69';
+  return `${open}<path d="${d}" fill="none" stroke="#75503E" stroke-width="1.3"/>`;
 }

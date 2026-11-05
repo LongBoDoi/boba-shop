@@ -27,7 +27,7 @@ export class FloatingText {
   private root: Phaser.GameObjects.Container;
   private tween: Phaser.Tweens.Tween;
 
-  constructor(ctx: StageContext, parent: Phaser.GameObjects.Container, readonly feedback: Feedback, onDone: () => void) {
+  constructor(ctx: StageContext, parent: Phaser.GameObjects.Container, readonly feedback: Feedback, onDone: () => void, anchorX?: number) {
     const { scene, bank, layout } = ctx;
     const say = feedback.tone === 'say';
     const color = TONE[feedback.tone];
@@ -50,7 +50,7 @@ export class FloatingText {
       ? Math.max(2, layout.stageHeight - layout.metrics.bubbleBottom - bubbleReach() - height)
       : layout.metrics.bubbleCenterY - 10;
     // The column stands at the slot's centre, so this is the one place that knows where the edge is.
-    const shift = chipShift(layout.slots[feedback.slot]?.centre ?? 0, width, layout.width);
+    const shift = chipShift(anchorX ?? layout.slots[feedback.slot]?.centre ?? 0, width, layout.width);
     this.root = scene.add.container(shift, top, [chip, text]);
     this.root.alpha = 0;
     parent.add(this.root);

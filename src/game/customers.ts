@@ -3,6 +3,9 @@ import { Rng } from './random';
 export type HairStyle = 'short' | 'bob' | 'bun' | 'spiky' | 'long' | 'cap' | 'balding';
 export type Accessory = 'none' | 'glasses' | 'bow';
 
+/** Legacy save keys: the cat painter maps hairStyle to coat patterns and hair/skin to fur tones.
+ * Keep these identifiers stable: customer kinds, regular identities and old saves depend on them.
+ */
 export interface CustomerLook {
   skin: string;
   hair: string;
@@ -51,7 +54,7 @@ export function generateLook(rng: Rng): CustomerLook {
   const roll = rng.next();
   return {
     skin: rng.pick(SKINS),
-    // Balding customers are the older regulars, so they get grey hair.
+    // The legacy elder style is drawn as a silver cat with pale, bushy brows.
     hair: hairStyle === 'balding' ? '#A8A8A8' : rng.pick(HAIRS),
     hairStyle,
     shirt: rng.pick(SHIRTS),

@@ -172,7 +172,7 @@ assert.equal(askHeightFor(tileRoomIn(40)), ASK_MIN_HEIGHT, 'Past that it stops a
 
 // ------------------------------------------------------- the counter's handover mat
 // A cup finished in the kitchen is carried out and stands on the painted mat beside the till until
-// the register hands it over. That painting is covered and centred too, so the thing to pin is
+// the register hands it over. That painting fits the whole width with a raised table, so the thing to pin is
 // that neither the cup nor the till is cropped away, and that they do not stand on each other: a
 // drink nobody can see is a drink nobody knows to hand over, and a till under a cup cannot be read.
 const { counterRoomPlacement } = require(path.join(__dirname, '../src/counter/roomLayout.ts'));
