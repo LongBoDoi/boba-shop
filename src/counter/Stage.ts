@@ -10,6 +10,7 @@ import { TextureBank } from './textures';
 import { ArrivalWalk } from './ArrivalWalk';
 import { Doorway } from './Doorway';
 import { uiState } from '../ui-state';
+import { store } from '../store';
 
 export const SLOT_DEPTH = 10;
 interface Guest {
@@ -38,7 +39,7 @@ export class Stage {
     this.clear();
     this.ctx = { scene: this.scene, bank: this.bank, layout };
     this.door = new Doorway(this.scene, layout);
-    this.syncCustomers(state, state.phase === 'playing' && state.clock < 5000);
+    this.syncCustomers(state, false);
     for (const guest of this.customers.values()) if (arriving.has(guest.view.customer.id) && !(guest.walk instanceof ArrivalWalk)) {
       guest.walk = new ArrivalWalk(this.ctx, guest.root, guest.view, this.door, guest.rank);
     }
@@ -89,7 +90,7 @@ export class Stage {
           slot === state.selectedSlot);
         guest = { root, view, rank: -1, slot };
         this.customers.set(customer.id, guest);
-        if (animate) guest.walk = new ArrivalWalk(ctx, root, view, this.door!, rank);
+        if (customer.atCounter === false) guest.walk = new ArrivalWalk(ctx, root, view, this.door!, rank);
       } else guest.view.update(customer, waiting ? 1 : patienceLeft(customer, state.clock), slot === state.selectedSlot);
       guest.view.setWaiting(waiting || !!guest.walk?.isPlaying());
       guest.slot = slot;
@@ -139,7 +140,7 @@ export class Stage {
       effect.view.destroy(); effect.root.destroy(); this.floating.delete(id);
     }
     for (const item of feedback) {
-      if (seen.has(item.id) || this.floating.has(item.id) || (item.tone === 'say' && item.slot !== this.front)) continue;
+      if (seen.has(item.id) || this.floating.has(item.id) || (item.tone === 'say' && (item.slot !== this.front || !uiState.value.counterReady))) continue;
       const anchorX = ctx.layout.room.queueX + Math.max(56, ctx.layout.metrics.charWidth * 0.82);
       const root = this.scene.add.container(anchorX, 0)
         .setDepth(SLOT_DEPTH + 102);
@@ -169,6 +170,10 @@ export class Stage {
     }
     for (const effect of this.leaving.values()) effect.view.updateMotion(delta, reduced);
     this.syncReady();
+    const guest = [...this.customers.values()].find(g => g.slot === this.front && g.rank === 0);
+    if (guest && !guest.walk?.isPlaying() && guest.view.customer.atCounter === false) {
+      store.dispatch({ type: 'CUSTOMER_AT_COUNTER', id: guest.view.customer.id });
+    }
   }
 
   private syncReady() {

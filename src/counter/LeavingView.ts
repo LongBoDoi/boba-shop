@@ -10,6 +10,7 @@ import { apply, ownerOf, StageContext } from './CustomerView';
 import { CatFigure } from './CatFigure';
 import { queueDepth } from './layout';
 import { Doorway } from './Doorway';
+import { exitWalkway } from './walkway';
 import { SHARED } from './textures';
 
 /** A reaction, a turn into the aisle, and a walk to the door. The visual outlives the sale event. */
@@ -70,7 +71,7 @@ export class LeavingView {
     const dt = Math.min(delta, 50); this.elapsed += dt; this.phaseTime += dt;
     const { layout } = this.ctx, p = this.door.placement;
     const id = -this.departure.id;
-    const waitX = p.x - layout.metrics.charWidth * p.scale * .55;
+    const waitX = p.passageX;
     const insideY = p.thresholdY + 28 * layout.room.scale;
     const place = (x: number, feet: number, scale: number, outside = false) => {
       this.parent.setPosition(x, feet - layout.room.queueY * scale).setScale(scale)
@@ -79,14 +80,13 @@ export class LeavingView {
     this.figure.setWalking(false);
     if (this.phase === 'reaction' && this.phaseTime >= 500) {
       this.figure.faceAway(true); this.next('turning');
-    } else if (this.phase === 'turning' && this.phaseTime >= 1400) {
+    } else if (this.phase === 'turning' && this.phaseTime >= 650) {
       this.next('aisle');
     } else if (this.phase === 'aisle') {
-      const t = Math.min(1, this.phaseTime / 5800), ease = t * t * (3 - 2 * t);
-      const side = -Math.min(layout.metrics.charWidth * .65, layout.width * .16);
-      place(this.start.x + (waitX - this.start.x) * ease + side * Math.sin(t * Math.PI),
-        this.start.feet + (insideY - this.start.feet) * ease,
-        this.start.scale + (p.scale - this.start.scale) * ease);
+      const t = Math.min(1, this.phaseTime / 5800);
+      const point = exitWalkway(layout, this.start, t);
+      place(point.x, point.feet, point.scale);
+      this.figure.setFacing(point.facing);
       this.figure.setWalking(true);
       if (t === 1) this.next('waiting');
     } else if (this.phase === 'waiting') {
@@ -106,7 +106,7 @@ export class LeavingView {
       const x = p.handleX + (p.passageX - p.handleX) * Math.min(1, t * 2);
       const feet = insideY + (p.outsideY - insideY) * t;
       const outside = t > .58;
-      if (outside) this.parent.setMask(this.door.outsideMask);
+      if (outside) this.parent.setData('outside', true);
       place(x, feet, p.scale * (1 - .08 * t), outside);
       this.figure.setWalking(true);
       if (t === 1) { this.figure.setFacing(90); this.next('outside'); }
@@ -126,7 +126,7 @@ export class LeavingView {
   destroy() {
     this.done = true;
     this.door.release(-this.departure.id);
-    this.parent.clearMask();
+    this.parent.setData('outside', false);
     this.figure.destroy();
     this.reaction?.destroy();
   }

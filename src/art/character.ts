@@ -1,8 +1,9 @@
 /** Warm illustrated cat guests, shared by the queue, tickets, book and title. */
 import type { CustomerLook } from '../game/customers';
 import { blend, shade, svgDoc, uid } from './svg';
+import { catHeadAngle, catTorsoAngle } from './catAngles';
 
-export type CatPart = 'shadow' | 'tail' | 'leftLeg' | 'rightLeg' | 'torso' | 'torsoBack' | 'leftArm' | 'rightArm' | 'head' | 'profile' | 'back';
+export type CatPart = 'shadow' | 'tail' | 'leftLeg' | 'rightLeg' | 'torso' | 'leftArm' | 'rightArm' | 'head';
 
 export type Mood = 'delighted' | 'happy' | 'neutral' | 'angry';
 
@@ -16,6 +17,7 @@ export interface CharacterOptions {
   fullBody?: boolean;
   /** Isolated, full-size rig layer; UI portraits still use the complete illustration. */
   part?: CatPart;
+  yaw?: number;
 }
 
 const INK = '#654737';
@@ -67,12 +69,11 @@ export function characterSvg(look: CustomerLook, opts: CharacterOptions): string
       <path d="M34 86Q50 100 66 86L63 94Q50 105 37 94Z" fill="${shade(shirt, -15)}"/>
       <path d="M36 89Q50 100 64 89M30 130Q50 134 70 130" fill="none" stroke="${shade(shirt, 38)}" stroke-width="1.6"/>
       <path d="M31 101L30 121M69 101L70 121" fill="none" stroke="${shade(shirt, -28)}" opacity=".35"/>`;
-    parts.torsoBack = parts.torso;
     parts.torso += `<path d="M45 107Q50 110 55 107L55 117Q50 121 45 117Z" fill="${shade(shirt, 30)}" stroke="${shade(shirt, -18)}" stroke-width=".7"/>
       <path d="M50 115V112Q45 108 47 108Q50 108 50 112Q51 108 54 109Q54 112 50 113" fill="#FFF0CD"/>`;
     for (let i = 0; i < 9; i++) {
       const stitch = `<path d="M${32 + i * 4} 126l1 2l1-2" fill="none" stroke="${shade(shirt, 35)}" stroke-width=".65" opacity=".5"/>`;
-      parts.torso += stitch; parts.torsoBack += stitch;
+      parts.torso += stitch;
     }
     for (const [part, mirror] of [['leftArm', false], ['rightArm', true]] as const) {
       parts[part] = `<g${mirror ? ' transform="translate(100 0) scale(-1 1)"' : ''}>
@@ -123,19 +124,12 @@ export function characterSvg(look: CustomerLook, opts: CharacterOptions): string
       <circle cx="69" cy="31" r="3" fill="#E6A28A" stroke="#955F4C" stroke-width=".8"/>`;
   }
   parts.head = out;
-  parts.profile = `<path d="M32 38L30 13Q31 8 35 13L48 27Q59 22 69 30Q81 38 79 57L82 63L77 65Q75 83 53 84Q34 84 28 74L19 70Q15 66 21 62L27 57Q26 45 32 38Z" fill="url(#${fur})" stroke="${c.outline}" stroke-width="1.6"/>
-    <path d="M33 16L35 32L42 28Z" fill="url(#${ear})"/>
-    <path d="M26 61Q37 57 40 66Q44 76 60 78Q42 87 28 74L20 70Q16 66 26 61Z" fill="url(#${muzzle})"/>
-    <path d="M19 63L26 64L22 68Z" fill="#AD7566" stroke="#7C5143" stroke-width=".6"/>
-    <path d="M23 69Q28 73 33 69M29 68L17 68M30 72L19 75" fill="none" stroke="${c.outline}" stroke-width="1"/>
-    <ellipse cx="37" cy="53" rx="2.9" ry="4.5" fill="#49382C"/><circle cx="36" cy="51.5" r="1.1" fill="#FFF8E5"/>
-    <path d="M51 29L49 39M59 29L55 39M70 47L76 45M69 54L77 53" stroke="${c.marking}" stroke-width="2.5" opacity=".6" fill="none"/>
-    <path d="M68 69Q64 76 56 78" stroke="${shade(c.base, 42)}" stroke-width="1.4" fill="none"/>`;
-  if (look.accessory === 'glasses') parts.profile += '<ellipse cx="36" cy="54" rx="7" ry="9" fill="none" stroke="#86613E" stroke-width="1.3"/><path d="M43 52L65 47" stroke="#86613E" stroke-width="1.3"/>';
-  if (look.hairStyle === 'cap') parts.profile += `<path d="M31 32Q37 17 56 21Q68 23 71 34L34 36Q13 38 16 33Z" fill="url(#${cloth})" stroke="${shade(shirt, -40)}" stroke-width="1.2"/>`;
-  parts.back = `<path d="${FACE}" fill="url(#${fur})" stroke="${c.outline}" stroke-width="1.6"/><g clip-path="url(#${head})">${look.hairStyle === 'bun' ? '' : markings(look, c.marking, c.dark)}<path d="M25 14L28 29M75 14L72 29M37 72Q50 77 63 72" fill="none" stroke="${shade(c.base, 35)}" stroke-width="1.5"/></g>`;
-  if (look.hairStyle === 'cap') parts.back += `<path d="M28 32Q29 17 49 17Q68 17 72 33Q50 38 28 32Z" fill="url(#${cloth})" stroke="${shade(shirt, -40)}" stroke-width="1.3"/><path d="M44 32Q50 24 56 32" fill="${c.base}" stroke="${shade(shirt, -40)}"/><path d="M43 33H57" stroke="${shade(shirt, -30)}" stroke-width="2"/>`;
   const layers: CatPart[] = ['shadow', 'tail', 'leftLeg', 'rightLeg', 'torso', 'leftArm', 'rightArm', 'head'];
+  if (opts.yaw !== undefined) {
+    const paint = { fur, muzzle, cloth, ear };
+    parts.head = catHeadAngle(look, c, paint, opts.yaw, mood, Boolean(blinking));
+    if (!headOnly) parts.torso = catTorsoAngle(shirt, paint, opts.yaw);
+  }
   const content = opts.part ? parts[opts.part] ?? '' : layers.map(part => parts[part] ?? '').join('');
   return svgDoc(width, height, defs + '<g stroke-linecap="round" stroke-linejoin="round">' + content + '</g>', headOnly ? '8 0 84 86.8' : fullBody ? '0 0 100 176' : '0 0 100 120');
 }

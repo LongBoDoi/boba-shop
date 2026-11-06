@@ -20,7 +20,6 @@ import {
   forfeitJar,
   inOvertime,
   jarPayout,
-  lineWaitMs,
   OVERTIME_FROM_DAY,
   OVERTIME_MAX_ROUNDS,
   OVERTIME_WINDOW_MS,
@@ -77,6 +76,9 @@ export interface Customer {
   name: string;
   order: Drink;
   status: CustomerStatus;
+  /** False until the scene confirms this guest is stationary at the service counter.
+   * Absent only in legacy saves/fixtures, which already represented customers at the counter. */
+  atCounter?: boolean;
   /**
    * When they walked up; drives the order-taking patience. For someone in the line outside it is when
    * they joined it, and it starts again when they reach the counter, because that is when anyone there
@@ -255,6 +257,7 @@ export type GameAction =
    */
   | { type: 'RESTORE'; state: GameState }
   | { type: 'TICK'; dt: number }
+  | { type: 'CUSTOMER_AT_COUNTER'; id: number }
   | { type: 'TAKE_ORDER'; slot: number }
   /** "Hỏi lại": show this usual after all, for the price of the tip. */
   | { type: 'ASK_AGAIN'; slot: number }
@@ -377,12 +380,14 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       return action.state;
     case 'TICK':
       return tick(state, action.dt);
+    case 'CUSTOMER_AT_COUNTER':
+      return isActive(state) ? customerAtCounter(state, action.id) : state;
     case 'TAKE_ORDER':
       return isActive(state) ? takeOrder(state, action.slot) : state;
     case 'ASK_AGAIN':
       return isActive(state) ? askAgain(state, action.slot) : state;
     case 'SELECT_SLOT':
-      return isActive(state) && action.slot === frontSlot(state.slots) && state.slots[action.slot]?.status === 'ordered'
+      return isActive(state) && action.slot === frontSlot(state.slots) && state.slots[action.slot]?.status === 'ordered' && state.slots[action.slot]?.atCounter !== false
         ? { ...state, selectedSlot: action.slot }
         : state;
     case 'PICK_CUP':
@@ -482,7 +487,7 @@ export function frontSlot(slots: (Customer | null)[]): number | null {
  */
 function readyToHandOver(state: GameState): boolean {
   const customer = state.selectedSlot === null ? null : state.slots[state.selectedSlot];
-  return Boolean(state.selectedSlot === frontSlot(state.slots) && customer?.status === 'ordered' && state.cup.size && state.cup.tea
+  return Boolean(state.selectedSlot === frontSlot(state.slots) && customer?.status === 'ordered' && customer.atCounter !== false && state.cup.size && state.cup.tea
     && state.build.lidded && state.build.straw && !state.build.inLidder);
 }
 
@@ -547,7 +552,7 @@ function tick(state: GameState, dt: number): GameState {
     if (!customer) return;
     // Waiting behind the active guest must not consume their service/order deadline.
     // Keep legacy already-taken orders intact, but freeze them until their turn too.
-    if (slot !== front) {
+    if (slot !== front || customer.atCounter === false) {
       slots[slot] = { ...customer, arrivedAt: customer.arrivedAt + dt,
         orderedAt: customer.orderedAt === null ? null : customer.orderedAt + dt };
       return;
@@ -567,11 +572,8 @@ function tick(state: GameState, dt: number): GameState {
     }
   });
 
-  // Whoever has waited outside long enough goes home, quietly: they never reached the counter, so
-  // nothing about it reaches the stars, the jar or the player's ears.
-  const patienceOutside = lineWaitMs(state);
-  const line = state.line.filter((customer) => clock - customer.arrivedAt < patienceOutside);
-  lost += state.line.length - line.length;
+  // Outside and queued guests have no service deadline until physical arrival at the counter.
+  const line = [...state.line];
 
   /**
    * Someone new, not yet anywhere. Real patience, because the line is saved and a save checks it. The
@@ -589,6 +591,7 @@ function tick(state: GameState, dt: number): GameState {
       orderPatienceMs,
       orderedAt: null,
       patienceMs,
+      atCounter: false,
       ...(overtime.rounds > 0 ? { lateRound: overtime.rounds } : {}),
     };
   };
@@ -620,7 +623,7 @@ function tick(state: GameState, dt: number): GameState {
    */
   const toCounter = (customer: Customer, spot: number) => {
     // Automatic ordering belongs to the head of the line, not an arbitrary storage slot.
-    const ordered = frontSlot(slots) === null && (auto || state.gear.includes('board'));
+    const ordered = customer.atCounter !== false && frontSlot(slots) === null && (auto || state.gear.includes('board'));
     slots[spot] = {
       ...customer,
       ...patienceFor(state, customer.look, { rounds: customer.lateRound ?? 0 }),
@@ -686,7 +689,7 @@ function tick(state: GameState, dt: number): GameState {
   }
 
   const head = frontSlot(slots);
-  if (head !== null && slots[head]!.status === 'requesting' && (auto || state.gear.includes('board'))) {
+  if (head !== null && slots[head]!.atCounter !== false && slots[head]!.status === 'requesting' && (auto || state.gear.includes('board'))) {
     slots[head] = { ...slots[head]!, status: 'ordered', orderedAt: clock };
   }
 
@@ -734,6 +737,7 @@ function tick(state: GameState, dt: number): GameState {
  * something nobody can see. Rounding it lets `memo` do its job.
  */
 export function patienceLeft(customer: Customer, clock: number): number {
+  if (customer.atCounter === false) return 1;
   const requesting = customer.status === 'requesting';
   const since = requesting ? customer.arrivedAt : customer.orderedAt ?? customer.arrivedAt;
   const limit = requesting ? customer.orderPatienceMs : customer.patienceMs;
@@ -770,7 +774,7 @@ function setMode(state: GameState, mode: GameMode): GameState {
   const slots = state.slots.map((customer, slot) => {
     if (!customer) return null;
     const changed = changeShop(state, customer, mode);
-    return slot !== front && customer.status === 'requesting'
+    return (slot !== front || customer.atCounter === false) && customer.status === 'requesting'
       ? { ...changed, status: 'requesting' as const, orderedAt: null } : changed;
   });
   return {
@@ -805,10 +809,28 @@ function changeShop(state: GameState, customer: Customer, mode: GameMode): Custo
   return { ...customer, ...patience, orderedAt, queuedAt: customer.queuedAt ?? since };
 }
 
-/** Take a waiting customer's order: reveal the recipe as a ticket and start the serve timer. */
+/** Acknowledge physical arrival, then start the greeting/order deadline exactly once. */
+function customerAtCounter(state: GameState, id: number): GameState {
+  const slot = frontSlot(state.slots);
+  if (slot === null) return state;
+  const customer = state.slots[slot]!;
+  if (customer.id !== id || customer.atCounter !== false) return state;
+  const auto = state.mode === 'relaxed' || state.gear.includes('board');
+  const ordered = customer.status === 'ordered' || auto;
+  const slots = [...state.slots];
+  slots[slot] = { ...customer, atCounter: true, arrivedAt: state.clock,
+    status: ordered ? 'ordered' : 'requesting', orderedAt: ordered ? state.clock : null };
+  const lines = ARRIVAL_LINES[kindOf(customer.look)];
+  const rng = createRng(state.seed);
+  const text = regularById(customer.regularId)?.line ?? rng.pick(lines);
+  return { ...state, seed: rng.seed, slots, selectedSlot: ordered ? slot : null, nextId: state.nextId + 1,
+    feedback: [...hushed(state.feedback, slot), { id: state.nextId, slot, text, tone: 'say', expiresAt: state.clock + SAY_MS }] };
+}
+
+/** Take an arrived customer's order and start the separate drink-preparation timer. */
 function takeOrder(state: GameState, slot: number): GameState {
   const customer = state.slots[slot];
-  if (slot !== frontSlot(state.slots) || !customer || customer.status !== 'requesting') return state;
+  if (slot !== frontSlot(state.slots) || !customer || customer.status !== 'requesting' || customer.atCounter === false) return state;
   const slots = [...state.slots];
   slots[slot] = { ...customer, status: 'ordered', orderedAt: state.clock };
   return {
@@ -829,7 +851,7 @@ function takeOrder(state: GameState, slot: number): GameState {
  */
 function askAgain(state: GameState, slot: number): GameState {
   const customer = state.slots[slot];
-  if (slot !== frontSlot(state.slots) || customer?.status !== 'ordered' || customer.recall !== 'blank') return state;
+  if (slot !== frontSlot(state.slots) || customer?.status !== 'ordered' || customer.atCounter === false || customer.recall !== 'blank') return state;
   const slots = [...state.slots];
   slots[slot] = { ...customer, recall: 'asked' };
   return { ...state, slots };

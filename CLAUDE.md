@@ -1896,7 +1896,7 @@ seeded generation and rules remain compatible. Do not rename those fields just t
 The painter maps them to fur and coat patterns; regulars retain distinct recognizable coats.
 Head-only crops include both ears and chin; standing cats keep the established 100×176 bounds.
 `counter/CatFigure.ts` animates eight cached body layers (art/character.ts `part` option), with
-head textures for mood/blink and rear head/shirt textures for exits. `catMotion.ts` supplies the
+24 directional head/torso drawings from `art/catAngles.ts`, plus mood/blink textures. `catMotion.ts` supplies the
 walk cycle, breathing, glances, occasional resting-paw pose and tail motion. Frame updates move
 joints only; never regenerate SVGs or upload textures per animation frame. See
 [cat animation](docs/customer-animation.md) for lifecycle and browser checks.
@@ -1913,7 +1913,7 @@ and prop silhouettes; `Backdrop` bakes an overlay from the original painting onc
 the lower body without altering the artwork. The same silhouettes exclude hidden hit areas.
 Only the front customer can order, be selected or receive a drink. `queueSlots` / `frontSlot`
 keep storage slots stable while ordering customers by arrival id. Waiting slot deadlines pause;
-the overflow line retains its existing wait limit. The register takes the front order, then opens
+outside and walking guests have no service deadline. `CUSTOMER_AT_COUNTER` starts the front guest’s timer only after physical arrival; the `atCounter` flag survives saves. The register takes the front order, then opens
 the kitchen; direct front-customer taps and swipes still work.
 It is also where a drink is handed over, and that comes first: with a cup waiting on the mat the
 register reads `Trao ly` and presses to `SERVE` — see "Handing the drink over".
@@ -1955,7 +1955,8 @@ for generation prompts and the optional browser interaction check.
 
 - Logic: drive `gameReducer` directly with a small script (the regression scripts in `tools/` do
   this — they transpile the TypeScript with `typescript` and `require` it, so no build step): start
-  a day, `TICK` until a customer spawns, `TAKE_ORDER` that slot, pour and scoop the order's
+  a day, `TICK` until a customer spawns, acknowledge `CUSTOMER_AT_COUNTER` for the front guest,
+  `TAKE_ORDER` that slot, pour and scoop the order's
   ingredients and `SERVE`, then check coins/stats; also let a `requesting` customer time out (no
   order taken) and confirm `stats.missed` rises, unless they are in a cap: a shipper leaving is not a
   miss. Reaching `dayEnd` needs the counter and the line to be empty after closing time, with no group

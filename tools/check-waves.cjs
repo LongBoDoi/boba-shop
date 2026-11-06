@@ -15,7 +15,8 @@ require.extensions['.ts'] = (module, filename) => {
 };
 
 try {
-  const { canExtend, createInitialState, gameReducer, NO_OVERTIME } = require(path.join(__dirname, '../src/game/reducer.ts'));
+  const { canExtend, createInitialState, gameReducer: rawReducer, NO_OVERTIME } = require(path.join(__dirname, '../src/game/reducer.ts'));
+const gameReducer = require('./sim/arrivals.cjs').withInstantArrivals(rawReducer);
   const { parseGame, serializeGame } = require(path.join(__dirname, '../src/game/save.ts'));
   const { ARRIVAL_LINES, generateLookOf, kindOf } = require(path.join(__dirname, '../src/game/customers.ts'));
   const { BOARD_SLOT, GEAR_IDS, gearItem } = require(path.join(__dirname, '../src/game/gear.ts'));
@@ -155,18 +156,18 @@ try {
   const justBefore = tick(outside(queued, queued.clock + 100 - wait + 1));
   assert.equal(justBefore.line.length, 1, 'A moment short of the limit, they are still there');
   const gaveUp = tick(outside(queued, queued.clock + 100 - wait));
-  assert.equal(gaveUp.line.length, 0, 'At the limit, they go');
-  assert.equal(gaveUp.lost, 1, 'And are counted');
+  assert.equal(gaveUp.line.length, 1, 'Outside waiting has no service deadline');
+  assert.equal(gaveUp.lost, 0, 'Travel cannot lose a customer');
   assert.deepEqual(gaveUp.stats, queued.stats, 'But not against the shop: they never reached the counter');
   assert.deepEqual(gaveUp.feedback, [], 'Nothing is said');
   assert.deepEqual(gaveUp.departures, [], 'Nobody walks off, so nothing plays');
   const jarGoing = { ...queued, overtime: { ...NO_OVERTIME, rounds: 1, jar: 41 } };
   const jarSafe = tick(outside(jarGoing, jarGoing.clock + 100 - wait));
-  assert.equal(jarSafe.lost, 1, 'Someone gives up in the line of a running jar');
+  assert.equal(jarSafe.lost, 0, 'Outside customers keep waiting during overtime');
   assert.deepEqual(jarSafe.overtime, jarGoing.overtime, 'And it does not burn: only a walkout from the counter does');
   for (const kind of ['shipper', 'elder', 'office']) {
     const kindGone = tick({ ...queued, line: [person(8, kind, { arrivedAt: queued.clock + 100 - wait })] });
-    assert.equal(kindGone.lost, 1, `A ${kind} waits outside as long as anyone: kinds are for the counter`);
+    assert.equal(kindGone.lost, 0, `A ${kind} waits outside as long as anyone: kinds are for the counter`);
   }
 
   // The bench. Read where it is used, so it is not in the config, and a save needs nothing new.
@@ -174,7 +175,7 @@ try {
   assert.equal(lineWaitMs(benched), wait * BENCH_LINE_PATIENCE, 'The bench lets them wait longer');
   assert.equal(benched.config.lineMs, queued.config.lineMs, 'Without touching the day\'s config');
   assert.equal(tick(outside(benched, benched.clock + 100 - wait)).line.length, 1, 'Someone who would have gone stays');
-  assert.equal(tick(outside(benched, benched.clock + 100 - wait * BENCH_LINE_PATIENCE)).line.length, 0, 'Until the longer wait runs out');
+  assert.equal(tick(outside(benched, benched.clock + 100 - wait * BENCH_LINE_PATIENCE)).line.length, 1, 'The old outside deadline cannot expire customers with or without a bench');
   assert.ok(GEAR_IDS.includes('bench') && gearItem('bench').price === 800, 'It is on sale');
   const closed = { ...run(nobody({ ...opened(2), clock: 239_900, nextSpawnAt: Number.MAX_SAFE_INTEGER }), 1_000), money: 800 };
   assert.equal(closed.phase, 'dayEnd', 'At the end of a day');
@@ -284,11 +285,11 @@ try {
   assert.equal(drained.phase, 'playing', 'They all arrive');
   const oneToCome = tick({ ...nobody(opened(5)), clock: CLOSE + 100, nextSpawnAt: CLOSE + 1_000, waveLeft: 1 });
   assert.deepEqual([oneToCome.phase, oneToCome.waveLeft], ['playing', 1], 'An empty shop is not a finished day with someone still on their way in');
-  // The line holds the day open too, until it reaches the counter or gives up.
+  // The line holds the day open until everyone reaches the counter.
   const stragglers = { ...nobody(opened(5)), clock: CLOSE + 100, nextSpawnAt: Number.MAX_SAFE_INTEGER, slots: [person(1, 'plain', { arrivedAt: CLOSE, orderPatienceMs: 1e7 }), person(2, 'plain', { arrivedAt: CLOSE, orderPatienceMs: 1e7 }), person(3, 'plain', { arrivedAt: CLOSE, orderPatienceMs: 1e7 })], line: [person(4, 'plain', { arrivedAt: CLOSE })] };
   assert.equal(tick(stragglers).phase, 'playing', 'A line keeps the day open');
   const lineGone = run(stragglers, wait + 1_000);
-  assert.deepEqual([lineGone.line.length, lineGone.lost], [0, 1], 'Until it gives up');
+  assert.deepEqual([lineGone.line.length, lineGone.lost], [1, 0], 'Outside waiting does not expire');
   assert.equal(run({ ...stragglers, slots: stragglers.slots.map(() => null), line: [] }, 200).phase, 'dayEnd', 'With nobody left the day ends');
   // A day nobody serves has to end as well, however many are outside.
   for (const day of [1, 5, 30]) {
@@ -300,12 +301,11 @@ try {
     const next = gameReducer(saved, { type: 'START_DAY', day: day + 1 });
     assert.deepEqual([next.lost, next.waveLeft, next.lullUntil, next.line, next.incoming], [0, 0, 0, [], []], 'And none of it carries to the next day');
   }
-  // Nobody above gave up outside: unattended, the counter's patience runs out before the line's. So here someone does.
-  assert.equal(parseGame(serializeGame(lineGone)).lost, 1, 'Someone who gave up is still counted after a reload mid-shift');
-  const closedOut = run({ ...lineGone, slots: lineGone.slots.map(() => null) }, 200);
-  assert.deepEqual([closedOut.phase, closedOut.lost], ['dayEnd', 1], 'And at the end of the day');
+  assert.equal(parseGame(serializeGame(lineGone)).lost, 0, 'Outside waiting stays penalty-free after reload');
+  const closedOut = until({ ...lineGone, slots: lineGone.slots.map(() => null) }, state => state.phase === 'dayEnd', 1_000_000);
+  assert.deepEqual([closedOut.phase, closedOut.lost], ['dayEnd', 0], 'Last guest reaches the counter before their timer can expire');
   const closedSaved = parseGame(serializeGame(closedOut));
-  assert.equal(closedSaved.lost, 1, 'Which is what the day-end screen reads after a reload');
+  assert.equal(closedSaved.lost, 0);
   assert.equal(gameReducer(closedSaved, { type: 'START_DAY', day: 6 }).lost, 0, 'The next day starts from nobody');
   assert.equal(gameReducer(gameReducer(closedOut, { type: 'GO_TO_TITLE' }), { type: 'START_DAY', day: 6 }).lost, 0, 'By way of the menu as well');
 
@@ -386,11 +386,10 @@ try {
   assert.equal(relaxedSpot.slots[0].patienceMs, patienceFor(relaxedSpot, FACES.plain).patienceMs, 'On the relaxed shop\'s patience: no half-patience shipper leaks in from outside');
   assert.equal(relaxedSpot.line.length, 1, 'And the next is still waiting');
   assert.ok(relaxedSpot.slots.every(Boolean) && relaxedSpot.line.length === 1, 'A new arrival does not jump the queue');
-  // The one line a relaxed shop can have is one it inherited, and it can still give up: only here can
-  // a relaxed day's card report `lost`, and it is why nobody says this shop keeps no one out.
+  // A line inherited by relaxed mode also waits without a service deadline.
   const heldOutside = tick(relaxedRush, lineWaitMs(relaxedRush) + 1);
-  assert.equal(heldOutside.line.length, 0, 'Someone outside with every spot held still goes home');
-  assert.equal(heldOutside.lost, relaxedRush.lost + 2, 'And is counted');
+  assert.equal(heldOutside.line.length, 2, 'Outside guests stay until they can reach the counter');
+  assert.equal(heldOutside.lost, relaxedRush.lost, 'No travel penalty in relaxed mode either');
   assert.equal(heldOutside.stats.missed, relaxedRush.stats.missed, 'But not held against the shop, in this mode either');
   // And back: the wave logic picks up from wherever the shop is.
   const standardAgain = gameReducer(calm, { type: 'SET_MODE', mode: 'standard' });
@@ -453,7 +452,7 @@ try {
   const endsAnyway = (patch) => {
     const state = parseGame(JSON.stringify({ ...pastClosing, ...patch }));
     assert.ok(state, 'An impossible group is not worth a shop');
-    assert.equal(until(gameReducer(state, { type: 'SET_PAUSED', paused: false }), (next) => next.phase === 'dayEnd', 300_000).phase, 'dayEnd', 'And the day still ends');
+    assert.equal(until(gameReducer(state, { type: 'SET_PAUSED', paused: false }), (next) => next.phase === 'dayEnd', 1_500_000).phase, 'dayEnd', 'And the day still ends');
     return state;
   };
   assert.equal(endsAnyway({ mode: 'relaxed', waveLeft: 3 }).waveLeft, 0, 'A relaxed shop has no group, and nothing in it would ever bring one in');

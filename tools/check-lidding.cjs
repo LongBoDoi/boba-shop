@@ -6,7 +6,8 @@ require.extensions['.ts'] = (m, file) => m._compile(ts.transpileModule(fs.readFi
   compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 }, fileName: file,
 }).outputText, file);
 
-const { createInitialState, gameReducer: reduce, canCarryOut, canServe } = require('../src/game/reducer.ts');
+const { createInitialState, gameReducer: rawReducer, canCarryOut, canServe } = require('../src/game/reducer.ts');
+const reduce = require('./sim/arrivals.cjs').withInstantArrivals(rawReducer);
 const { parseGame, serializeGame } = require('../src/game/save.ts');
 const { layoutKitchen, findStation } = require('../src/kitchen/layout.ts');
 let state = reduce(createInitialState(441), { type: 'START_DAY', day: 1 });

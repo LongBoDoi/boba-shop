@@ -15,7 +15,8 @@ require.extensions['.ts'] = (module, filename) => {
 };
 
 try {
-  const { canServe, createInitialState, gameReducer, patienceLeft } = require(path.join(__dirname, '../src/game/reducer.ts'));
+  const { canServe, createInitialState, gameReducer: rawReducer, patienceLeft } = require(path.join(__dirname, '../src/game/reducer.ts'));
+const gameReducer = require('./sim/arrivals.cjs').withInstantArrivals(rawReducer);
   const { parseGame, serializeGame } = require(path.join(__dirname, '../src/game/save.ts'));
   const { decodeSaveCode, encodeSaveCode } = require(path.join(__dirname, '../src/game/saveCode.ts'));
   const { ARRIVAL_LINES, kindOf } = require(path.join(__dirname, '../src/game/customers.ts'));

@@ -1,7 +1,8 @@
 /* Reducer-level FIFO checks, including legacy saves and automatic order taking. */
 const assert = require('node:assert/strict');
 const { src } = require('./sim/load.cjs');
-const { createInitialState, gameReducer: R, frontSlot, queueSlots, canServe, patienceLeft } = src('game/reducer.ts');
+const { createInitialState, gameReducer: rawReducer, frontSlot, queueSlots, canServe, patienceLeft } = src('game/reducer.ts');
+const R = require('./sim/arrivals.cjs').withInstantArrivals(rawReducer);
 const { serializeGame, parseGame } = src('game/save.ts');
 const { layoutCounter, queuePosition } = src('counter/layout.ts');
 const { behindCounterForeground } = src('counter/foreground.ts');

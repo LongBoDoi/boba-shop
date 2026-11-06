@@ -1,7 +1,9 @@
 /* A bot that plays whole shifts through the shipped gameReducer. Rules are the game's; only the
  * human's timing and slips are modelled, and every such number is in PROFILES / MACHINE below. */
 const { src } = require('./load.cjs');
-const { canCarryOut, canExtend, canServe, createInitialState, frontSlot, gameReducer: R, patienceLeft } = src('game/reducer.ts');
+const { canCarryOut, canExtend, canServe, createInitialState, frontSlot, gameReducer: rawReducer, patienceLeft } = src('game/reducer.ts');
+// Headless service simulation: visual travel timing is covered by browser tests.
+const R = require('./arrivals.cjs').withInstantArrivals(rawReducer);
 const { kindOf } = src('game/customers.ts');
 const { patienceFor, payoutFor, starsFor } = src('game/rules.ts');
 const { drinkPrice, evaluateDrink } = src('game/orders.ts');

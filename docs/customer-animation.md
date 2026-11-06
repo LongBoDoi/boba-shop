@@ -1,45 +1,67 @@
 # Animated cat customers
 
-The counter uses an articulated version of the same cats shown in the title, order cards and
-regular book. No new raster art or background repainting is involved.
+The counter uses articulated cats in the café palette. The source room paintings are unchanged.
 
-- `art/character.ts` exposes isolated shadow, tail, legs, torso, arms and head layers. Portraits
-  still compose the full illustration; heads and shirts also have rear views for departures.
-- `counter/CatFigure.ts` rasterizes layers once at the device density and moves their pivots each
-  frame. Only a mood or blink changes the head texture. All layers remain owned by the customer's
-  identity in `TextureBank`; there are no frame-by-frame SVG builds or texture uploads.
-- `counter/catMotion.ts` coordinates opposing steps and arm swings, body weight transfer and
-  head follow-through. Idle cats breathe, glance around, rest a paw and swish their tails on
-  different schedules. Impatient cats swish more briskly. Taking an order triggers a brief nod.
-- `Stage` couples the walking state to actual arrival/queue-advance tweens. Idle motion uses
-  visual time, separately from the reducer's 150ms clock. `CounterScene` freezes both travel and
-  rig clocks on pause, opening screens and hidden documents. Offscreen idle rigs skip frame work.
-- `LeavingView` receives the existing rig on sale/timeout, preserving its pose. It reacts for
-  400ms, turns away, walks beside the queue toward the doorway over 2500ms, and fades only at the
-  door. A served drink rides the raised paw. Visual departures survive the shorter reducer event;
-  `Stage.sweep` retains their texture owners until the visual finishes. The last departure can
-  finish behind the results card. Resize, reset and shutdown destroy rigs and pending callbacks
-  check their lifetime before touching objects.
-- `queueDepth` inverts the queue's perspective spacing to give departing figures their floor
-  depth. Two cropped barrier overlays in `Backdrop` repeat original painting pixels at the posts'
-  floor depths, so guests can pass first in front of and then behind the gold posts and ropes.
-  The source background files are unchanged.
-- `prefers-reduced-motion` keeps idle joints still and removes limb/bob loops during travel;
-  essential position changes and blinking remain.
+## Direction and movement
 
-Validation:
+`art/catAngles.ts` draws 24 directions at 15° intervals. Head, ears, muzzle, markings, glasses,
+clothing and pocket are projected around rounded volumes; profiles are not horizontally squeezed
+front images. `character.ts` retains the portrait illustration for cards and the regular book.
+`CatFigure` caches the directional head/torso textures and eight articulated layers by customer
+identity. A half turn takes about 500 ms, within a 650 ms turning beat. Paws shift their weight
+through the turn; limbs, tail and held drink change their overlap with the body as it turns.
 
-```sh
-npm run build
-npm test
-# With Vite running, and PLAYWRIGHT_MODULE / CHROME_PATH set if necessary:
-node tools/check-customer-animation.cjs
-node tools/check-counter-screen.cjs
-npx cap copy
-```
+`catMotion.ts` coordinates alternating steps, lifted paws, opposing arms, breathing, head
+follow-through, blinks, glances and resting poses. Walking side views also move paws along the
+travel axis. A served drink follows the same rig's raised paw. Texture owners survive until the
+visual departure finishes, then `Stage` releases them, including pending decodes.
 
-The animation browser check covers alternate paw phases, idle variation, pause during waiting
-and departure, live rig handover, the held cup's attachment, rear-view exit art, departure lifetime,
-texture release, stable idle texture counts and reduced-motion preferences. The counter check
-covers the existing service flow at seven portrait/landscape screen sizes. Capacitor copy updates
-both platforms' web assets; it does not constitute a native-device animation/performance test.
+`ArrivalWalk` reserves the door, approaches outside, pauses at the handle, opens the leaf, crosses
+the threshold, then walks slowly up the aisle. `LeavingView` reacts, turns, follows the measured
+floor waypoints in `walkway.ts`, waits for its door lease, reaches for the handle, opens the leaf,
+crosses out and walks behind the exterior wall. Neither trip fades the customer. Queue guests
+advance only in FIFO order; only the stationary front guest can be served.
+
+Waypoints stay in the central aisle, inside the rope barriers and clear of the chairs/sign.
+`queueDepth` and original-painting foreground crops put cats behind the counter and the correct
+side of the posts. Direction follows the departure path. Geometry uses the same source-coordinate
+projection in portrait and landscape layouts.
+
+## Door and scenery
+
+`Doorway` has a FIFO lease shared by arrivals and departures. The original painted leaf supplies
+25 cached hinge frames, including the exact closed panel. The frame stays stationary. The garden
+is a single stationary texture in both closed and open states: visible pane pixels retain their
+original coordinates; areas previously hidden by wood are reconstructed from adjacent pane
+samples. There is no replacement scenery or brightness change on opening.
+
+Four cropped original-room strips hide exterior actors outside the aperture, on WebGL and Canvas.
+This avoids Phaser 4's unsupported legacy GeometryMask path in WebGL. Interior actors switch to
+floor depth only after crossing the threshold; exterior actors disappear only behind the wall.
+
+## Service time and saves
+
+New customers have `atCounter: false`. Outside waiting, entering the room and advancing in the
+queue cannot consume order or preparation patience, cause timeouts, burn the overtime jar, or
+increment lost/missed counts. `Stage` sends `CUSTOMER_AT_COUNTER` only once the front guest has
+finished moving. The reducer verifies identity and FIFO position, then starts their greeting and
+full order timer (or automatic order in relaxed mode/with the board). Taking a manual order starts
+the separate preparation timer. Duplicate/stale arrivals cannot reset timers. Order, selection and
+serving actions independently reject unarrived guests.
+
+The presence flag survives saves. Older saves without the flag retain their already-arrived
+behavior. Pause/opening screens/hidden documents freeze travel and rig clocks. Reduced motion
+keeps idle poses still and suppresses limb/bob loops, while essential travel and blinking remain.
+
+## Validation
+
+`npm test` includes raw-reducer presence tests: long travel, waiting, arrival, duplicate callbacks,
+automatic orders, invalid flags and save/restore. Existing headless recipe/rules tests explicitly
+use `tools/sim/arrivals.cjs` to acknowledge immediate arrival; they do not test travel duration.
+
+With Vite running, `tools/check-customer-animation.cjs` checks the complete entry/exit sequence,
+progressive turn textures, live rig/drink handover, pause, opacity, physical arrival callback and
+cleanup on portrait and landscape screens. `SCREENSHOT_DIR` captures intermediate poses.
+`tools/check-counter-screen.cjs` covers service flow at seven viewport sizes. Run `npm run build`,
+`npm test`, `git diff --check` and `npx cap copy` for the shared web/Android/iOS bundle. Capacitor
+copy is not a native device animation or performance test.

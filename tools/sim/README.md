@@ -8,7 +8,10 @@ standard of the regression scripts.
 
 It loads the game's own TypeScript in memory the way the regression scripts do (`load.cjs`, which
 finds the repo root from its own path), so **the rules, arrivals, timeouts, prices and tips are the
-shipped `gameReducer`**. Only the human is modelled.
+shipped `gameReducer`**. The headless bot uses `arrivals.cjs` to acknowledge physical arrival
+immediately for the front guest; it measures service mechanics, not the animated journey. Travel
+and patience gating are covered separately by `check-customer-presence.cjs` and the browser
+animation check. Historical throughput therefore excludes the new walking time.
 
 ```bash
 node tools/sim/sanity.cjs        # 2,280 shifts; the accounting error, should stay under ~1%, and throws if the books disagree

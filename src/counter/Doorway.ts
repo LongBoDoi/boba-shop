@@ -8,8 +8,7 @@ const FRAMES = 24;
 /** Shared hinged door. FIFO leases prevent two cats walking through each other in the opening. */
 export class Doorway {
   readonly placement;
-  readonly outsideMask: Phaser.Display.Masks.GeometryMask;
-  private maskShape: Phaser.GameObjects.Graphics;
+  private walls: Phaser.GameObjects.Image[] = [];
   private garden: Phaser.GameObjects.Image;
   private leaf: Phaser.GameObjects.Image;
   private keys: string[] = [];
@@ -19,8 +18,6 @@ export class Doorway {
   private target = 0;
   private closing = false;
   private shown = -1;
-  private closedKey: string;
-  private outsideKey: string;
 
   constructor(private scene: Phaser.Scene, layout: CounterLayout) {
     this.placement = doorPlacement(layout);
@@ -28,36 +25,31 @@ export class Doorway {
     const source = scene.textures.get(tex(COUNTER_ROOMS[layout.room.orientation].image)).getSourceImage() as HTMLImageElement;
     const prefix = `counter:door:${layout.room.orientation}`;
     const backgroundKey = `${prefix}:outside`;
-    this.closedKey = `${prefix}:closed`;
-    this.outsideKey = backgroundKey;
-    if (!scene.textures.exists(this.closedKey)) {
-      const original = document.createElement('canvas'); original.width = art.width; original.height = art.height;
-      original.getContext('2d')!.drawImage(source, art.x, art.y, art.width, art.height, 0, 0, art.width, art.height);
-      scene.textures.addCanvas(this.closedKey, original);
-    }
     if (!scene.textures.exists(backgroundKey)) {
       const canvas = document.createElement('canvas'); canvas.width = art.width; canvas.height = art.height;
       const c = canvas.getContext('2d')!;
-      // Join the original unobstructed garden panes behind the hinged leaf. Closed doors use
-      // an exact source crop, so the room does not acquire a blur or a different window design.
-      const total = art.panes.reduce((sum, pane) => sum + pane[1], 0);
-      for (const side of [0, 1]) {
-        let y = 0;
-        const [column, w] = art.columns[side];
-        for (const [top, h] of art.panes) {
-          const height = h / total * art.height;
-          c.drawImage(source, art.x + side * art.width / 2 + column, art.y + top, w, h,
-            side * art.width / 2, y, art.width / 2, height + .5);
-          y += height;
-        }
+      c.drawImage(source, art.x, art.y, art.width, art.height, 0, 0, art.width, art.height);
+      const original = c.getImageData(0, 0, art.width, art.height), result = c.getImageData(0, 0, art.width, art.height);
+      const panes = [0, art.width / 2].flatMap(offset => art.columns.flatMap(([x, w]) =>
+        art.panes.map(([y, h]) => ({ x: Math.ceil(x + offset), y, right: Math.floor(x + offset + w - 1), bottom: y + h - 1 }))));
+      // Preserve every visible garden pixel at its original coordinate. Only the wood/handle
+      // occlusions are reconstructed, once, from adjacent glass samples. This ONE stationary
+      // garden is used for both open and closed doors; there is no scenery/lighting swap.
+      for (let y = 0; y < art.height; y++) for (let x = 0; x < art.width; x++) {
+        if (panes.some(r => x >= r.x && x <= r.right && y >= r.y && y <= r.bottom)) continue;
+        const nearest = panes.map(r => {
+          const px = Math.max(r.x, Math.min(r.right, x)), py = Math.max(r.y, Math.min(r.bottom, y));
+          return { at: (py * art.width + px) * 4, distance: (px - x) ** 2 + (py - y) ** 2 };
+        }).sort((a, b) => a.distance - b.distance).slice(0, 4);
+        const weights = nearest.map(n => 1 / Math.max(1, n.distance) ** 2), total = weights.reduce((a, b) => a + b, 0);
+        const at = (y * art.width + x) * 4;
+        for (let channel = 0; channel < 3; channel++) result.data[at + channel] = nearest.reduce((sum, n, i) => sum + original.data[n.at + channel] * weights[i], 0) / total;
       }
-      const light = c.createLinearGradient(0, 0, 0, art.height);
-      light.addColorStop(0, '#ffe6b71a'); light.addColorStop(.8, '#fff5dc22'); light.addColorStop(1, '#f4d6a65c');
-      c.fillStyle = light; c.fillRect(0, 0, art.width, art.height);
+      c.putImageData(result, 0, 0);
       scene.textures.addCanvas(backgroundKey, canvas);
     }
     this.keys.push(backgroundKey);
-    this.garden = scene.add.image(p.x, p.y, this.closedKey).setOrigin(0).setDisplaySize(p.width, p.height).setDepth(1);
+    this.garden = scene.add.image(p.x, p.y, backgroundKey).setOrigin(0).setDisplaySize(p.width, p.height).setDepth(1);
     const panel = document.createElement('canvas'); panel.width = art.width; panel.height = art.height;
     const c = panel.getContext('2d')!; c.drawImage(source, art.x, art.y, art.width, art.height, 0, 0, art.width, art.height);
     const half = art.width / 2;
@@ -66,7 +58,7 @@ export class Doorway {
       for (const [column, w] of art.columns) {
         const x = offset + column;
         c.clearRect(x, y, w, h);
-        c.fillStyle = '#fff7d91c'; c.fillRect(x, y, w, h);
+
       }
     }
     for (let i = 0; i <= FRAMES; i++) {
@@ -76,8 +68,9 @@ export class Doorway {
       const ctx = canvas.getContext('2d')!;
       ctx.drawImage(panel, half, 0, half, art.height, half, 0, half, art.height);
       const angle = i / FRAMES * Math.PI * .44, squeeze = Math.cos(angle), forward = Math.sin(angle);
-      // Affine vertical strips give the painted leaf real perspective on the Canvas renderer.
-      for (let x = 0; x < half; x++) {
+      // Bake the painted leaf into perspective frames for the WebGL/Canvas texture cache.
+      if (i === 0) ctx.drawImage(panel, 0, 0);
+      else for (let x = 0; x < half; x++) {
         const depth = x / half * forward;
         ctx.drawImage(panel, x, 0, 1, art.height, x * squeeze, depth * 8,
           squeeze + .55, art.height + depth * 25);
@@ -91,10 +84,14 @@ export class Doorway {
     }
     this.leaf = scene.add.image(p.x, p.y, `${prefix}:0`).setOrigin(0)
       .setDisplaySize(p.width, (art.height + 45) * layout.room.scale).setDepth(3);
-    this.maskShape = scene.make.graphics({ x: 0, y: 0 });
-    this.maskShape.fillStyle(0xffffff).fillRect(p.x + 2 * layout.room.scale, p.y, p.width - 4 * layout.room.scale, p.height);
-    this.outsideMask = this.maskShape.createGeometryMask();
-    this.keys.push(this.closedKey);
+    // Opaque room strips hide exterior actors outside the aperture on WebGL and Canvas alike.
+    // They reuse the original texture; no unsupported GeometryMask or extra offscreen filter.
+    const crops = [[0, 0, art.x, source.height], [art.x + art.width, 0, source.width - art.x - art.width, source.height],
+      [art.x, 0, art.width, art.y], [art.x, art.y + art.height, art.width, source.height - art.y - art.height]];
+    this.walls = crops.map(([x, y, width, height]) => scene.add.image(layout.room.x, layout.room.y,
+      tex(COUNTER_ROOMS[layout.room.orientation].image)).setOrigin(0).setDisplaySize(layout.room.width, layout.room.height)
+      .setCrop(x, y, width, height).setDepth(2.5));
+
   }
 
   request(id: number) {
@@ -117,11 +114,12 @@ export class Doorway {
     const frame = Math.round(this.opening * FRAMES);
     if (frame !== this.shown) {
       this.shown = frame; this.leaf.setTexture(this.keys[frame + 1]);
-      this.garden.setTexture(frame === 0 ? this.closedKey : this.outsideKey);
+
     }
   }
   destroy() {
-    this.garden.destroy(); this.leaf.destroy(); this.outsideMask.destroy(); this.maskShape.destroy();
+    this.garden.destroy(); this.leaf.destroy();
+    for (const wall of this.walls) wall.destroy();
     for (const key of this.keys) this.scene.textures.remove(key);
   }
 }

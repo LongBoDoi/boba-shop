@@ -15,7 +15,8 @@ require.extensions['.ts'] = (module, filename) => {
 };
 
 try {
-  const { createInitialState, gameReducer, NO_OVERTIME, suspendedShift } = require(path.join(__dirname, '../src/game/reducer.ts'));
+  const { createInitialState, gameReducer: rawReducer, NO_OVERTIME, suspendedShift } = require(path.join(__dirname, '../src/game/reducer.ts'));
+const gameReducer = require('./sim/arrivals.cjs').withInstantArrivals(rawReducer);
   const { parseGame, serializeGame, SAVE_VERSION } = require(path.join(__dirname, '../src/game/save.ts'));
   const { getDayConfig } = require(path.join(__dirname, '../src/game/levels.ts'));
   const { dayNews, OVERTIME_MAX_ROUNDS } = require(path.join(__dirname, '../src/game/rules.ts'));

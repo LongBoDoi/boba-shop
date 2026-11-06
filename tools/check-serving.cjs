@@ -15,7 +15,8 @@ require.extensions['.ts'] = (module, filename) => {
 };
 
 try {
-  const { canAfford, canCarryOut, canServe, createInitialState, gameReducer } = require(path.join(__dirname, '../src/game/reducer.ts'));
+  const { canAfford, canCarryOut, canServe, createInitialState, gameReducer: rawReducer } = require(path.join(__dirname, '../src/game/reducer.ts'));
+const gameReducer = require('./sim/arrivals.cjs').withInstantArrivals(rawReducer);
   const { drinkPrice, evaluateDrink, generateOrder } = require(path.join(__dirname, '../src/game/orders.ts'));
   const { createRng } = require(path.join(__dirname, '../src/game/random.ts'));
   const { getDayConfig, describeUnlocks } = require(path.join(__dirname, '../src/game/levels.ts'));

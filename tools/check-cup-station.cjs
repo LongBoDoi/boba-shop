@@ -8,7 +8,8 @@ require.extensions['.ts'] = (module, filename) => module._compile(ts.transpileMo
 
 try {
   const { CUP_SIZES, EMPTY_DRINK } = require('../src/game/ingredients.ts');
-  const { createInitialState, gameReducer } = require('../src/game/reducer.ts');
+  const { createInitialState, gameReducer: rawReducer } = require('../src/game/reducer.ts');
+const gameReducer = require('./sim/arrivals.cjs').withInstantArrivals(rawReducer);
   const { getDayConfig } = require('../src/game/levels.ts');
   const { generateOrder, evaluateDrink, drinkPrice } = require('../src/game/orders.ts');
   const { createRng } = require('../src/game/random.ts');

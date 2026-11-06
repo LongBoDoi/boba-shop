@@ -213,7 +213,7 @@ export function parseGame(json: string | null | undefined): GameState | null {
   // Only a customer whose order has been taken can be the selected one. If that customer has since
   // gone, the next tick picks whoever has been waiting longest for their drink.
   const selected = int(save.selectedSlot, 0, slots.length - 1);
-  const selectedSlot = selected !== null && selected === frontSlot(slots) && slots[selected]?.status === 'ordered' ? selected : null;
+  const selectedSlot = selected !== null && selected === frontSlot(slots) && slots[selected]?.status === 'ordered' && slots[selected]?.atCounter !== false ? selected : null;
 
   return {
     phase,
@@ -422,6 +422,7 @@ function parseCustomer(raw: unknown, regulars: GameState['regulars']): Customer 
   const orderPatienceMs = num(value.orderPatienceMs, 1);
   const patienceMs = num(value.patienceMs, 1);
   const status = pick(value.status, ['requesting', 'ordered'] as const);
+  if (value.atCounter !== undefined && typeof value.atCounter !== 'boolean') return null;
   const look = parseLook(value.look);
   const order = parseDrink(value.order);
   // Null until the order is taken, so an absent one is correct rather than missing.
@@ -453,6 +454,7 @@ function parseCustomer(raw: unknown, regulars: GameState['regulars']): Customer 
     orderPatienceMs,
     orderedAt,
     patienceMs,
+    ...(value.atCounter === undefined ? {} : { atCounter: value.atCounter as boolean }),
     ...(lateRound === undefined ? {} : { lateRound }),
     ...(regularId === undefined ? {} : { regularId, ...(recall === undefined ? {} : { recall }) }),
     // Last, because a change of mode is what adds it: this is the order the reducer's copy has them in.

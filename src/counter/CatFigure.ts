@@ -19,10 +19,9 @@ export class CatFigure {
   private alive = true;
   private loaded = false;
   private mood: Mood = 'happy';
-  private rear = false;
   private facing = 0;
   private facingTarget = 0;
-  private facePart: 'head' | 'profile' | 'back' = 'head';
+  private drawAngle = 0;
   private reaching = 0;
   private reachTarget = 0;
   private blinking = false;
@@ -62,19 +61,22 @@ export class CatFigure {
       if (!this.alive || keys.some(key => !key)) return;
       this.loaded = true; this.root.setVisible(true); this.refreshFace();
     });
-    // Prepare the turned-away silhouette once, before the customer needs to leave.
-    void this.texture('back', mood); void this.texture('torsoBack', mood);
-    void this.texture('profile', mood);
+    // Cache a complete turntable before the customer starts walking.
+    for (let angle = 0; angle < 360; angle += 15) {
+      void this.texture('head', mood, false, angle);
+      void this.texture('torso', mood, false, angle);
+    }
     void this.texture('head', mood, true);
   }
 
-  private texture(part: CatPart, mood = this.mood, blinking = false) {
+  private texture(part: CatPart, mood = this.mood, blinking = false, angle = this.drawAngle) {
     const { charWidth, charHeight } = this.ctx.layout.metrics;
+    const yaw = part === 'head' || part === 'torso' ? angle : 0;
     const face = part === 'head' ? `:${mood}:${blinking}` : '';
     const owner = ownerOf(this.customer);
-    const key = `${owner}:rig:${part}${face}:${charWidth.toFixed(2)}`;
+    const key = `${owner}:rig:${part}:${yaw}${face}:${charWidth.toFixed(2)}`;
     return this.ctx.bank.get(owner, key, () => characterSvg(this.customer.look,
-      { mood, blinking, width: charWidth, fullBody: true, part }), charWidth, charHeight);
+      { mood, blinking, width: charWidth, fullBody: true, part, yaw }), charWidth, charHeight);
   }
 
   setMood(mood: Mood) {
@@ -86,7 +88,14 @@ export class CatFigure {
   setWalking(walking: boolean) { this.walkTarget = walking ? 1 : 0; }
   acknowledge() { this.reaction = 650; }
   holdDrink() { this.holding = true; }
-  setFacing(degrees: number) { this.facingTarget = degrees; }
+  setFacing(degrees: number) {
+    if (Math.abs((degrees - this.facingTarget) % 360) < .01) return;
+    let difference = (degrees - this.facing) % 360;
+    if (difference > 180) difference -= 360;
+    if (difference < -180) difference += 360;
+    this.facingTarget = this.facing + difference;
+    for (let angle = 0; angle < 360; angle += 15) void this.texture('head', this.mood, false, angle);
+  }
   reachDoor(reaching: boolean) { this.reachTarget = reaching ? 1 : 0; }
 
   faceAway(away: boolean) {
@@ -95,7 +104,7 @@ export class CatFigure {
 
   private refreshFace() {
     const request = ++this.faceRequest;
-    void this.texture(this.facePart, this.mood, this.blinking).then(key => {
+    void this.texture('head', this.mood, this.blinking).then(key => {
       if (this.alive && key && request === this.faceRequest) this.joints.head.setTexture(key).setDisplaySize(100, 176);
     });
   }
@@ -104,16 +113,24 @@ export class CatFigure {
   update(delta: number, reduced = false) {
     if (!this.alive || !this.loaded) return;
     const dt = Math.min(delta, 50);
-    this.facing += Math.max(-dt * .145, Math.min(dt * .145, this.facingTarget - this.facing));
+    this.facing += Math.max(-dt * .36, Math.min(dt * .36, this.facingTarget - this.facing));
     this.reaching += (this.reachTarget - this.reaching) * (1 - Math.exp(-dt / 180));
-    const yaw = Math.abs(this.facing), rear = yaw > 125;
-    const facePart = rear ? 'back' : yaw > 48 ? 'profile' : 'head';
-    if (facePart !== this.facePart) { this.facePart = facePart; this.refreshFace(); }
-    if (rear !== this.rear) {
-      this.rear = rear;
-      void this.texture(rear ? 'torsoBack' : 'torso').then(key => {
-        if (this.alive && this.rear === rear && key) this.joints.torso.setTexture(key).setDisplaySize(100, 176);
+    const angle = ((Math.round(this.facing / 15) * 15) % 360 + 360) % 360;
+    if (angle !== this.drawAngle) {
+      this.drawAngle = angle; this.refreshFace();
+      void this.texture('torso', this.mood, false, angle).then(key => {
+        if (this.alive && this.drawAngle === angle && key) this.joints.torso.setTexture(key).setDisplaySize(100, 176);
       });
+      const near = Math.sin(this.facing * Math.PI / 180) > 0 ? 'rightArm' : 'leftArm';
+      const far = near === 'leftArm' ? 'rightArm' : 'leftArm';
+      this.root.moveTo(this.joints[far], 2);
+      this.root.moveTo(this.joints[near], this.root.getIndex(this.joints.head));
+      this.root.bringToTop(this.joints.head);
+      const yaw = this.facing * Math.PI / 180;
+      // The far paw and its drink pass BEHIND the body during a turn, never across its back.
+      if (19 * Math.sin(yaw) + 10 * Math.cos(yaw) < 0) this.root.moveTo(this.hand, this.root.getIndex(this.joints.torso));
+      else this.root.bringToTop(this.hand);
+      this.root.moveTo(this.joints.tail, Math.cos(yaw) < -.3 ? this.root.getIndex(this.joints.head) : 1);
     }
     this.elapsed += dt;
     this.walking += (this.walkTarget - this.walking) * (1 - Math.exp(-dt / 110));
@@ -129,24 +146,29 @@ export class CatFigure {
     const pose = catPose(reduced ? 0 : this.elapsed, this.stride, reduced ? 0 : this.walking,
       this.personality, this.mood === 'angry', reduced ? 0 : this.reaction / 650);
     const j = this.joints;
-    const turnWidth = .62 + .38 * Math.abs(Math.cos(this.facing * Math.PI / 180));
+    const yaw = this.facing * Math.PI / 180, cos = Math.cos(yaw), sin = Math.sin(yaw);
     const set = (part: Joint, dx: number, dy: number, angle: number, sy = 1) => {
       const [x, y] = PIVOTS[part];
       // setDisplaySize preserves the device-density raster scale while joints move in art units.
-      j[part].setPosition(50 + (x + dx - 50) * turnWidth, y + dy).setAngle(angle).setDisplaySize(100 * turnWidth, 176 * sy);
+      const articulated = part === 'leftArm' || part === 'rightArm' || part === 'leftLeg' || part === 'rightLeg' || part === 'tail';
+      const depth = part === 'tail' ? -19 : part.includes('Leg') ? 2 : 0;
+      const projectedX = articulated ? 50 + (x - 50) * cos - depth * sin : x;
+      j[part].setPosition(projectedX + dx, y + dy).setAngle(angle).setDisplaySize(100, 176 * sy);
     };
     set('torso', pose.bodyX, pose.bodyY, pose.bodyAngle, pose.breath);
     set('head', pose.bodyX + pose.headX, pose.bodyY + pose.headY, pose.headAngle, pose.headScaleY);
     set('leftArm', pose.bodyX, pose.bodyY, pose.leftArm * (1 - this.reaching) - 145 * this.reaching);
     set('rightArm', pose.bodyX, pose.bodyY, this.holding ? -23 + pose.rightArm * .12 : pose.rightArm);
-    set('leftLeg', 0, -pose.leftLift, pose.leftLeg);
-    set('rightLeg', 0, -pose.rightLift, pose.rightLeg);
+    const turning = Math.abs(this.facingTarget - this.facing) > 1 ? 1 : 0;
+    const pivot = Math.sin(yaw * 2) * turning;
+    const sideStep = Math.sin(this.stride) * this.walking * sin * 5;
+    set('leftLeg', sideStep, -pose.leftLift - Math.max(0, pivot) * 3, pose.leftLeg + pivot * 4);
+    set('rightLeg', -sideStep, -pose.rightLift - Math.max(0, -pivot) * 3, pose.rightLeg - pivot * 4);
     set('tail', pose.bodyX, pose.bodyY, pose.tail);
-    j.head.setFlipX(this.facePart === 'profile' && this.facing < 0);
     j.shadow.setDisplaySize(100 * pose.shadow, 176);
     // The cup rides the raised paw, never the independently swinging body image.
     const a = Phaser.Math.DegToRad(this.holding ? -23 + pose.rightArm * .12 : pose.rightArm);
-    this.hand.setPosition(50 + (19 + pose.bodyX + 8 * Math.cos(a) - 28 * Math.sin(a)) * turnWidth,
+    this.hand.setPosition(50 + 19 * cos + pose.bodyX + 8 * Math.cos(a) - 28 * Math.sin(a),
       91 + pose.bodyY + 8 * Math.sin(a) + 28 * Math.cos(a)).setAngle(this.holding ? pose.bodyAngle * .25 : 0);
   }
 

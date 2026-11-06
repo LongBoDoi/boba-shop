@@ -13,7 +13,7 @@ export class ArrivalWalk {
   constructor(private ctx: StageContext, private root: Phaser.GameObjects.Container,
     private view: CustomerView, private door: Doorway, rank: number) {
     this.rank = rank;
-    this.root.setMask(door.outsideMask).setAlpha(1).setDepth(2);
+    this.root.setData('outside', true).setAlpha(1).setDepth(2);
     this.place(door.placement.hiddenX, door.placement.outsideY, door.placement.scale * .92, true);
     this.view.figure.setFacing(-90);
   }
@@ -46,7 +46,7 @@ export class ArrivalWalk {
       const t = Math.min(1, this.elapsed / 1200);
       const feet = p.outsideY + (p.thresholdY + 26 * this.ctx.layout.room.scale - p.outsideY) * t;
       const x = p.handleX + (p.passageX - p.handleX) * Math.min(1, t * 2);
-      if (t > .42) this.root.clearMask();
+      if (t > .42) this.root.setData('outside', false);
       this.place(x, feet, p.scale * (.92 + .08 * t), t <= .42);
       if (t === 1) {
         this.door.release(id); this.aisleStart = { x, feet, scale: p.scale }; this.next('aisle');
@@ -63,7 +63,7 @@ export class ArrivalWalk {
     }
   }
   remove() {
-    this.removed = true; this.door.release(this.view.customer.id); this.root.clearMask();
+    this.removed = true; this.door.release(this.view.customer.id); this.root.setData('outside', false);
     this.view.figure.reachDoor(false);
   }
 }

@@ -54,12 +54,12 @@ export const CounterPage = memo(function CounterPage({ width, height, wide }: {
     return uiState.subscribe((ui, was) => { if (ui.pageOffset !== was.pageOffset) apply(); });
   }, [width]);
   const action = !counterReady ? 'Xin chào' : serving ? 'Trao ly' : requesting ? 'Nhận đơn' : ordered ? 'Pha chế' : 'Xin chào';
-  const detail = serving ? `Cho ${name}`
+  const detail = !counterReady ? 'Mời bạn vào quán' : serving ? `Cho ${name}`
     : requesting ? `${requesting} khách chờ` : ordered ? `${ordered} đơn đã nhận` : 'Mời bạn gọi món';
   return <div ref={root} class="counter-register-layer" style={{ width, height }}>
     {waiting && <HandoffCup key={cupId} drink={waiting} seat={handoff} />}
     <button type="button" class={`counter-register ${serving ? 'ready' : ''}`}
-      aria-label={serving ? `Trao ly cho ${name}` : requesting ? `Nhận đơn, ${requesting} khách đang chờ` : action}
+      aria-label={!counterReady ? 'Khách đang đến quầy' : serving ? `Trao ly cho ${name}` : requesting ? `Nhận đơn, ${requesting} khách đang chờ` : action}
       disabled={!running || opening || !counterReady || (!serving && !requesting && !ordered)}
       style={{ left: Math.max(0, register.x), top: register.y - Math.max(0, 44 - register.height) / 2,
         width: register.width + Math.min(0, register.x), height: Math.max(44, register.height),
