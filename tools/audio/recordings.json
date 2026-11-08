@@ -138,5 +138,15 @@
     "license": "CC0-1.0",
     "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
     "sha256": "666388c75468f435af0f511f17c16bd2281391d3ef7671c61c2ea6a9cbd5b127"
+  },
+  {
+    "id": "meow",
+    "title": "Freesound - meow-1.wav by nathan-osman",
+    "author": "nathan-osman",
+    "source": "https://freesound.org/people/nathan-osman/sounds/686775/",
+    "download": "https://cdn.freesound.org/previews/686/686775_2956624-hq.mp3",
+    "license": "CC0-1.0",
+    "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
+    "sha256": "0fac01655fa518de44ba97715892922873ba567e96462469b159c5271ccdd891"
   }
 ]

@@ -13,6 +13,7 @@ import {
 import { DayConfig, getDayConfig } from './levels';
 import { drinkPrice, evaluateDrink, generateOrder } from './orders';
 import { createRng } from './random';
+import { isMusicChoice, MusicChoice } from './music';
 import { Recall, Regular, RegularMemory, regularById, regularDue, rollUsual } from './regulars';
 import {
   burnJar,
@@ -45,7 +46,7 @@ export type CustomerStatus = 'requesting' | 'ordered';
 export type GameMode = 'standard' | 'relaxed';
 
 /**
- * How loud the shop is, as two independent halves of the mix, each 0–1.
+ * Two independent mix levels (0–1) and the background-music choice.
  *
  * This lives in game state for the same reasons `mode` does: `SET_AUDIO` can be sent from any
  * screen, `START_DAY` carries it to the next day, and it rides along in the save, so the volume a
@@ -55,19 +56,22 @@ export type GameMode = 'standard' | 'relaxed';
  * that reaches for an `AudioContext` would end that.
  */
 export interface AudioSettings {
-  /** The looping music under the screen. */
+  /** Shared background music on every screen. */
   music: number;
   /** Everything else: taps, the kitchen, the till. */
   sfx: number;
+  /** One repeated song, the whole playlist in order, or shuffled rounds. */
+  musicChoice: MusicChoice;
 }
 
 /** Music a little under the effects: it plays continuously, and they do not. */
-export const DEFAULT_AUDIO: AudioSettings = { music: 0.7, sfx: 1 };
+export const DEFAULT_AUDIO: AudioSettings = { music: 0.7, sfx: 1, musicChoice: 'cycle' };
 
-/** Volumes arrive from a save that can be hand-edited, so this is the one gate on them. */
+/** Settings arrive from hand-edited/old saves: clamp levels and recover unknown song choices. */
 export function clampAudio(audio: AudioSettings): AudioSettings {
   const level = (value: number) => (Number.isFinite(value) ? Math.min(1, Math.max(0, value)) : 0);
-  return { music: level(audio.music), sfx: level(audio.sfx) };
+  return { music: level(audio.music), sfx: level(audio.sfx),
+    musicChoice: isMusicChoice(audio.musicChoice) ? audio.musicChoice : DEFAULT_AUDIO.musicChoice };
 }
 
 export interface Customer {

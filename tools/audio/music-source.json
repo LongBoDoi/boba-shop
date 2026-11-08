@@ -1,0 +1,280 @@
+{
+  "video": "https://www.youtube.com/watch?v=rCHMqrkoyFA",
+  "title": "Two Hours of Happy Piano Music 😀",
+  "artist": "Dan Musselman",
+  "duration": 7223,
+  "sourceSha256": "4da20c4626b768bc4188cf26ed242116ea2dc0d44d271ad91d09825211be2a1a",
+  "license": "Copyright Dan Musselman; no open-content license declared in the source video",
+  "tracks": [
+    {
+      "id": "clear-skies",
+      "number": 1,
+      "title": "Clear Skies",
+      "start": 0,
+      "end": 210,
+      "bytes": 2576569,
+      "sha256": "bb576c8dbc50bfc79bf385266611d1aa73bbd3a3bf0978c3741239558b7e57de"
+    },
+    {
+      "id": "keep-it-upbeat",
+      "number": 2,
+      "title": "Keep It Upbeat",
+      "start": 210,
+      "end": 463,
+      "bytes": 3097408,
+      "sha256": "e11a47ec485cb291c29c90dfa0a3b223e3b24e1600a78c8e9dd4e93c62d01e13"
+    },
+    {
+      "id": "the-wheel",
+      "number": 3,
+      "title": "The Wheel",
+      "start": 463,
+      "end": 684,
+      "bytes": 2707807,
+      "sha256": "9b40e35bbc3c3b4205a057ed26dadf3ed4f10d08e297aa60799287ea93bde3ba"
+    },
+    {
+      "id": "morning-music",
+      "number": 4,
+      "title": "Morning Music",
+      "start": 684,
+      "end": 960,
+      "bytes": 3380243,
+      "sha256": "0a3dacb801a55f463022957dd778f3fead4a1ca8e1a7f29daf3a5254e3c16ae3"
+    },
+    {
+      "id": "dont-quit",
+      "number": 5,
+      "title": "Don’t Quit",
+      "start": 960,
+      "end": 1170,
+      "bytes": 2575158,
+      "sha256": "298ce30900cb488e0c4c10252a290adcaeb83b4e9b8b816c55883f68a5fe18a1"
+    },
+    {
+      "id": "keep-rolling",
+      "number": 6,
+      "title": "Keep Rolling",
+      "start": 1170,
+      "end": 1441,
+      "bytes": 3320531,
+      "sha256": "69cbceaeb0ba771d08f3b6d9f90b52ecd738fe6e32b7ae6e4eff239e712f5f70"
+    },
+    {
+      "id": "laid-back",
+      "number": 7,
+      "title": "Laid Back",
+      "start": 1441,
+      "end": 1650,
+      "bytes": 2561846,
+      "sha256": "9082a3bd9b3892126c1f7346eb6025e990b0edf63725c95a4f624f4f5f322e68"
+    },
+    {
+      "id": "pick-me-up",
+      "number": 8,
+      "title": "Pick Me Up",
+      "start": 1650,
+      "end": 1856,
+      "bytes": 2524043,
+      "sha256": "c0cb576b77165997f200378fee1a44512d6bb8f39b13a06dd95ff4ae66429e49"
+    },
+    {
+      "id": "things-are-good",
+      "number": 9,
+      "title": "Things Are Good",
+      "start": 1856,
+      "end": 2104,
+      "bytes": 3036501,
+      "sha256": "e60dd557de2999887515cca0459d0f5ef7162fae7b08648cc377ce1cc20066e9"
+    },
+    {
+      "id": "celebrate-the-wins",
+      "number": 10,
+      "title": "Celebrate the Wins",
+      "start": 2104,
+      "end": 2324,
+      "bytes": 2693091,
+      "sha256": "142a914f76852b46cf34739c17925e9e093a9f272036ff9092ec0aa9355a073f"
+    },
+    {
+      "id": "youve-got-this",
+      "number": 11,
+      "title": "You’ve Got This",
+      "start": 2324,
+      "end": 2581,
+      "bytes": 3145955,
+      "sha256": "6f02c223cd897590cb2b5b90dd4af2e9565d8b92e2a4ad3b7ab7cf83df0d431d"
+    },
+    {
+      "id": "take-a-break",
+      "number": 12,
+      "title": "Take a Break",
+      "start": 2581,
+      "end": 2746,
+      "bytes": 2020033,
+      "sha256": "0683c614c5be2d9769609a1cd54e46d02597e299cada675255a056977967ac7e"
+    },
+    {
+      "id": "reflection",
+      "number": 13,
+      "title": "Reflection",
+      "start": 2746,
+      "end": 3003,
+      "bytes": 3147362,
+      "sha256": "a6a560bcdec73267445b77fbe85ec684d30481f415985d772aa13bb40c6f1f23"
+    },
+    {
+      "id": "awakening",
+      "number": 14,
+      "title": "Awakening",
+      "start": 3003,
+      "end": 3298,
+      "bytes": 3615170,
+      "sha256": "7c402e5dd303f77589aab1fa94a48564f5a30a16b202fb06773a4a827d389d02"
+    },
+    {
+      "id": "triumphant",
+      "number": 15,
+      "title": "Triumphant",
+      "start": 3298,
+      "end": 3544,
+      "bytes": 3009901,
+      "sha256": "42c79f21523b6b8cb8d1be70ed6117c9881a28a055403253e9539714b436cfb0"
+    },
+    {
+      "id": "its-alright",
+      "number": 16,
+      "title": "It’s Alright",
+      "start": 3544,
+      "end": 3814,
+      "bytes": 3308199,
+      "sha256": "5335bae85c2dfefcaebd3ecea6a3ab903cff1a0e5329b7d8c79fa76a34a53b70"
+    },
+    {
+      "id": "good-times",
+      "number": 17,
+      "title": "Good Times",
+      "start": 3814,
+      "end": 4086,
+      "bytes": 3328444,
+      "sha256": "7f369eabb18e1ca6060173917c19d754c4f5bab355a0b2fb9d003ca3783518d3"
+    },
+    {
+      "id": "yes",
+      "number": 18,
+      "title": "Yes!",
+      "start": 4086,
+      "end": 4309,
+      "bytes": 2731222,
+      "sha256": "27a8602935a392e55c8c63d7c5c5e7998c5d2613c54ae6445c085a6f81a654d7"
+    },
+    {
+      "id": "sunset-vibes",
+      "number": 19,
+      "title": "Sunset Vibes",
+      "start": 4309,
+      "end": 4580,
+      "bytes": 3315163,
+      "sha256": "0bcd4919a1164173be068207ee601656647938d187f73332ef105619a66fae56"
+    },
+    {
+      "id": "helpful-people",
+      "number": 20,
+      "title": "Helpful People",
+      "start": 4580,
+      "end": 4810,
+      "bytes": 2815849,
+      "sha256": "3de6bf569277a3ecb02d94b1e97f2771924c27e9e93646fa306f4d34d15b24d2"
+    },
+    {
+      "id": "nod-to-kg",
+      "number": 21,
+      "title": "Nod to KG",
+      "start": 4810,
+      "end": 5086,
+      "bytes": 3382124,
+      "sha256": "463525363f647b6664f911ad40533f298908395007592ba3189a56a33c706add"
+    },
+    {
+      "id": "build-up",
+      "number": 22,
+      "title": "Build Up",
+      "start": 5086,
+      "end": 5328,
+      "bytes": 2963036,
+      "sha256": "7f9675db1f1123d6fc57aadd1c2ab9e5e002674bf05d3ba93a6c2f07aa12a2f0"
+    },
+    {
+      "id": "lift-off",
+      "number": 23,
+      "title": "Lift Off",
+      "start": 5328,
+      "end": 5529,
+      "bytes": 2461247,
+      "sha256": "ece12540ba0091a8602cd33a54655c6bf7614c064735dcc72c653eb76073dc50"
+    },
+    {
+      "id": "strollin",
+      "number": 24,
+      "title": "Strollin’",
+      "start": 5529,
+      "end": 5737,
+      "bytes": 2545112,
+      "sha256": "fc17994b86315663b4991e082180f992c722b81a2c2aac5a4dfddeb31490c80f"
+    },
+    {
+      "id": "victory",
+      "number": 25,
+      "title": "Victory",
+      "start": 5737,
+      "end": 5961,
+      "bytes": 2746195,
+      "sha256": "aa8443ac9200e82acdf363534e073865dbfc6c206c0c971b851a6e23f53b9bfd"
+    },
+    {
+      "id": "moving-forward",
+      "number": 26,
+      "title": "Moving Forward",
+      "start": 5961,
+      "end": 6204,
+      "bytes": 2978224,
+      "sha256": "194c3b14812037e5cd0f864a9a36845f84fbc2fe3e630f60b245e33b97924ce6"
+    },
+    {
+      "id": "figuring-things-out",
+      "number": 27,
+      "title": "Figuring Things Out",
+      "start": 6204,
+      "end": 6459,
+      "bytes": 3124496,
+      "sha256": "c13cbaa2d51cce744d741d2b907e407bc84f2ca59cf2e0943a4e52e60d1fa4d9"
+    },
+    {
+      "id": "time-out",
+      "number": 28,
+      "title": "Time Out",
+      "start": 6459,
+      "end": 6736,
+      "bytes": 3391894,
+      "sha256": "c043a0ca38368026ea851481e3db4668e17e89e0a25a8489206a3b8efb840b12"
+    },
+    {
+      "id": "struttin",
+      "number": 29,
+      "title": "Struttin’",
+      "start": 6736,
+      "end": 6985,
+      "bytes": 3050367,
+      "sha256": "1a09421f00cd77bca41c6678ff29cc786df985944b280340887296c499fc39d4"
+    },
+    {
+      "id": "goodbye-for-now",
+      "number": 30,
+      "title": "Goodbye for Now",
+      "start": 6985,
+      "end": 7223,
+      "bytes": 2733825,
+      "sha256": "9ad2adce5dae20fd8cbc359d85a7d3fbad2062fdcd370e1f329c5b1935aa6993"
+    }
+  ]
+}

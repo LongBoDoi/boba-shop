@@ -1,0 +1,113 @@
+/* The painted shop and the two main controls follow the supplied reference composition. */
+.storefront { background: #FBE3C7; isolation: isolate; }
+.storefront-heading { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.storefront-frame { position: absolute; inset: 0; container-type: inline-size; }
+.storefront-painting, .storefront-painting > img, .storefront-painting > canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; pointer-events: none; }
+.storefront-painting { overflow: hidden; background-size: cover; background-position: center; }
+.storefront-painting > canvas { opacity: 0; }
+.storefront-painting.has-still > .storefront-still, .storefront-painting.is-moving > .storefront-motion { opacity: 1; }
+.storefront-painting > img { object-fit: contain; }
+.storefront-painting.has-still > img { visibility: hidden; }
+.storefront-ambience { position: absolute; }
+.storefront-settings {
+  position: absolute;
+  right: max(calc(var(--safe-right) + 8px), 1.1vw);
+  top: max(calc(var(--safe-top) + 8px), 2.1vh);
+  width: clamp(48px, 7.3vw, 122px); aspect-ratio: .92; background: transparent;
+  border-radius: 13%; box-shadow: none; display: grid; place-items: center;
+  transform: rotate(-2deg); transition: transform 180ms ease, background 180ms ease;
+}
+.storefront-settings svg { width: 68%; height: 68%; filter: drop-shadow(1px 3px 1px #45546140); transition: transform 350ms ease; }
+.storefront-settings:hover svg { transform: rotate(30deg); }
+.storefront-settings:active { transform: rotate(-2deg) scale(.94); }
+.storefront-actions {
+  position: absolute;
+  bottom: max(calc(var(--safe-bottom) + 12px), 2vh);
+  left: 48.6%;
+  transform: translateX(-50%); width: clamp(210px, 23.5vw, 395px);
+}
+.storefront-start.btn {
+  width: 100%; min-height: 54px; height: clamp(54px, 9.5vh, 90px); padding: 5px 18px;
+  margin: 0; border: 0; border-radius: 8px; background: #FF4298;
+  box-shadow: 0 4px 0 #C9457730, inset 0 1px 0 #FFADD399;
+  transition: transform 160ms ease, background 160ms ease, box-shadow 160ms ease;
+}
+.storefront-start .btn-label { font-size: clamp(30px, 3.25vw, 54px); line-height: 1.35; text-shadow: 0 2px 0 #D73B8130; }
+.storefront-start.has-day .btn-label { font-size: clamp(20px, 2.1vw, 36px); }
+.storefront-start:hover { background: #FF55A2; box-shadow: 0 6px 0 #C9457730, inset 0 1px 0 #FFADD399; }
+.storefront-start:active { transform: translateY(2px) scale(.98); }
+.storefront-book {
+  position: absolute;
+  bottom: max(calc(var(--safe-bottom) + 14px), 2.5vh);
+  left: calc(48.6% + clamp(105px, 11.75vw, 197.5px) + 20px);
+  display: flex; align-items: center; gap: 7px; padding: 8px 13px; min-height: 44px;
+  border: 1px solid #C99C6A99; border-radius: 12px; font-size: clamp(13px, 1.15vw, 18px);
+  font-weight: 700; background: #FFF3DFEB; color: #94623D; box-shadow: 0 2px 0 #C5966240; transition: transform 160ms ease;
+}
+.storefront-book svg { width: 21px; height: 21px; }
+.storefront-book:active { transform: translateY(2px); }
+.storefront-cat { position: absolute; border-radius: 45%; }
+.storefront-cat:focus-visible { outline: 3px dashed #B77A43; outline-offset: 5px; }
+.cat-roof, .cat-baker { min-width: 44px; min-height: 44px; }
+.storefront-hello {
+  position: absolute; left: 50%; top: 20%; transform: translateX(-50%); padding: 5px 16px;
+  border: 2px solid #BC8A59; border-radius: 18px; background: #FFF9EB; color: #9B633C;
+  white-space: nowrap; font-size: clamp(13px, 1.3vw, 22px); font-weight: 700; opacity: 0; pointer-events: none;
+}
+.storefront-hello.show { animation: storefront-hello 3.5s ease both; }
+@keyframes storefront-hello { 0%, 100% { opacity: 0; } 8%, 80% { opacity: 1; } }
+/* Subtle, local illumination leaves the painted colours intact. No full-scene blur or tint. */
+.storefront-lamp {
+  position: absolute; top: 36%; width: 11%; height: 20%; opacity: .25;
+  background: radial-gradient(ellipse at 50% 0%, #FFF6D4A0, #FFE5A030 45%, transparent 72%);
+  animation: storefront-lamplight 2.4s ease-in-out infinite alternate;
+}
+.lamp-left { left: 32.7%; }.lamp-right { left: 51.9%; animation-delay: -2.1s; }
+@keyframes storefront-lamplight { to { opacity: .55; } }
+.storefront-glass { position: absolute; left: 33.5%; top: 53%; width: 20%; height: 24%; overflow: hidden; border-radius: 10% 20% 2% 2%; }
+.storefront-glass i {
+  position: absolute; inset: -20% -50%; background: linear-gradient(110deg, transparent 43%, #FFFBEA00 45%, #FFFBEA40 49%, #FFFBEA00 54%, transparent 57%);
+  transform: translateX(-90%); animation: storefront-shine 5.5s ease-in-out infinite;
+}
+@keyframes storefront-shine { 0%, 12% { transform: translateX(-90%); opacity: 0; } 24%, 50% { opacity: .85; } 78%, 100% { transform: translateX(90%); opacity: 0; } }
+.storefront-door-light { position: absolute; left: 68%; top: 34%; width: 10%; height: 48%; background: linear-gradient(135deg, transparent 20%, #FFF9DE30 38%, transparent 56%); animation: storefront-doorlight 4.4s ease-in-out infinite alternate; }
+@keyframes storefront-doorlight { to { opacity: .25; transform: translateX(6%); } }
+.storefront-snooze { position: absolute; color: #92562F; font-size: 1.5cqw; font-weight: 800; opacity: 0; animation: storefront-snooze 2.7s ease-out infinite; pointer-events: none; }
+.snooze-one { left: 87.7%; top: 52%; }.snooze-two { left: 88%; top: 52%; animation-delay: -.9s; }
+.snooze-three { left: 11.1%; top: 81%; animation-delay: -1.6s; }
+@keyframes storefront-snooze { 0% { opacity: 0; transform: translate(0, 0) scale(.65); } 18%, 45% { opacity: .8; } 90%, 100% { opacity: 0; transform: translate(1.4cqw, -5.5cqw) rotate(14deg) scale(1.2); } }
+.storefront-dust { position: absolute; inset: 0; }
+.storefront-dust i { position: absolute; width: .27%; aspect-ratio: 1; border-radius: 50%; background: #FFF7DA; opacity: 0; animation: storefront-dust var(--duration) ease-in-out var(--delay) infinite; }
+@keyframes storefront-dust { 0%, 100% { opacity: 0; transform: translate(0, 2cqw); } 25%, 70% { opacity: .8; } 90% { transform: translate(3.3cqw, -5.8cqw); opacity: 0; } }
+.storefront-leaf { position: absolute; left: 10%; top: -5%; width: 1.5%; height: auto; opacity: 0; animation: storefront-leaf 7.5s linear infinite; }
+.leaf-1 { left: 21%; width: 1.2%; animation-delay: -2s; animation-duration: 8.5s; }
+.leaf-2 { left: 6%; width: 1.1%; animation-delay: -4s; animation-duration: 9s; }
+.leaf-3 { left: 16%; width: 1.3%; animation-delay: -5.5s; animation-duration: 8s; }
+.leaf-4 { left: 24%; width: 1%; animation-delay: -6.8s; animation-duration: 10s; }
+@keyframes storefront-leaf {
+  0% { opacity: 0; transform: translate(0, 0) rotate(-25deg); } 7% { opacity: .9; }
+  27% { transform: translate(5cqw, 14cqw) rotate(85deg); } 52% { transform: translate(1cqw, 30cqw) rotate(-65deg); }
+  80% { opacity: .8; transform: translate(7cqw, 46cqw) rotate(110deg); } 98%, 100% { opacity: 0; transform: translate(5cqw, 60cqw) rotate(165deg); }
+}
+.is-covered .storefront-painting * { animation-play-state: paused; }
+.storefront-settings:focus-visible, .storefront-start:focus-visible, .storefront-book:focus-visible { outline: 3px solid #82532F; outline-offset: 5px; }
+/* Portrait has its own garden composition; controls remain separate from the art. */
+@media (max-aspect-ratio: 1/1) {
+  .storefront-actions { left: 50%; bottom: calc(var(--safe-bottom) + 20px); width: min(72%, 340px); }
+  .storefront-start.btn { height: 64px; border-radius: 12px; }.storefront-start .btn-label { font-size: 32px; }
+  .storefront-start.has-day .btn-label { font-size: 26px; }
+  .storefront-settings { right: calc(var(--safe-right) + 4px); top: calc(var(--safe-top) + 8px); width: 48px; }
+  .storefront-book { left: 50%; translate: -50% 0; bottom: calc(var(--safe-bottom) + 100px); font-size: 16px; }
+}
+@media (max-height: 500px) and (min-aspect-ratio: 1/1) {
+  .storefront-actions { width: clamp(180px, 25vw, 260px); }
+  .storefront-start.btn { height: 49px; min-height: 44px; }.storefront-start .btn-label { font-size: 28px; }
+  .storefront-start.has-day .btn-label { font-size: 22px; }
+  .storefront-book { left: calc(48.6% + clamp(90px, 12.5vw, 130px) + 16px); padding: 4px 10px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .storefront-painting *, .storefront-hello.show { animation: none !important; }
+  .storefront-snooze, .storefront-leaf, .storefront-dust, .storefront-glass i { display: none; }
+  .storefront-hello.show { opacity: 1; }
+  .storefront-settings svg, .storefront-start, .storefront-book { transition: none; }
+}

@@ -1,7 +1,6 @@
-import { initAudio, playSound, setAudioSettings, setGamePaused, setMusic } from './audio/audio';
-import { MusicId } from './audio/sounds';
+import { initAudio, playSound, setAudioSettings, setGamePaused, stopGameEffects } from './audio/audio';
 import { CARRY_MS, COIN_FLIGHT_MS, COIN_START_MS } from './game/effectTiming';
-import { GameState, Outcome, Phase } from './game/reducer';
+import { GameState, Outcome } from './game/reducer';
 import { leftContent } from './game/rules';
 import { store } from './store';
 
@@ -12,7 +11,6 @@ export { playSound, setPourFill, setPouring } from './audio/audio';
  * Audio players; this is the part that watches the shop and tells it which track to play, how
  * loud, and which moments deserve a cue.
  */
-const TRACKS: Record<Phase, MusicId> = { title: 'menu', playing: 'shop', dayEnd: 'menu' };
 
 const DEPARTURE_CUE: Record<Outcome, 'serveGood' | 'serveOk' | 'serveBad' | 'leave'> = {
   perfect: 'serveGood',
@@ -31,7 +29,7 @@ export function startSound() {
     if (!previous || state.audio !== previous.audio) setAudioSettings(state.audio);
     const paused = state.phase === 'playing' && state.paused;
     if (!previous || paused !== (previous.phase === 'playing' && previous.paused)) setGamePaused(paused);
-    if (!previous || state.phase !== previous.phase) setMusic(TRACKS[state.phase]);
+    if (previous && state.phase !== previous.phase) stopGameEffects();
     if (!previous) return;
 
     if (state.phase === 'dayEnd' && (previous.phase !== 'dayEnd' || previous.day !== state.day)) playSound('dayEnd');

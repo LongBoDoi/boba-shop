@@ -12,6 +12,8 @@ const rate = 24_000;
 const ffmpeg = process.env.FFMPEG_PATH || (fs.existsSync(path.join(__dirname, 'bin/ffmpeg.exe'))
   ? path.join(__dirname, 'bin/ffmpeg.exe') : 'ffmpeg');
 const sources = require('./recordings.json');
+const onlyArg = process.argv.find((arg) => arg.startsWith('--only='));
+const only = onlyArg ? new Set(onlyArg.slice(7).split(',')) : null;
 const decoded = new Map();
 function recording(id) {
   if (decoded.has(id)) return decoded.get(id);
@@ -44,11 +46,14 @@ const cuts = {
   milk1: ['pour', 0.6, 0.5], milk2: ['pour', 1.4, 0.5],
   pourStart: ['pour', 0.45, 0.18], pourStop: ['pour', 3.15, 0.25],
   pourLoop: ['pour', 1.05, 1.7],
+  meow1: ['meow', 0, 1.02],
 };
 
 fs.mkdirSync(out, { recursive: true });
-const manifest = [];
+if (only) for (const id of only) if (!(id in cuts)) throw new Error(`Unknown clip: ${id}`);
+const manifest = only ? require('./cuts.json').filter((cut) => !only.has(cut.id)) : [];
 for (const [id, [source, start, duration]] of Object.entries(cuts)) {
+  if (only && !only.has(id)) continue;
   const original = recording(source);
   const offset = Math.round(start * rate);
   const count = Math.round(duration * rate);
@@ -105,7 +110,7 @@ fs.writeFileSync(path.join(root, 'src/audio/clips.ts'),
 fs.writeFileSync(path.join(root, 'src/assets/audio/CREDITS.md'),
   '# Recorded sound credits\n\nAll effect sources are CC0 1.0. Shipped WAVs are trimmed, filtered, mixed to mono and levelled excerpts\n' +
   'of the public high-quality MP3 previews. Original downloads, checksums and edit decisions are\n' +
-  'preserved under `tools/audio/`. Music is generated separately by `tools/make-music.cjs`.\n\n' +
+  'preserved under `tools/audio/`. The separate piano library is credited in `music/CREDITS.md`.\n\n' +
   sources.map((s) => `- **${s.id}** — [${s.author}](${s.source}), [CC0](${s.licenseUrl}).`).join('\n') + '\n');
 fs.writeFileSync(path.join(__dirname, 'audition.html'), `<!doctype html>
 <html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">

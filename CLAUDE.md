@@ -484,18 +484,18 @@ src/art/                the artwork: SVG strings (character, counter, counterTop
                         ingredientIcon, kitchenEquipment, shopBackdrop) and the measurements of the
                         painted sprites (kitchenArt.ts, toppingArt.ts, toppingGeometry.ts,
                         cupGeometry.ts, iceLayout.ts)
-src/audio/              sounds.ts (the cue catalogue and the mix), audio.ts (the engine — players,
-                        voices, fades), foley.ts (the scheduler), webAudio.ts (the players);
+src/audio/              sounds.ts (cue mix), audio.ts (lifecycle), foley.ts (effect scheduler),
+                        webAudio.ts (effect buffers), music.ts / musicPlayer.ts (shared playlist);
                         see "The shop's sound" and docs/audio.md
 src/assets/kitchen/     the painted sprites themselves — generated, see "The kitchen's artwork"
-src/assets/audio/       the sounds and the two music loops — generated, see "The shop's sound"
+src/assets/audio/       recorded Foley and 30 piano tracks — see "The shop's sound"
 src/assets/fonts/       Baloo 2, four weights, with its licence
 public/                 what makes the page installable: manifest.webmanifest, sw.js, icons/
                         — see "The page as the app"
 android/, ios/          the Capacitor projects: the same dist/ in a native shell
 capacitor.config.ts     the app id, name and web directory
 app.json                not an app config — only the EAS Hosting project the page is published to
-tools/                  make-music.cjs: music only; audio/build-foley.cjs: recorded effects
+tools/                  audio/build-music.cjs: piano chapters; audio/build-foley.cjs: recorded effects
                         cut-sheets.py: cuts the asset sheets into those sprites
                         cut-tea-jars.ps1: a whole dispenser per tea, off the kitchen sheet
                         cut-cup-design.ps1: the cup and its drink, off the cup design
@@ -508,6 +508,7 @@ tools/check-overtime.cjs      closing time, the jar and its burn, relaxed, buyin
 tools/check-waves.cjs         groups and the quiet, the line and its bench, a press, a rush saved
 tools/check-regulars.cjs      who comes and when, the usual, Hỏi lại, the streak, the book, a visit saved
 tools/check-audio.cjs   loop seams, cue wiring, and the volumes through a save
+tools/check-music.cjs   chapter hashes/containers, all 32 music choices and save migration
 tools/check-audio-engine.cjs  the scheduler and the whole browser lifecycle, against a fake context
 tools/check-prep-layout.cjs   the sideways layouts, against the painting's own band
 tools/check-backup-code.cjs   the backup code's round trip and its refusals
@@ -1227,22 +1228,29 @@ After changing anything in `rules.ts` or `getDayConfig`, run `node tools/sim/san
 
 Effects are recorded Foley: 29 edited WAV clips from 14 CC0 sources. `src/audio/clips.ts` names the
 files; `sounds.ts` defines action layers, alternate takes, buses, priorities and cooldowns;
-`foley.ts` schedules a bounded player pool, live fill for pours and cancellation; `audio.ts` is the
-lifecycle and the music crossfades. `src/sound.ts` is the only thing that watches the shop and
-decides what to play — the scenes and the UI never reach for the engine themselves.
+`foley.ts` schedules a bounded player pool, live fill for pours and cancellation; `audio.ts` owns
+lifecycle, and `music.ts` owns the shared playlist. `src/sound.ts` watches the shop and forwards
+settings and effect events. The settings card subscribes only to music status, never the clock.
 
 **Everything plays through Web Audio** (`src/audio/webAudio.ts`): one decoded `AudioBuffer` per
-clip, and a throwaway source node per cue. The obvious alternative is an `<audio>` element per
+short effect clip, and a throwaway source node per cue. The obvious alternative is an `<audio>` element per
 player — over fifty in a shift — and cycling those through pause, seek and play on every grab and
 drop is what made the game lag once sound arrived, on desktop and phone alike. Headless benchmarks
 cannot see it (their audio goes to a null device); turning both volumes to 0 on a real device is
-what found it. A runtime with no `AudioContext` gets no sound at all, says so once, and plays on —
-there is no second kind of player any more. See `docs/audio.md`.
+what found it. Long music uses one compressed media source into the same context (two only during
+a crossfade), rather than caching two hours of decoded PCM. A runtime with no `AudioContext` gets
+no sound at all, says so once, and plays on. See `docs/audio.md`.
 
 The originals and the license/checksum manifest live in `tools/audio/`. Rebuild effects with
-`node tools/audio/build-foley.cjs` (offline ffmpeg required). The two original music loops stay
-byte-identical and are built by `tools/make-music.cjs`. Open `tools/audio/audition.html` to
-audition shipped clips.
+`node tools/audio/build-foley.cjs` (offline ffmpeg required). The generated music loops are replaced
+by 30 Dan Musselman piano chapters from the requested video. `tools/audio/build-music.cjs` cuts
+them from a downloaded source against `music-source.json`; music copyright/credits are separate
+from the CC0 effects in `src/assets/audio/music/CREDITS.md`. The 84 MB AAC library loads one
+2–3.6 MB song at a time, outside startup/effect warmup. The same song continues across every
+screen, including pause/day end. Settings select one repeated song, a sequential looping playlist
+or shuffled rounds without repeats. `audio.musicChoice` migrates in old saves without changing
+`SAVE_VERSION`. Full-track fetches allow offline reuse through the existing service-worker cache;
+unplayed songs still need the network on the web. Open `tools/audio/audition.html` for effects.
 
 Keep these behaviours: the first gesture is what unlocks sound (a browser will not play before one,
 and there is no way to ask whether it will); a hidden page stops everything and lets go of the audio
@@ -1887,6 +1895,74 @@ sprites over them. Finishing uses a painted lid stack, with no moving machine or
 
 
 ## Conventions
+
+The title follows the supplied cream/caramel cat-storefront reference, with the start button at
+the bottom centre and the settings gear at the upper right. `ui/Storefront.tsx` and
+`ui/storefrontMotion.ts` animate separate transparent foliage/sign sprites and a jointed beckoning
+paw over a fixed background; never apply displacement fields to the scene or its surroundings.
+`ui/storefrontArt.ts` uses one complete v3 backdrop and restores full cup/prop silhouettes from
+that same painting. Never blend clean plates through object-shaped masks: that produces cutout
+shadows and mismatched background patches. `ui/storefrontCats.ts` animates all four transparent
+cats with anchored breathing, tail motion and a baker blink. `ui/fortuneCat.ts` uses the first four
+poses of `fortune-arm-wrist-v6.png` for one wrist bend and its exact reversed return every 1.2 seconds.
+Raised poses must show peach paw pads, with an 80 px palm comparable to the resting paw.
+The curved shoulder tucks behind the cheek at (905,138),
+keeping the endpoint hidden; never restore a flat foreleg cap standing separately on the awning.
+Paint the head/body before the waving paw, then cover only the shoulder with the native cheek
+clipped along its painted curve. Never use a rectangular shoulder edge or paint the entire head
+last: both can expose a cut through the wrist. Keep the roof cat and tail as one original sprite;
+do not extract a rectangular tail layer. The atlas's outer toe-to-wrist contour stays rounded.
+Clicking the title cats plays the recorded `meow` cue, respecting the SFX volume and mute setting.
+Do not lift/compress the whole arm or add extra palm turns, wrist twists, greeting shakes, realistic fur, detailed knuckles
+or rendered shading. The sign and three overlapping chain links share one fixed
+bracket pivot. See `ui/titleSprite.ts` for alpha cleanup and source-atlas extraction.
+`ui/title.css` adds blinks, dust, sleep letters and light. This ambient title motion was explicitly
+requested; keep unrelated UI motion calm. `storefrontLayout.ts` fits the entire original shop in
+landscape and recomposes the original facade, sign, four cats, plants and cup in portrait. Each
+subject keeps a uniform scale; do not restore whole-image cover cropping. `storefrontPortrait.ts`
+extracts the original architecture; `storefront-courtyard-v1.png` supplies only additional wall
+and paving. The original portrait cafe, including its door, case and all fixtures, shares one
+uniform transform and sits above the menu. Never stretch its height, insert glass/wood bands,
+space out pastry rows or independently enlarge door/case art. Fill the area above its roof with
+`storefront-house-roof-v3.png`, the preferred high gabled attic/roof, with peak and `fitPeakY` at y230.
+Both eave tips are shortened to x126/1408, only about 22/20 pixels past their posts. Keep the tall
+roof and current camera zoom; do not restore the low v2 pitch. The left portrait column uses the
+restored plate consistently along x320..355,y294..827 to prevent a wood-color seam at the easel patch.
+Align the roof wall edges x148/1388
+and base y900 with the cafe posts x320/1367 at y148, using one uniform scale. Both orientations
+use different designs: only portrait shows the cottage with at least 56 CSS pixels above its peak;
+landscape retains the earlier original cafe/wall composition. Never stretch either part.
+`storefrontSky.ts` supplies a blue/cream sky, clouds that translate across it and eight bird-wing
+poses; sky motion shares the scene clock, pause/reduced-motion handling and GPU/static renderer.
+Keep clouds/birds behind the roof and tree. Do not restore the full-screen striped upper wall.
+The original storefront must retain its proportions and painted details.
+The striped awning is the exception to the shared facade translation: keep its original size and
+height, but offset it 32 native pixels left so its hem is centered over the posts. Its complete
+painted scallops are extracted separately, with the old awning replaced by wall behind it.
+Fit the portrait fascia's rounded end caps to x320/1367, retaining its central artwork. Also fit
+the roof cornice end caps to x148/1388 so no old lip projects behind the shortened fascia.
+`storefront-side-garden-v2.png` adds trees, a low fence and flowering shrubs behind both sides.
+Keep its complete edge silhouettes inside wide layouts and anchor its measured alpha base to
+the doorstep. Portrait uses `storefront-corner-trees-v1.png` for integrated branch/leaf crowns on
+both sides, with trunk endings 48 CSS pixels outside the frame. `storefront-right-leaves-v1.png`
+replaces the chopped right plant only in portrait. All portrait ground props share the cafe's
+transform so the complete left pot clears the easel. Use complete atlas silhouettes and pot rims, with the cup/right
+pot and paw/front-pot pairs intact; paint the cup pair last to avoid clipping it with another pot.
+Keep the shop and foreground together; do not accept a large empty courtyard just because all
+subjects are within screen bounds. All portrait props sit at the foot of the facade, with ground
+contacts anchored to the doorstep in shop coordinates. Never position them using fractions of
+unused courtyard/viewport height: that strands them in the middle of the yard. Keep the native
+right cup/plants/paw-sign/cat/ledge arrangement under one transform and cap prop scale relative
+to the shop. Preserve the easel's original position so it matches the board baked into the facade;
+draw it ahead of left foliage to keep its lettering visible.
+Use soft ground-contact shadows for standing props. Do not restore a row of oversized pots,
+cats and signs across the paving. Keep foliage edge padding out of recomposed layouts, where it becomes a visible
+rectangle. `storefrontScene.ts` shares every subject placement between GPU and static rendering;
+reduced motion and context loss must preserve the responsive scene. Rotation resizes the existing
+renderer without restarting animation or reloading its art. Keep controls inside viewport safe
+areas, with a stacked book/start layout in portrait, and preserve the existing resume-day
+behaviour. Asset provenance, the imagegen prompt and browser checks are
+in [animated title](docs/animated-title.md).
 
 All customers are illustrated cats, drawn by `art/character.ts` for the queue, order avatars,
 regular book and title screen. Warm fur gradients, coat markings, cheek tufts, paws and curled

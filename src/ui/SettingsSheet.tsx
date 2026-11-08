@@ -1,10 +1,12 @@
-import { useState } from 'preact/hooks';
+import { useEffect, useState } from 'preact/hooks';
 
 import { shallow, useGame } from '../hooks';
 import { playSound } from '../sound';
 import { dispatch, store } from '../store';
 import { uiState } from '../ui-state';
 import { GameMode } from '../game/reducer';
+import { isMusicChoice, MusicChoice, MUSIC_TRACKS } from '../game/music';
+import { getMusicSnapshot, retryMusic, subscribeMusic } from '../audio/audio';
 import { decodeSaveCode, encodeSaveCode } from '../game/saveCode';
 import { Button } from './Button';
 
@@ -72,6 +74,7 @@ export function SettingsSheet() {
             })}
             <div class="settings-section">Âm thanh</div>
             <VolumeRow label="Nhạc nền" level={audio.music} onChange={(music) => dispatch({ type: 'SET_AUDIO', audio: { music } })} />
+            <MusicPicker choice={audio.musicChoice} />
             <VolumeRow label="Hiệu ứng" level={audio.sfx} onChange={(sfx) => dispatch({ type: 'SET_AUDIO', audio: { sfx } })} />
             <div class="settings-section">Sao lưu tiệm</div>
             <Backup />
@@ -79,6 +82,52 @@ export function SettingsSheet() {
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+/** One compact menu: two playlist modes, then every named chapter from the source video. */
+function MusicPicker({ choice }: { choice: MusicChoice }) {
+  const [playing, setPlaying] = useState(getMusicSnapshot);
+  useEffect(() => {
+    const update = () => setPlaying(getMusicSnapshot());
+    update();
+    return subscribeMusic(update);
+  }, []);
+  const track = MUSIC_TRACKS.find((item) => item.id === playing.track);
+  const status = playing.state === 'error' ? 'Chưa tải được nhạc. Thử lại khi có mạng.'
+    : playing.state === 'muted' ? 'Nhạc nền đang tắt.'
+    : playing.state === 'loading' ? `Đang tải: ${track?.title ?? 'nhạc nền'}…`
+    : playing.state === 'playing' ? `Đang phát: ${track?.title ?? ''}`
+    : 'Nhạc sẽ phát sau khi bạn chạm vào game.';
+  return (
+    <div class="settings-music">
+      <label class="settings-volume-label" for="background-music">Chọn nhạc nền</label>
+      <select id="background-music" class="settings-music-select live" value={choice}
+        onChange={(event) => {
+          const musicChoice = event.currentTarget.value;
+          if (isMusicChoice(musicChoice)) dispatch({ type: 'SET_AUDIO', audio: { musicChoice } });
+        }}>
+        <optgroup label="Phát cả danh sách">
+          <option value="cycle">Vòng lặp · Phát lần lượt 30 bài</option>
+          <option value="shuffle">Ngẫu nhiên · Trộn 30 bài</option>
+        </optgroup>
+        <optgroup label="Chọn một bài · Lặp lại bài đã chọn">
+          {MUSIC_TRACKS.map((item) => (
+            <option key={item.id} value={item.id}>
+              {String(item.number).padStart(2, '0')}. {item.title} · {Math.floor(item.duration / 60)}:{String(item.duration % 60).padStart(2, '0')}
+            </option>
+          ))}
+        </optgroup>
+      </select>
+      <div class="settings-note">{choice === 'cycle' ? 'Phát lần lượt 30 bài, rồi quay lại đầu danh sách.'
+        : choice === 'shuffle' ? 'Phát đủ 30 bài theo thứ tự ngẫu nhiên trước khi trộn lại.'
+        : 'Lặp lại bài đã chọn trên tất cả màn hình.'}</div>
+      <div class="settings-music-status settings-note" role="status" aria-live="polite">{status}</div>
+      {playing.state === 'error' && <Button label="Thử phát lại" variant="secondary" onPress={retryMusic} />}
+      <a class="settings-music-credit live" href="https://www.youtube.com/watch?v=rCHMqrkoyFA" target="_blank" rel="noopener noreferrer">
+        Piano: Dan Musselman · 30 bản nhạc
+      </a>
     </div>
   );
 }

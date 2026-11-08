@@ -317,5 +317,16 @@
     "rms": 0.08965802075513607,
     "peak": 0.6499999761581421,
     "sha256": "b43a9adc58232cc5c9615d1ca04c0d61fff651a83b65b57714b8b304336eb30d"
+  },
+  {
+    "id": "meow1",
+    "source": "meow",
+    "start": 0,
+    "duration": 1.02,
+    "durationMs": 880,
+    "mastering": "body-presence-compression-v1",
+    "rms": 0.18999989331041026,
+    "peak": 0.6462281942367554,
+    "sha256": "f51efe7dbe7720171cdf8dae9136bc9a7f23ea45c717f4ee2a5d541e88425ec1"
   }
 ]

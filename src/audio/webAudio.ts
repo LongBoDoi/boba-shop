@@ -23,8 +23,9 @@
  * - `setPlaybackRate()` moves the pitch with the speed. `shouldCorrectPitch` is accepted and
  *   ignored, because every caller here sets it false — the rate *is* the variation.
  *
- * This is the only player the game has. `audio.ts` checks for an `AudioContext` before building
- * any of it; a browser without Web Audio simply plays no sound.
+ * Short effects use this player. Long music uses `musicPlayer.ts`, feeding a compressed media
+ * source into the same context without caching album-length PCM. `audio.ts` checks for an
+ * `AudioContext` before building either; a browser without Web Audio simply plays no sound.
  */
 
 type ContextClass = typeof AudioContext;
@@ -83,6 +84,9 @@ function audio(): AudioContext | null {
 }
 
 const GESTURES = ['pointerdown', 'pointerup', 'touchstart', 'touchend', 'mousedown', 'click', 'keydown'] as const;
+
+/** Music streams into the same context, while short effects stay decoded buffers. */
+export { audio as getWebAudioContext };
 
 /** Called from the first gesture `audio.ts` sees; harmless anywhere else. */
 export function resumeWebAudio() {

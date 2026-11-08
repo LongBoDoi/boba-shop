@@ -1,9 +1,12 @@
 ﻿# Sound and music
 
-Effects use a recorded Foley bank, replacing the former procedural synthesizer. There are 29
-mono 24 kHz PCM clips (about 600 KB) edited from 14 CC0 recordings. Source credits ship with the
+Effects use a recorded Foley bank, replacing the former procedural synthesizer. There are 30
+mono 24 kHz PCM clips (about 640 KB) edited from 15 CC0 recordings. Source credits ship with the
 WAVs in [CREDITS.md](../src/assets/audio/CREDITS.md). They cover pouring, ice, a dispenser pump,
-cup contacts, spoon scrapes, paper, a door bell, coins, splashes, a bag, footsteps, drops and cream.
+cup contacts, spoon scrapes, paper, a door bell, coins, splashes, a bag, footsteps, drops, cream,
+and the title cats' greeting. That greeting uses an 880 ms excerpt of
+[nathan-osman's CC0 kitten recording](https://freesound.org/people/nathan-osman/sounds/686775/),
+with a short retrigger guard and the existing effect-volume/mute controls.
 
 ## Runtime
 
@@ -11,11 +14,14 @@ cup contacts, spoon scrapes, paper, a door bell, coins, splashes, a bag, footste
 - `src/audio/sounds.ts`: actions, alternate takes, layers, timing, levels, variation and priorities.
 - `src/audio/foley.ts`: effects scheduling, player pool, cancellation and held-pour envelopes.
 - `src/audio/audio.ts`: browser unlock, whether the page is in front, settings and music.
-- `src/audio/webAudio.ts`: the players — Web Audio, not `<audio>` elements. See "Everything
+- `src/audio/webAudio.ts`: effects players — decoded Web Audio buffers. See "Everything
   plays through Web Audio" below.
-- `src/sound.ts`: watches the shop and tells the engine the track, the volumes and the cues.
+- `src/audio/music.ts`: screen-independent playlist, shuffle rounds and crossfades.
+- `src/audio/musicPlayer.ts`: one compressed song at a time, routed into the same Web Audio mix.
+- `src/game/music.ts` and `src/audio/musicAssets.ts`: generated chapter metadata and asset URLs.
+- `src/sound.ts`: watches the shop and tells the engine the settings and the cues.
 
-Six common contacts and one stream player are warmed. Alternate takes load on demand. There
+Six common contacts, the cat greeting and one stream player are warmed. Alternate takes load on demand. There
 are at most 14 effect players plus the stream; idle players are reused, and lower/equal-priority
 voices can be replaced. Quiet UI touches cannot steal critical serving sounds. Alternate takes
 do not repeat consecutively within an action layer. Small speed and level variations sound like
@@ -41,14 +47,38 @@ Late rewind promises are invalidated before their player can be reused or remove
 Serving cues follow `state.departures`, not feedback tone: taking an order also posts good
 feedback. Arrivals and overflow are seeded from current state when restoring a saved shop.
 
-The two original music loops remain separate and byte-identical. Music loads on demand and
-crossfades with phase changes. Mixing with other audio and existing saved-volume
-migration/clamping behavior are preserved. Recording and background audio remain disabled.
+Background music is now 30 chapters of [Two Hours of Happy Piano Music](https://www.youtube.com/watch?v=rCHMqrkoyFA)
+by Dan Musselman, split at the artist's published timestamps. The two generated loops are removed.
+AAC stereo at 44.1 kHz / 96 kbps totals about 84 MB on disk, with 2–3.6 MB per song.
+The original performance and dynamics are preserved; only 15/40 ms edge ramps prevent cut clicks.
+
+Settings offer 32 choices: one named song (repeated), **Vòng lặp** (all 30 in order, wrapping),
+and **Ngẫu nhiên** (shuffled rounds without repeats, including at round boundaries). The default
+is Vòng lặp. The playing song continues across the title, kitchen, counter, pause and day-end
+screens. Selecting another named song crossfades once the new file is ready; rapid changes keep
+at most two players. Muting or hiding the page pauses immediately and returning resumes the same
+position. Pausing the game cancels effects but keeps the background music.
+
+`audio.musicChoice` rides in the existing save and backup code. Older saves keep their volumes
+and gain the default playlist; unknown choices fall back without discarding the shop. The settings
+show the current track, loading/errors and a retry button. Music needs the browser's accepted
+gesture, and a rejected first media play is retried on touchend/click.
+
+Only the active track downloads. Its compressed blob is played through a media source and gain
+node in the existing AudioContext; **music never enters the permanent decoded effects cache**.
+Full-file fetches let the service worker cache ordinary 200 responses, so previously played songs
+work offline. Unplayed songs still need a connection on the web; Capacitor packages every file.
+Object URLs, fetches, media sources and fades are released when replaced or disposed. Empty media
+elements are reused so Safari's per-element playback permission survives sequential chapter changes;
+at most two elements are used by the playlist. Nothing records or plays in the background.
+Music credits and copyright status are separate from CC0
+effects: [music/CREDITS.md](../src/assets/audio/music/CREDITS.md).
 
 ## Everything plays through Web Audio
 
-`audio.ts` hands `FoleyEngine` and the music `WebAudioPlayer`s: a decoded `AudioBuffer` per clip
-and a throwaway source node per cue.
+`audio.ts` hands `FoleyEngine` `WebAudioPlayer`s: a decoded `AudioBuffer` per short clip
+and a throwaway source node per cue. Long music uses a single media source in the same context,
+with a second only during track changes; it does not create a media pipeline per effect voice.
 
 The obvious alternative is one `HTMLAudioElement` per player, and this engine keeps a player per
 voice: twenty-one at launch, past fifty over a shift. Each is a full media pipeline, and every cue
@@ -118,8 +148,10 @@ every excerpt and output checksum. The game needs no network or Freesound accoun
 node tools/audio/build-foley.cjs
 # Optional: restore missing originals after checking CC0 on each source page.
 node tools/audio/fetch-recordings.cjs
-# Only rebuild the original music loops.
-node tools/make-music.cjs
+# Split the downloaded source audio using the checked-in chapter manifest.
+node tools/audio/build-music.cjs path/to/source.webm
+# To regenerate the chapter manifest too, pass matching yt-dlp metadata as a second argument.
+node tools/audio/build-music.cjs path/to/source.webm path/to/source.info.json
 ```
 
 Open `tools/audio/audition.html` for the shop demo, full action sounds at their game mix levels,
@@ -132,4 +164,7 @@ Run `npm run typecheck` and `npm test`. Audio checks validate source/output hash
 catalogue coverage, no orphaned synth files, the sub-1 MB effect budget, PCM format, levels,
 one-shot edges and loop seams. Scheduler checks cover alternate takes, layers, voice limits,
 priority, cooldowns, live fill, the page's own lifecycle (the gesture gate, a hidden page),
-mute/pause cancellation, stale/rejected rewind promises and resource cleanup. These checks cannot judge subjective sound quality.
+mute/pause cancellation, stale/rejected rewind promises and resource cleanup. Music checks cover
+all 30 output hashes and complete MP4 containers, chapter coverage, all 32 saved choices, legacy
+migration, sequential wrapping, shuffled rounds, repeated songs, fades, background/mute continuity,
+media autoplay rejection and late download/play races. These checks cannot judge subjective sound quality.

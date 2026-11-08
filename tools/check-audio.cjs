@@ -10,7 +10,7 @@ require.extensions['.ts'] = (module, file) => module._compile(ts.transpileModule
 }).outputText, file);
 require.extensions['.wav'] = (module, file) => { module.exports = file; };
 const { CLIPS } = require('../src/audio/clips.ts');
-const { SOUNDS, PRELOAD, MUSIC, POUR_LOOP } = require('../src/audio/sounds.ts');
+const { SOUNDS, POUR_LOOP } = require('../src/audio/sounds.ts');
 const sources = require('./audio/recordings.json');
 const cuts = require('./audio/cuts.json');
 const hash = (bytes) => crypto.createHash('sha256').update(bytes).digest('hex');
@@ -20,12 +20,11 @@ for (const source of sources) {
   assert.equal(hash(fs.readFileSync(path.join(__dirname, 'audio/recordings', source.id + '.mp3'))), source.sha256, source.id + ' original changed');
 }
 assert.equal(Object.keys(CLIPS).length, cuts.length, 'Every clip has an edit record');
-const all = [...Object.values(CLIPS).map((c) => c.module), ...Object.values(MUSIC)];
+const all = Object.values(CLIPS).map((c) => c.module);
 assert.equal(new Set(all).size, all.length, 'No duplicate asset entries');
 const folder = path.join(root, 'src/assets/audio');
 const disk = fs.readdirSync(folder, { recursive: true }).filter((f) => f.endsWith('.wav')).map((f) => path.join(folder, f));
 assert.deepEqual(disk.sort(), all.slice().sort(), 'No missing or orphaned audio, including old synth cues');
-assert.ok(Object.values(MUSIC).every((file) => !PRELOAD.includes(file)), 'Music stays outside effect warmup');
 const used = new Set();
 for (const [id, cue] of Object.entries(SOUNDS)) {
   assert.ok(cue.layers.length > 0, id + ' is empty');
@@ -50,14 +49,13 @@ for (const file of all) {
   assert.equal(bytes.readUInt16LE(22), 1);
   assert.equal(bytes.readUInt16LE(34), 16);
   assert.equal(bytes.readUInt32LE(40) + 44, bytes.length);
-  const music = Object.values(MUSIC).includes(file);
   const rate = bytes.readUInt32LE(24);
-  assert.equal(rate, music ? 16000 : 24000);
+  assert.equal(rate, 24000);
   const s = Float32Array.from({ length: (bytes.length - 44) / 2 }, (_, i) => bytes.readInt16LE(44 + i * 2) / 32767);
   const peak = s.reduce((n, x) => Math.max(n, Math.abs(x)), 0);
   assert.ok(peak > 0.03 && peak < 0.99, file + ' is silent or clipped');
   assert.ok(Math.abs(s.reduce((n, x) => n + x, 0) / s.length) < 0.02, file + ' DC offset');
-  if (!music) {
+  {
     measuredRms.set(file, rms(s, 0, s.length));
     size += bytes.length;
     const cut = cuts.find((c) => CLIPS[c.id].module === file);
@@ -66,7 +64,7 @@ for (const file of all) {
     assert.equal(Math.round(s.length / rate * 1000), cut.durationMs);
     assert.ok(s.length / rate <= 2, 'Effects stay short on mobile');
   }
-  if (music || file === POUR_LOOP.module) {
+  if (file === POUR_LOOP.module) {
     const delta = Math.sqrt(s.slice(1).reduce((n, x, i) => n + (x - s[i]) ** 2, 0) / (s.length - 1));
     assert.ok(Math.abs(s[0] - s[s.length - 1]) < delta, file + ' loop seam');
     const width = Math.round(s.length * 0.005), overall = rms(s, 0, s.length);
@@ -96,15 +94,15 @@ let state = createInitialState(99);
 assert.deepEqual(state.audio, DEFAULT_AUDIO, 'A new shop opens at the default volumes');
 
 state = gameReducer(state, { type: 'SET_AUDIO', audio: { music: 0 } });
-assert.deepEqual(state.audio, { music: 0, sfx: DEFAULT_AUDIO.sfx }, 'One volume can be set without the other');
+assert.deepEqual(state.audio, { ...DEFAULT_AUDIO, music: 0 }, 'One volume can be set without the other');
 
 state = gameReducer(state, { type: 'SET_AUDIO', audio: { sfx: 4, music: -1 } });
-assert.deepEqual(state.audio, { music: 0, sfx: 1 }, 'Out-of-range volumes are clamped rather than refused');
-assert.deepEqual(clampAudio({ music: NaN, sfx: Infinity }), { music: 0, sfx: 0 }, 'Nonsense clamps to silence');
+assert.deepEqual(state.audio, { ...DEFAULT_AUDIO, music: 0, sfx: 1 }, 'Out-of-range volumes are clamped rather than refused');
+assert.deepEqual(clampAudio({ music: NaN, sfx: Infinity }), { ...DEFAULT_AUDIO, music: 0, sfx: 0 }, 'Nonsense clamps to silence');
 
 // Carried to the next day, and over a trip to the menu and back, the way `mode` and `money` are.
 state = gameReducer(state, { type: 'SET_AUDIO', audio: { music: 0.35, sfx: 0.7 } });
-const quiet = { music: 0.35, sfx: 0.7 };
+const quiet = { ...DEFAULT_AUDIO, music: 0.35, sfx: 0.7 };
 assert.deepEqual(gameReducer(state, { type: 'START_DAY', day: 2 }).audio, quiet, 'The volumes carry to the next day');
 assert.deepEqual(
   gameReducer(gameReducer(state, { type: 'GO_TO_TITLE' }), { type: 'START_DAY', day: 1 }).audio,
@@ -132,7 +130,7 @@ const edited = JSON.parse(serializeGame(state));
 edited.audio = { music: 'loud', sfx: 99 };
 const fixed = parseGame(JSON.stringify(edited));
 assert.ok(fixed, 'A save with nonsense volumes is not thrown away over them');
-assert.deepEqual(fixed.audio, { music: DEFAULT_AUDIO.music, sfx: 1 }, 'The volumes are brought back into range');
+assert.deepEqual(fixed.audio, { ...DEFAULT_AUDIO, sfx: 1 }, 'The volumes are brought back into range');
 
 
 console.log('check-audio: '+cuts.length+' recorded clips, provenance verified, '+Math.round(size/1024)+' KB, clean loops and saved volumes.');

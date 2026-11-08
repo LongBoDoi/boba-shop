@@ -7,6 +7,7 @@ require.extensions['.ts'] = (module, file) => module._compile(ts.transpileModule
   compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 }, fileName: file,
 }).outputText, file);
 require.extensions['.wav'] = (module, file) => { module.exports = path.basename(file); };
+require.extensions['.m4a'] = require.extensions['.wav'];
 let clock = 1000, serial = 0;
 const timers = new Map();
 const original = { timeout: global.setTimeout, interval: global.setInterval, clearTimeout: global.clearTimeout, clearInterval: global.clearInterval, now: Date.now };
@@ -68,6 +69,16 @@ const live = () => players.filter((p) => !p.removed);
  * lifecycle, not a stub of the engine's own.
  */
 let contexts = [], fetched = [], decodes = 0, failing = null, docListeners = [];
+let mediaPlayers = [], blobs = new Map(), revoked = [];
+const originalBlob = { create: URL.createObjectURL, revoke: URL.revokeObjectURL };
+class FakeMedia {
+  constructor() { this.paused = true; this.loop = false; this.starts = 0; this.currentTime = 0; mediaPlayers.push(this); }
+  play() { if (this.paused) this.starts++; this.paused = false; return Promise.resolve(); }
+  pause() { this.paused = true; }
+  removeAttribute() { this.src = ''; }
+  load() {}
+  get file() { return blobs.get(this.src); }
+}
 class Param { constructor(value) { this.value = value; } }
 class FakeContext {
   constructor() {
@@ -101,17 +112,30 @@ class FakeContext {
     this.sources.push(node);
     return node;
   }
+  createMediaElementSource(media) {
+    const node = { media, out: null, connect(to) { this.out = to; }, disconnect() { this.out = null; },
+      get buffer() { return { file: media.file }; },
+      get started() { return media.starts > 0; }, get stopped() { return media.paused; },
+      get loop() { return media.loop; } };
+    (this.streams ??= []).push(node);
+    return node;
+  }
   decodeAudioData(bytes, ok) { decodes++; const buffer = { duration: 0.5, file: bytes.file }; ok(buffer); return Promise.resolve(buffer); }
 }
 
 function openPage({ webAudio = true } = {}) {
   contexts = []; fetched = []; decodes = 0; failing = null; docListeners = []; listeners = [];
+  mediaPlayers = []; blobs = new Map(); revoked = [];
+  global.Audio = FakeMedia;
+  URL.createObjectURL = (blob) => { const url = `blob:music-${blobs.size}`; blobs.set(url, blob.file); return url; };
+  URL.revokeObjectURL = (url) => revoked.push(url);
   if (webAudio) global.AudioContext = FakeContext; else delete global.AudioContext;
   global.fetch = async (uri) => {
     fetched.push(uri);
     // Each buffer remembers which file it was, so a source can be told by what it plays.
     return uri === failing ? { ok: false, status: 404 }
-      : { ok: true, arrayBuffer: async () => Object.assign(new ArrayBuffer(4), { file: uri }) };
+      : { ok: true, headers: { get: () => 'audio/mp4' }, blob: async () => ({ file: uri }),
+        arrayBuffer: async () => Object.assign(new ArrayBuffer(4), { file: uri }) };
   };
   global.document = {
     visibilityState: 'visible',
@@ -125,6 +149,8 @@ function openPage({ webAudio = true } = {}) {
 }
 function closePage() {
   delete global.AudioContext; delete global.fetch; delete global.document; delete global.window;
+  delete global.Audio;
+  URL.createObjectURL = originalBlob.create; URL.revokeObjectURL = originalBlob.revoke;
 }
 function fresh(options) {
   assert.equal(timers.size, 0, 'Previous engine left timers behind');
@@ -146,7 +172,7 @@ async function main() {
     const { WARM_CLIPS } = require('../src/audio/sounds.ts');
     assert.equal(contexts.length, 1, 'One audio context for the whole game');
     const ctx = contexts[0];
-    const sounding = () => ctx.sources.filter((n) => n.started && !n.stopped && !n.ended);
+    const sounding = () => [...ctx.sources, ...(ctx.streams ?? [])].filter((n) => n.started && !n.stopped && !n.ended);
     const playing = (file) => sounding().find((n) => n.buffer && n.buffer.file === file);
     // How many sources have ever been started. A cue that is *refused* starts none, which is
     // what the suppression rules below are read off; a cue that answers starts one or more — a
@@ -157,7 +183,7 @@ async function main() {
     assert.equal(new Set(fetched).size, fetched.length, 'Each clip is fetched once, however many voices share it');
     assert.equal(decodes, fetched.length, 'And decoded once');
 
-    engine.setMusic('menu'); engine.playSound('order'); engine.setPouring(true, 0.2);
+    engine.playSound('order'); engine.setPouring(true, 0.2);
     await settle();
     assert.equal(sounding().length, 0, 'Nothing sounds before the page has been interacted with');
     assert.ok(listeners.every((l) => l.capture), 'The unlocking listeners cannot be swallowed');
@@ -165,8 +191,10 @@ async function main() {
     assert.equal(ctx.state, 'running', 'The first gesture resumes the context');
     await advance(1000); await settle();
     assert.equal(listeners.length, 0, 'And takes the listeners off again');
-    const music = playing('music-menu.wav');
-    assert.ok(music && music.loop, 'The menu theme loops on its own buffer');
+    const music = playing('clear-skies.m4a');
+    assert.ok(music && !music.loop, 'The shared playlist starts with Clear Skies');
+    assert.ok(!fetched.some((file) => file !== 'clear-skies.m4a' && file.endsWith('.m4a')), 'Only the active song loads');
+    assert.equal(decodes, fetched.filter((file) => file.endsWith('.wav')).length, 'Music never fills the PCM effect cache');
     const pour = playing('pourLoop.wav');
     assert.ok(pour && pour.loop, 'The held pour loops');
     assert.ok(pour.playbackRate.value > 0.976, 'Held stream resonance follows elapsed fill');
@@ -204,7 +232,7 @@ async function main() {
     engine.setAudioSettings({ music: 0.5, sfx: 0 });
     const muted = begun(); await advance(250); await settle();
     assert.equal(begun(), muted, 'Muting cancels queued layers');
-    assert.ok(sounding().every((n) => n.loop), 'And silences every effect, leaving the music');
+    assert.ok(sounding().every((n) => n.buffer.file.endsWith('.m4a')), 'And silences every effect, leaving the music');
     engine.setAudioSettings({ music: 0.5, sfx: 0.8 });
 
     engine.setPouring(true, 0.1); engine.playSound('ice'); await settle();
@@ -224,14 +252,12 @@ async function main() {
     assert.equal(ctx.state, 'running', 'It takes the device back on return');
     assert.ok(!playing('pourLoop.wav'), 'No stale pour restarts on return');
 
-    engine.setMusic('shop');
+    engine.stopGameEffects();
     await advance(1200); await settle();
-    assert.ok(!playing('music-menu.wav'), 'The menu theme is faded out and let go of');
-    assert.ok(playing('music-shop.wav'), 'And the shop theme is under the shift');
+    assert.equal(playing('clear-skies.m4a'), music, 'Screen transitions keep the very same song and player');
     engine.setAudioSettings({ music: 0, sfx: 0.8 }); await advance(1200); await settle();
-    assert.ok(!playing('music-shop.wav'), 'Turning the music off releases its player');
+    assert.ok(!playing('clear-skies.m4a'), 'Turning music off pauses it immediately');
     engine.setAudioSettings({ music: 0.5, sfx: 0.8 });
-    engine.setMusic('menu');
     engine.playSound('dayEnd'); await settle();
 
     // A clip that cannot be fetched is silent, not an exception, and is not fetched again per cue.
@@ -246,6 +272,130 @@ async function main() {
     await advance(1500); await settle();
     assert.ok(ctx.gains.every((g) => !g.connected), 'Every voice is disconnected on teardown');
     assert.equal(sounding().length, 0);
+    assert.ok(mediaPlayers.every((media) => media.paused && !media.src), 'Music media pipelines are released');
+    assert.equal(revoked.length, blobs.size, 'Every compressed-track blob is released');
+    closePage();
+  }
+  // The playlist is independent of game screens. Drive real completion callbacks, not durations.
+  {
+    const { MusicEngine } = require('../src/audio/music.ts');
+    const { MUSIC_TRACKS } = require('../src/game/music.ts');
+    const { DEFAULT_AUDIO } = require('../src/game/reducer.ts');
+    let songs = [], snapshots = [];
+    class Song {
+      constructor(id) { this.id = id; this.volume = 0; this.playing = false; this.removed = false; songs.push(this); }
+      play() { if (this.playing) return; this.playing = true; this.onPlaying?.(); }
+      pause() { this.playing = false; }
+      remove() { assert.ok(!this.removed, 'Song released twice'); this.removed = true; this.playing = false; }
+      end() { this.playing = false; this.onEnded?.(); }
+    }
+    const make = () => new MusicEngine((id) => new Song(id), (s) => snapshots.push(s), () => 0.42);
+    let playlist = make();
+    playlist.setState(DEFAULT_AUDIO, false);
+    assert.equal(songs.length, 0, 'No music pipeline or download before a gesture');
+    playlist.setState(DEFAULT_AUDIO, true);
+    for (let i = 0; i < 30; i++) songs.at(-1).end();
+    assert.deepEqual(songs.map((song) => song.id), [...MUSIC_TRACKS.map((t) => t.id), MUSIC_TRACKS[0].id], 'Cycle plays all chapters then wraps');
+    playlist.dispose();
+
+    songs = []; playlist = make();
+    const shuffled = { ...DEFAULT_AUDIO, musicChoice: 'shuffle' };
+    playlist.setState(shuffled, true);
+    for (let i = 0; i < 60; i++) songs.at(-1).end();
+    for (const start of [0, 30]) assert.equal(new Set(songs.slice(start, start + 30).map((s) => s.id)).size, 30, 'No repeats within a shuffled round');
+    assert.ok(songs.every((song, i) => !i || song.id !== songs[i - 1].id), 'No adjacent repeat between shuffled rounds');
+    playlist.dispose();
+
+    songs = []; playlist = make();
+    const fixed = { ...DEFAULT_AUDIO, musicChoice: MUSIC_TRACKS[4].id };
+    playlist.setState(fixed, true);
+    const originalSong = songs[0];
+    assert.ok(originalSong.loop, 'A chosen song loops itself');
+    await advance(1000);
+    playlist.setState({ ...fixed, sfx: 0 }, true);
+    assert.equal(songs.length, 1, 'Effects settings do not restart the playlist');
+    playlist.setState({ ...fixed, music: 0 }, true);
+    assert.ok(!originalSong.playing, 'Mute pauses immediately');
+    playlist.setState(fixed, false); await advance(2000);
+    assert.ok(!originalSong.playing, 'Backgrounding cannot restart a muted song');
+    playlist.setState(fixed, true);
+    assert.equal(songs.at(-1), originalSong, 'Returning and unmuting keep the same song and position');
+    playlist.setState(shuffled, true);
+    assert.equal(songs.at(-1), originalSong, 'Changing a playlist mode preserves the song in progress');
+    for (let i = 0; i < 29; i++) songs.at(-1).end();
+    assert.equal(new Set(songs.map((song) => song.id)).size, 30, 'Entering shuffle counts the playing song as already heard');
+    playlist.dispose();
+
+    songs = []; playlist = make();
+    playlist.setState(DEFAULT_AUDIO, true);
+    const stale = songs[0].onEnded;
+    for (let i = 1; i < 8; i++) {
+      playlist.setState({ ...DEFAULT_AUDIO, musicChoice: MUSIC_TRACKS[i].id }, true);
+      assert.ok(songs.filter((s) => !s.removed).length <= 2, 'Rapid switching retains at most the current and outgoing pipeline');
+    }
+    const count = songs.length; stale();
+    assert.equal(songs.length, count, 'An old song finishing cannot advance the new selection');
+    await advance(1000);
+    assert.equal(songs.filter((s) => !s.removed).length, 1, 'The outgoing player is freed after its fade');
+    const failed = songs.at(-1);
+    failed.onError();
+    playlist.setState({ ...DEFAULT_AUDIO, musicChoice: failed.id }, false);
+    playlist.setState({ ...DEFAULT_AUDIO, musicChoice: failed.id }, true);
+    assert.equal(snapshots.at(-1).state, 'error', 'A failed download remains visible after backgrounding');
+    playlist.retry();
+    assert.equal(songs.at(-1).id, failed.id, 'Retry keeps the chosen song');
+    assert.ok(failed.removed);
+    playlist.dispose();
+    assert.ok(songs.every((s) => s.removed));
+    assert.equal(timers.size, 0, 'No playlist fades survive disposal');
+  }
+  // A track arriving after pause/teardown must never start by itself. Phones may reject the
+  // first media play even when their Web Audio context has accepted the same gesture.
+  {
+    fresh();
+    const { StreamMusicPlayer } = require('../src/audio/musicPlayer.ts');
+    let resolveLoad;
+    global.fetch = () => new Promise((resolve) => { resolveLoad = resolve; });
+    const player = new StreamMusicPlayer('late.m4a');
+    const media = mediaPlayers.at(-1);
+    player.play(); player.pause();
+    resolveLoad({ ok: true, headers: { get: () => 'audio/mp4' }, blob: async () => ({ file: 'late.m4a' }) });
+    await settle();
+    assert.equal(media.starts, 0, 'Loading after a pause cannot create ghost music');
+    const play = media.play;
+    media.play = () => Promise.reject(new DOMException('A gesture is needed', 'NotAllowedError'));
+    player.play(); await settle();
+    assert.ok(media.paused, 'A rejected autoplay stays silent');
+    media.play = play;
+    for (const listener of docListeners.filter((l) => l.type === 'touchend')) listener.fn();
+    await settle();
+    assert.equal(media.starts, 1, 'A later accepted phone gesture retries the music');
+    player.pause();
+    let resolvePlay;
+    media.play = () => new Promise((resolve) => { resolvePlay = resolve; });
+    player.play(); player.pause(); media.paused = false; resolvePlay(); await settle();
+    assert.ok(media.paused, 'A late successful play promise cannot undo a pause');
+    player.remove();
+    const disposed = new StreamMusicPlayer('removed.m4a');
+    assert.equal(mediaPlayers.at(-1), media, 'Chapter changes reuse the media element already unlocked by the player');
+    disposed.play(); disposed.remove();
+    const before = blobs.size;
+    resolveLoad({ ok: true, headers: { get: () => 'audio/mp4' }, blob: async () => ({ file: 'removed.m4a' }) });
+    await settle();
+    assert.equal(blobs.size, before, 'No blob or playback is created for a removed player');
+    global.fetch = async (uri) => ({ ok: true, headers: { get: () => 'audio/mp4' }, blob: async () => ({ file: uri }) });
+    let resolveOldPlay;
+    media.play = () => new Promise((resolve) => { resolveOldPlay = resolve; });
+    const old = new StreamMusicPlayer('old.m4a');
+    old.play(); await settle(); old.remove();
+    media.play = play;
+    const replacement = new StreamMusicPlayer('replacement.m4a');
+    replacement.play(); await settle();
+    assert.ok(!media.paused);
+    resolveOldPlay(); await settle();
+    assert.ok(!media.paused, 'An old play promise cannot pause a media element recycled for another song');
+    replacement.remove();
+    assert.ok(contexts[0].gains.every((g) => !g.connected));
     closePage();
   }
   // Scheduler: alternate real takes, playback bounds, global cap and priority pressure.
@@ -336,7 +486,7 @@ async function main() {
     const engine = fresh({ webAudio: false });
     const warns = []; const warn = console.warn; console.warn = (...a) => warns.push(a);
     const stop = engine.initAudio();
-    engine.setMusic('menu'); engine.playSound('order'); engine.setPouring(true, 0.3);
+    engine.playSound('order'); engine.setPouring(true, 0.3);
     await advance(1200);
     engine.setGamePaused(true); engine.setAudioSettings({ music: 1, sfx: 1 }); engine.setPourFill(0.8);
     engine.setGamePaused(false);

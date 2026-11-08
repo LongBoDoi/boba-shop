@@ -2,7 +2,7 @@
 
 All effect sources are CC0 1.0. Shipped WAVs are trimmed, filtered, mixed to mono and levelled excerpts
 of the public high-quality MP3 previews. Original downloads, checksums and edit decisions are
-preserved under `tools/audio/`. Music is generated separately by `tools/make-music.cjs`.
+preserved under `tools/audio/`. The separate piano library is credited in `music/CREDITS.md`.
 
 - **pour** — [ahamirikia](https://freesound.org/people/ahamirikia/sounds/710550/), [CC0](https://creativecommons.org/publicdomain/zero/1.0/).
 - **ice** — [Agonda](https://freesound.org/people/Agonda/sounds/210586/), [CC0](https://creativecommons.org/publicdomain/zero/1.0/).
@@ -18,3 +18,4 @@ preserved under `tools/audio/`. Music is generated separately by `tools/make-mus
 - **steps** — [SpliceSound](https://freesound.org/people/SpliceSound/sounds/170501/), [CC0](https://creativecommons.org/publicdomain/zero/1.0/).
 - **plop** — [3dm0nd_M](https://freesound.org/people/3dm0nd_M/sounds/380037/), [CC0](https://creativecommons.org/publicdomain/zero/1.0/).
 - **foam** — [elizagoode](https://freesound.org/people/elizagoode/sounds/181409/), [CC0](https://creativecommons.org/publicdomain/zero/1.0/).
+- **meow** — [nathan-osman](https://freesound.org/people/nathan-osman/sounds/686775/), [CC0](https://creativecommons.org/publicdomain/zero/1.0/).

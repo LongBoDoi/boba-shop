@@ -1,13 +1,9 @@
-import musicMenu from '../assets/audio/music-menu.wav';
-import musicShop from '../assets/audio/music-shop.wav';
-
 import { CLIPS, Clip } from './clips';
 
-export type SoundId = 'tap' | 'button' | 'nudge' | 'customer' | 'order' | 'leave'
+export type SoundId = 'tap' | 'button' | 'meow' | 'nudge' | 'customer' | 'order' | 'leave'
   | 'milk' | 'ice' | 'scoop' | 'sugar' | 'foam' | 'pickup' | 'cupPickup' | 'cupDown'
   | 'spill' | 'trash' | 'coin' | 'serveGood' | 'serveOk' | 'serveBad' | 'dayEnd'
   | 'pourStart' | 'pourStop';
-export type MusicId = 'menu' | 'shop';
 export type SoundBus = 'ui' | 'kitchen' | 'counter';
 export interface SoundLayer {
   clips: readonly Clip[];
@@ -32,6 +28,7 @@ const cue = (bus: SoundBus, gain: number, priority: number, voices: number, minG
 export const SOUNDS: Record<SoundId, SoundSpec> = {
   tap: cue('ui', 0.55, 0, 2, 55, layer([CLIPS.cup1], 0.8, 0, [1.12, 1.18])),
   button: cue('ui', 0.72, 0, 2, 80, layer([CLIPS.pump1, CLIPS.pump2], 0.9)),
+  meow: cue('ui', 0.78, 1, 1, 1000, layer([CLIPS.meow1], 1, 0, [1.02, 1.05])),
   nudge: cue('ui', 0.42, 1, 1, 180, layer([CLIPS.cup1], 0.8, 0, [0.85, 0.9])),
   customer: cue('counter', 0.62, 2, 2, 220, layer([CLIPS.bell1])),
   order: cue('counter', 0.68, 1, 2, 100, layer([CLIPS.paper1, CLIPS.paper2])),
@@ -56,12 +53,6 @@ export const SOUNDS: Record<SoundId, SoundSpec> = {
 };
 export const BUS_GAIN: Record<SoundBus, number> = { ui: 0.9, kitchen: 1, counter: 1 };
 export const POUR_LOOP = { ...CLIPS.pourLoop, gain: 0.72 };
-export const MUSIC: Record<MusicId, string> = {
-  menu: musicMenu,
-  shop: musicShop,
-};
-// Recorded contacts have more transient headroom than the old synth cues. Leave room for them.
-export const MUSIC_GAIN: Record<MusicId, number> = { menu: 0.45, shop: 0.32 };
 // Primary contacts warmed first; alternate clips are loaded only when chosen.
-export const WARM_CLIPS = [CLIPS.cup1, CLIPS.pump1, CLIPS.ice1, CLIPS.milk1, CLIPS.paper1, CLIPS.spoon1];
+export const WARM_CLIPS = [CLIPS.cup1, CLIPS.pump1, CLIPS.ice1, CLIPS.milk1, CLIPS.paper1, CLIPS.spoon1, CLIPS.meow1];
 export const PRELOAD = Object.values(CLIPS).map((clip) => clip.module);

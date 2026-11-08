@@ -12,6 +12,7 @@ import {
   sweetnessForPumps,
 } from './ingredients';
 import { DayConfig, getDayConfig } from './levels';
+import { isMusicChoice } from './music';
 import {
   AudioSettings,
   clampAudio,
@@ -271,6 +272,7 @@ function parseAudio(raw: unknown): AudioSettings {
   return clampAudio({
     music: level(value.music, DEFAULT_AUDIO.music),
     sfx: level(value.sfx, DEFAULT_AUDIO.sfx),
+    musicChoice: isMusicChoice(value.musicChoice) ? value.musicChoice : DEFAULT_AUDIO.musicChoice,
   });
 }
 

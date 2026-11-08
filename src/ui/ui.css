@@ -125,60 +125,8 @@ button:focus-visible { outline: 2px solid var(--primary-dark); outline-offset: 2
 }
 .loading-note { font-size: 15px; color: var(--ink-soft); }
 
-/* ------------------------------------------------------------------ Title */
+/* ------------------------------------------------------------------ Title (see title.css) */
 .title { position: absolute; inset: 0; background: var(--wall); overflow: hidden; }
-.title-awning { position: absolute; left: 0; top: 0; }
-.title-safe {
-  position: absolute;
-  inset: 0;
-  padding: var(--safe-top) var(--safe-right) var(--safe-bottom) var(--safe-left);
-  display: flex;
-}
-.title-scroll {
-  flex: 1;
-  overflow-y: auto;
-  overflow-x: hidden;
-  scrollbar-width: none;
-  -webkit-overflow-scrolling: touch;
-}
-.title-scroll::-webkit-scrollbar { display: none; }
-.title-content {
-  min-height: 100%;
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  padding: 20px;
-}
-.title-hero { flex: 1 0 auto; display: flex; flex-direction: column; align-items: center; justify-content: center; }
-.title-logo { display: flex; flex-direction: column; align-items: center; }
-.title-word { animation: rise-8 450ms var(--ease-out) both; text-align: center; }
-.title-small { font-size: 30px; line-height: 36px; font-weight: 800; color: var(--primary); }
-.title-big { font-size: 58px; line-height: 66px; font-weight: 800; color: var(--ink); text-shadow: 0 4px 0 #FFFFFF; }
-.title-subtitle { font-size: 17px; font-weight: 600; color: var(--ink-soft); }
-.title-scene { margin-top: 24px; display: flex; flex-direction: row; align-items: flex-end; gap: 6px; }
-.title-fan { margin-bottom: -4px; }
-/* The shop's mark (`tools/make-logo.py`), cut out of its painting so it stands on the wall. */
-.title-mark {
-  height: auto;
-  display: block;
-  filter: drop-shadow(0 5px 6px rgba(74, 44, 42, 0.14));
-  animation: rise-16 450ms var(--ease-out) 180ms both;
-}
-.title-card {
-  width: 100%;
-  max-width: 520px;
-  align-self: center;
-  background: var(--floor-ui);
-  border-radius: 24px;
-  padding: 20px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  border-bottom: 6px solid var(--line);
-  animation: rise-16 450ms var(--ease-out) 300ms both;
-}
-.title-step { font-size: 16px; font-weight: 600; color: var(--ink); }
-.title-start { margin-top: 8px; }
 
 @keyframes rise-8 { from { opacity: 0; transform: translateY(8px); } }
 @keyframes rise-16 { from { opacity: 0; transform: translateY(16px); } }
@@ -272,6 +220,32 @@ button:focus-visible { outline: 2px solid var(--primary-dark); outline-offset: 2
   border: 2px solid var(--line);
 }
 .settings-volume { gap: 6px; }
+.settings-music {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  padding: 12px;
+  border-radius: 18px;
+  background: var(--panel);
+  border: 2px solid var(--line);
+}
+.settings-music-select {
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
+  padding: 8px;
+  border: 2px solid var(--line);
+  border-radius: 12px;
+  background: var(--paper);
+  color: var(--ink);
+  font: inherit;
+  font-size: 14px;
+  text-overflow: ellipsis;
+}
+.settings-music-select:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+.settings-music-credit { color: var(--primary-dark); font-size: 12px; line-height: 17px; }
+.settings-music-status { overflow-wrap: anywhere; }
 .settings-note { font-size: 13px; line-height: 17px; font-weight: 600; color: var(--ink-soft); }
 .settings-code, .settings-paste {
   display: block;
@@ -911,7 +885,7 @@ button:focus-visible { outline: 2px solid var(--primary-dark); outline-offset: 2
 .wipe-badge { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; opacity: 0; }
 
 @media (prefers-reduced-motion: reduce) {
-  .title-word, .title-card, .dayend-card, .dayend-star, .dayend-row, .card-in, .overlay-dim-in, .meter { animation-duration: 1ms; }
+  .dayend-card, .dayend-star, .dayend-row, .card-in, .overlay-dim-in, .meter { animation-duration: 1ms; }
 }
 
 /* ------------------------------------------------------------------ The new-version card */
