@@ -13,6 +13,8 @@ export interface StorefrontSources {
   rightLeaves?: HTMLImageElement;
   cornerTrees?: HTMLImageElement;
   easelClear?: HTMLImageElement;
+  neighborhood?: HTMLImageElement;
+  landscapeNeighborhood?: HTMLImageElement;
 }
 export interface StorefrontLayer {
   id: string; image: HTMLCanvasElement; box: ArtBox; pivot: {x: number;y: number};
@@ -54,24 +56,7 @@ function foregroundArt(_backdrop: HTMLImageElement, source: HTMLImageElement): F
   });
 }
 
-/** Original landscape occluders, without the portrait prop regrouping. */
-function landscapeForegrounds(backdrop: HTMLImageElement,source: HTMLImageElement): ForegroundLayer[] {
-  const paths = [
-    {id: 'pot-left',box: {x: 42,y: 714,w: 134,h: 152},path: 'M44 714 H174 L164 851 Q163 864 110 864 Q58 865 56 850 Z'},
-    {id: 'pot-front',box: {x: 1374,y: 775,w: 83,h: 86},path: 'M1376 783 Q1389 791 1416 792 Q1441 792 1455 783 L1448 846 Q1447 857 1415 858 Q1385 858 1383 848 Z'},
-    {id: 'pot-right',box: {x: 1588,y: 748,w: 84,h: 111},path: 'M1589 755 Q1604 767 1634 767 Q1660 767 1671 757 L1663 846 Q1661 856 1627 857 Q1598 856 1596 847 Z'},
-    {id: 'paw-stand',box: {x: 1254,y: 735,w: 134,h: 130},path: 'M1318 737 C1284 739 1256 772 1256 800 Q1255 826 1271 843 L1268 849 Q1267 857 1280 857 L1327 859 Q1332 865 1346 863 L1365 859 Q1371 858 1371 848 C1397 819 1389 774 1358 750 Q1339 735 1318 737 Z'},
-    {id: 'cup',box: {x: 1427,y: 479,w: 190,h: 400},path: 'M1546 480 Q1556 478 1568 484 Q1574 487 1573 492 L1558 594 Q1557 601 1553 602 Q1538 604 1527 600 L1541 489 Q1541 482 1546 480 Z M1529 583 C1481 583 1454 591 1446 623 C1433 626 1430 630 1429 638 L1428 647 Q1428 653 1439 656 L1459 858 Q1459 869 1480 874 Q1518 881 1554 874 Q1575 870 1577 856 L1604 656 Q1615 654 1615 647 L1614 637 Q1613 627 1601 625 C1597 605 1583 591 1559 586 L1556 599 Q1540 603 1528 600 Z'},
-  ];
-  const props = paths.map(({id,box,path}) => {
-    const image = spriteCanvas(box.w,box.h),g = image.getContext('2d')!;
-    g.translate(-box.x,-box.y);g.clip(new Path2D(path));g.drawImage(backdrop,0,0,1672,941);
-    return {id,image,box};
-  });
-  return [...props,...foregroundArt(backdrop,source).filter(p => p.id === 'pot-shelf')];
-}
-
-export function storefrontArt(original: HTMLImageElement, sources: Required<Omit<StorefrontSources,'courtyard'|'upper'|'garden'|'rightLeaves'|'cornerTrees'|'easelClear'>> & Pick<StorefrontSources,'courtyard'|'upper'|'garden'|'rightLeaves'|'cornerTrees'|'easelClear'>) {
+export function storefrontArt(original: HTMLImageElement, sources: Required<Omit<StorefrontSources,'courtyard'|'upper'|'garden'|'rightLeaves'|'cornerTrees'|'easelClear'|'neighborhood'|'landscapeNeighborhood'>> & Pick<StorefrontSources,'courtyard'|'upper'|'garden'|'rightLeaves'|'cornerTrees'|'easelClear'|'neighborhood'|'landscapeNeighborhood'>) {
   let rightLeaves: {image: HTMLCanvasElement;box: ArtBox} | null = null;
   if (sources.rightLeaves) {
     const raw = cleanSprite(cropSprite(sources.rightLeaves,{x: 0,y: 0,w: sources.rightLeaves.width,h: sources.rightLeaves.height}));
@@ -81,6 +66,7 @@ export function storefrontArt(original: HTMLImageElement, sources: Required<Omit
   const cornerTrees = sources.cornerTrees ? [0,1].map(i => cropSprite(sources.cornerTrees!,
     {x: sources.cornerTrees!.width/2*i,y: 0,w: sources.cornerTrees!.width/2,h: sources.cornerTrees!.height})) : null;
   const garden = sources.garden ? cropSprite(sources.garden,{x: 0,y: 0,w: sources.garden.width,h: sources.garden.height}) : null;
+  const neighborhood = sources.neighborhood;
   const gardenBounds = garden ? alphaBounds(garden,64) : null;
   const gardenBase = gardenBounds && garden ? (gardenBounds.y+gardenBounds.h)/garden.height : 1;
   const groups = [
@@ -119,7 +105,7 @@ export function storefrontArt(original: HTMLImageElement, sources: Required<Omit
     gradient.addColorStop(1,'rgba(111,65,35,0)');g.fillStyle = gradient;g.fillRect(-1,-1,2,2);
     return {id,image,box: {x: x-w/2,y: y-h/2,w,h}};
   });
-  return {background: sources.backdrop,garden,gardenBase,rightLeaves,cornerTrees,portrait: portraitArt(sources.backdrop,sources.courtyard,sources.upper,sources.easelClear),foliage,sign: signArt(original),cats,shadows,
+  return {background: sources.backdrop,neighborhood,landscapeNeighborhood: sources.landscapeNeighborhood,garden,gardenBase,rightLeaves,cornerTrees,portrait: portraitArt(sources.backdrop,sources.courtyard,sources.upper,sources.easelClear),foliage,sign: signArt(original),cats,shadows,
     contactShadows,
-    foregrounds: foregroundArt(sources.backdrop,sources.foreground),landscapeForegrounds: landscapeForegrounds(sources.backdrop,sources.foreground)};
+    foregrounds: foregroundArt(sources.backdrop,sources.foreground)};
 }

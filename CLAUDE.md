@@ -1917,52 +1917,31 @@ Do not lift/compress the whole arm or add extra palm turns, wrist twists, greeti
 or rendered shading. The sign and three overlapping chain links share one fixed
 bracket pivot. See `ui/titleSprite.ts` for alpha cleanup and source-atlas extraction.
 `ui/title.css` adds blinks, dust, sleep letters and light. This ambient title motion was explicitly
-requested; keep unrelated UI motion calm. `storefrontLayout.ts` fits the entire original shop in
-landscape and recomposes the original facade, sign, four cats, plants and cup in portrait. Each
-subject keeps a uniform scale; do not restore whole-image cover cropping. `storefrontPortrait.ts`
-extracts the original architecture; `storefront-courtyard-v1.png` supplies only additional wall
-and paving. The original portrait cafe, including its door, case and all fixtures, shares one
-uniform transform and sits above the menu. Never stretch its height, insert glass/wood bands,
-space out pastry rows or independently enlarge door/case art. Fill the area above its roof with
-`storefront-house-roof-v3.png`, the preferred high gabled attic/roof, with peak and `fitPeakY` at y230.
-Both eave tips are shortened to x126/1408, only about 22/20 pixels past their posts. Keep the tall
-roof and current camera zoom; do not restore the low v2 pitch. The left portrait column uses the
-restored plate consistently along x320..355,y294..827 to prevent a wood-color seam at the easel patch.
-Align the roof wall edges x148/1388
-and base y900 with the cafe posts x320/1367 at y148, using one uniform scale. Both orientations
-use different designs: only portrait shows the cottage with at least 56 CSS pixels above its peak;
-landscape retains the earlier original cafe/wall composition. Never stretch either part.
-`storefrontSky.ts` supplies a blue/cream sky, clouds that translate across it and eight bird-wing
-poses; sky motion shares the scene clock, pause/reduced-motion handling and GPU/static renderer.
-Keep clouds/birds behind the roof and tree. Do not restore the full-screen striped upper wall.
-The original storefront must retain its proportions and painted details.
-The striped awning is the exception to the shared facade translation: keep its original size and
-height, but offset it 32 native pixels left so its hem is centered over the posts. Its complete
-painted scallops are extracted separately, with the old awning replaced by wall behind it.
-Fit the portrait fascia's rounded end caps to x320/1367, retaining its central artwork. Also fit
-the roof cornice end caps to x148/1388 so no old lip projects behind the shortened fascia.
-`storefront-side-garden-v2.png` adds trees, a low fence and flowering shrubs behind both sides.
-Keep its complete edge silhouettes inside wide layouts and anchor its measured alpha base to
-the doorstep. Portrait uses `storefront-corner-trees-v1.png` for integrated branch/leaf crowns on
-both sides, with trunk endings 48 CSS pixels outside the frame. `storefront-right-leaves-v1.png`
-replaces the chopped right plant only in portrait. All portrait ground props share the cafe's
-transform so the complete left pot clears the easel. Use complete atlas silhouettes and pot rims, with the cup/right
-pot and paw/front-pot pairs intact; paint the cup pair last to avoid clipping it with another pot.
-Keep the shop and foreground together; do not accept a large empty courtyard just because all
-subjects are within screen bounds. All portrait props sit at the foot of the facade, with ground
-contacts anchored to the doorstep in shop coordinates. Never position them using fractions of
-unused courtyard/viewport height: that strands them in the middle of the yard. Keep the native
-right cup/plants/paw-sign/cat/ledge arrangement under one transform and cap prop scale relative
-to the shop. Preserve the easel's original position so it matches the board baked into the facade;
-draw it ahead of left foliage to keep its lettering visible.
-Use soft ground-contact shadows for standing props. Do not restore a row of oversized pots,
-cats and signs across the paving. Keep foliage edge padding out of recomposed layouts, where it becomes a visible
-rectangle. `storefrontScene.ts` shares every subject placement between GPU and static rendering;
-reduced motion and context loss must preserve the responsive scene. Rotation resizes the existing
-renderer without restarting animation or reloading its art. Keep controls inside viewport safe
-areas, with a stacked book/start layout in portrait, and preserve the existing resume-day
-behaviour. Asset provenance, the imagegen prompt and browser checks are
-in [animated title](docs/animated-title.md).
+requested; keep unrelated UI motion calm. Both orientations now render the SAME full cottage
+composition from storefrontScene.ts: corrected facade, high roof, awning, all cats and complete
+foreground silhouettes. Do not restore the old full-frame landscape painting or side-panel
+variant. Portrait keeps its close framing. Landscape fits the complete cottage between a 24 CSS
+pixel top margin and 82/130 CSS pixels for controls (short/tall screens), and anchors all props to
+the doorstep rather than the outer screen edges. Keep every subject uniformly scaled.
+storefront-neighborhood-v1.png is the portrait background; storefront-neighborhood-landscape-v1.png
+is the wide background, with seven houses, balconies, ivy, a rose trellis, bench and street lamp.
+Cover-fit each above the ground line; the landscape plate is bottom-aligned. Both versions use
+storefront-side-garden-v2.png plus two integrated swaying corner-tree sprites. Loading, reduced
+motion and WebGL fallback must show the current cottage design; do not flash the old flat menu.
+storefront-house-roof-v3.png keeps the preferred tall apex y230, balanced eave ends x126/1408,
+and wall posts x148/1388 joined to cafe posts x320/1367 at y148. Keep its camera fit unchanged.
+The fascia end caps fit x320/1367 and roof cornice caps fit x148/1388. The awning keeps its native
+size and height with a 32 native pixel left offset. Never stretch the facade, insert shelf/glass
+bands, space out pastries or restore excessive overhangs. The continuous left column and old
+easel silhouette are restored from storefront-easel-clear-v1.png; retain original art elsewhere.
+Use storefront-right-leaves-v1.png and complete cup/pot silhouettes, with cup/right-pot and
+paw/front-pot pairs intact. Paint the cup pair last. Keep the easel clear of the left pot and draw
+it before the sleeping cat. All ground contacts and shadows remain close to the facade. The
+right sleeper, ledge and garden cluster share one transform. Do not split tails, clip straw/leaf
+edges or introduce rectangular cutout shadows. Tree roots remain outside the frame.
+Rotation reuses the renderer and loaded assets, preserving animation time. Keep controls inside
+safe areas, retain existing resume-day behavior, and share placement between GPU and static
+rendering. Source provenance, prompts and browser checks are in [animated title](docs/animated-title.md).
 
 All customers are illustrated cats, drawn by `art/character.ts` for the queue, order avatars,
 regular book and title screen. Warm fur gradients, coat markings, cheek tufts, paws and curled

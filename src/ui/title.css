@@ -6,7 +6,7 @@
 .storefront-painting { overflow: hidden; background-size: cover; background-position: center; }
 .storefront-painting > canvas { opacity: 0; }
 .storefront-painting.has-still > .storefront-still, .storefront-painting.is-moving > .storefront-motion { opacity: 1; }
-.storefront-painting > img { object-fit: contain; }
+.storefront-painting > img { object-fit: cover; }
 .storefront-painting.has-still > img { visibility: hidden; }
 .storefront-ambience { position: absolute; }
 .storefront-settings {

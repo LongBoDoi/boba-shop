@@ -45,8 +45,10 @@ try{
  ];
  for(const [width,height] of [[329,738],[320,568],[390,844],[430,932],[568,320],[844,390],[932,430],[768,1024],[1024,768],[1672,941],[2560,1080],[600,610]]){
   const layout=storefrontLayout(width,height);
-  if(layout.portrait){
+  {
   const houseRoof=subjectTransform(layout,'upper');
+  const peak=houseRoof.ty+UPPER_STOREY.peakY*houseRoof.d;
+  assert((layout.floor-peak)/layout.h>(layout.portrait ? .55 : .6),'The shared cottage occupies most of the screen height');
   const roofToFrame=(UPPER_STOREY.baseY-UPPER_STOREY.peakY)*houseRoof.d/(676*layout.shop.d);
   assert(roofToFrame>=.8&&roofToFrame<=.9,'Keep the preferred tall gable');
   const leftOverhang=UPPER_STOREY.wallLeft-UPPER_STOREY.eaveLeft,rightOverhang=UPPER_STOREY.eaveRight-UPPER_STOREY.wallRight;
@@ -60,14 +62,11 @@ try{
   const canopy=subjectTransform(layout,'canopy');
   assert(canopy.tx/layout.unit<=-30,'The trunk source edge stays outside the screen');
   assert((269*canopy.a+canopy.ty)/layout.unit>70,'A substantial leafy canopy remains visible');
-  assert((houseRoof.ty+UPPER_STOREY.peakY*houseRoof.d)/layout.unit>=55,'Whole roof and sky fit in both orientations');
+  assert((houseRoof.ty+UPPER_STOREY.peakY*houseRoof.d)/layout.unit>=(layout.portrait ? 55 : 23),'Whole roof and sky fit in both orientations');
   for(const [x,lowerX]of [[UPPER_STOREY.wallLeft,320],[UPPER_STOREY.wallRight,1367]]){
    const a=apply(houseRoof,{x,y:UPPER_STOREY.baseY}),b=apply(layout.shop,{x:lowerX,y:148});
    assert(Math.hypot(a.x-b.x,a.y-b.y)<1e-8,'Roof walls join both cafe posts without a seam');
   }
-  } else {
-   assert.equal(layout.upperBottom,0,'Landscape retains the original cafe composition');
-   assert(!Object.hasOwn(layout.groups,'upper'),'The cottage and sky apply only to portrait');
   }
   for(const [id,source]of subjects){
    const box=storefrontBox(layout,id,source);
@@ -75,7 +74,7 @@ try{
    assert(Math.abs(box.width/box.height-source.w/source.h)<1e-8,'Subjects keep their original aspect ratios');
    if(layout.portrait)assert(box.top+box.height<height-145,`${id} stays clear of portrait controls`);
   }
-  if(layout.portrait){
+  {
    const cup=storefrontBox(layout,'cup',subjects[4][1]),floor=layout.floor/layout.unit;
    const doorPaw=storefrontBox(layout,'door',{x:1187,y:610,w:76,h:75});
    const clear=(a,b)=>a.left>=b.left+b.width||a.left+a.width<=b.left||a.top>=b.top+b.height||a.top+a.height<=b.top;
@@ -86,7 +85,7 @@ try{
    assert(floor>=height*.44,'The shop occupies enough of a portrait screen');
    assert(height-floor<=220,'Keep only a short forecourt below the close storefront');
    assert(layout.upperBottom>layout.shop.ty,'An upper-storey painting fills the area above the original roof');
-   assert(1047*layout.shop.a/layout.w>.74,'The close facade fills most of the portrait width');
+   if(layout.portrait)assert(1047*layout.shop.a/layout.w>.74,'The close facade fills most of the portrait width');
    const upper=subjectTransform(layout,'upper');
    assert.equal(upper.a,upper.d,'The upper building keeps its own aspect ratio');
    assert(Math.abs(UPPER_STOREY.baseY*upper.d+upper.ty-layout.upperBottom)<1e-8,'Wall tucks behind the original awning');
@@ -94,7 +93,7 @@ try{
     const a=apply(upper,{x,y:UPPER_STOREY.baseY}),b=apply(layout.shop,{x:lowerX,y:148});
     assert(Math.hypot(a.x-b.x,a.y-b.y)<1e-8,'Roof walls join both cafe posts without a seam');
    }
-   assert((upper.ty+UPPER_STOREY.peakY*upper.d)/layout.unit>=55,'Whole roof and open sky remain visible');
+   assert((upper.ty+UPPER_STOREY.peakY*upper.d)/layout.unit>=(layout.portrait ? 55 : 23),'Whole roof and open sky remain visible');
    for(const id of ['facade','case','door','roof','baker','mat','plant-shelf','pot-shelf','lamp-left','lamp-right']){
     assert.deepEqual(subjectTransform(layout,id),layout.shop,'Keep the original storefront and fixtures on one uniform transform');
    }
@@ -104,7 +103,7 @@ try{
    }
    const leftCat=storefrontBox(layout,'sleep-left',subjects[2][1]);
    const rightCluster=storefrontBox(layout,'paw-stand',{x:1254,y:735,w:134,h:130});
-   assert(rightCluster.left-(leftCat.left+leftCat.width)>width*.2,'Keep an open path between the two garden clusters');
+   assert(rightCluster.left-(leftCat.left+leftCat.width)>Math.min(width*.2,400*layout.shop.a/layout.unit),'Keep an open path between the two garden clusters');
    const perch=layout.groups.bench,sleeper=layout.groups['sleep-right'];
    assert.deepEqual(perch,sleeper,'The sleeping cat stays attached to its supporting ledge');
    assert(garden.a<=layout.shop.a*1.16,'Garden props should remain in proportion to the storefront');
@@ -112,7 +111,7 @@ try{
    assert(pot.left+pot.width<board.left,'The complete left pot clears the easel, including its feet');
    for(const [id,foot]of [['pot-left',866],['pot-front',861],['pot-right',859],['cup',879],['paw-stand',865],['sleep-left',887],['easel',870],['bench',832]]){
     const m=subjectTransform(layout,id),contact=m.d*foot+m.ty;
-    assert(Math.abs(contact-layout.floor)<=65*layout.shop.a,`${id} must stay at the facade foot, not in the middle of the courtyard`);
+    assert(Math.abs(contact-layout.floor)<=Math.max(65*layout.shop.a,45*layout.unit),`${id} must stay at the facade foot, not in the middle of the courtyard`);
    }
   }
  }

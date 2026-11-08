@@ -4,39 +4,46 @@ The title follows the supplied cream/caramel cat-cafe composition. **Bắt đầ
 bottom centre, **Cài đặt** at the upper right, and **Sổ khách** remains available.
 Returning to an unfinished day preserves its cup, customers and clock.
 
-Landscape retains the earlier front-view cafe composition, including its original awning and wall.
-Only portrait shows a complete cottage with a gabled roof, open sky, flapping birds and side garden.
-Portrait adds another 18% zoom over the earlier close framing (height-limited on short screens). The roof
-joins the actual wooden posts at x320/1367. Ground props use compact, ground-anchored groups
-so the complete left pot clears the board and its legs. Each subject keeps its
-original aspect ratio. Extra plaster wall and paving fill the viewport, including wide phones.
+Both orientations now use one complete gabled-cottage design: the same corrected facade, roof,
+cat mascot, baker, sleeping cats, plants, cup and easel. The old flat landscape cafe and the later
+side-panel composition are no longer rendered. Portrait retains its close framing. Landscape
+fits the complete cottage vertically and places compact ground props beside its door, rather than
+stranding them at the screen edges. A dedicated wide neighborhood fills the whole background,
+with seven houses, balconies, ivy, a bench/rose trellis and a street lamp. The full garden and
+swaying corner branches fill the wider margins naturally. Subjects retain their aspect ratios.
+Landscape reserves 82 CSS pixels for controls on short phones and 130 on taller screens; the
+roof stays at least 24 CSS pixels below the top. Portrait keeps its existing framing and controls.
 Settings stays at the safe upper-right corner, start at the bottom centre, and the guest book sits
 above start in portrait. GPU and static fallback use the same placement code. Rotation reuses
 loaded artwork and the renderer, preserving animation time.
 
-The portrait storefront uses its original proportions under **one uniform transform**: facade,
+The shared storefront uses its original proportions under **one uniform transform**: facade,
 door, shelves, case, wall motif, lamps, roof cat and baker. The striped awning retains its native
 size and height, translated 32 native pixels left to center its hem over the facade posts. Its
 scalloped alpha edge follows the existing brown outline, with a narrow wall strip restored behind
 it so the old awning does not remain visible. The ground line sits 210 CSS
 pixels above the bottom in the earlier framing; the closer framing now leaves 180 CSS pixels
 on short phones and 200 on taller phones for the controls. The upper
-space now shows a blue/cream sky with three translating clouds and three independently flying,
-flapping birds, behind a terracotta gable and small circular attic window. Both roof posts align
+space now shows an opaque painted neighborhood of four tall houses, ivy, balconies and plants,
+behind the main terracotta gable. Its full image is uniformly cover-fitted above the doorstep.
+The sky/cloud/bird layer remains only a fallback when the neighborhood cannot load, so birds
+never fly over house windows. Both roof posts align
 with the original cafe posts. Portrait reserves at least 56 CSS pixels above the roof;
 short phones uniformly reduce the house and all foreground props to fit their complete silhouettes.
-Landscape uses its earlier fit and subject placements. The cafe is not stretched vertically;
+Landscape fits the same cottage and keeps its props together on the doorstep. The cafe is not stretched vertically;
 no extra glass panes or shelf gaps are inserted and pastries are not sliced.
 The fascia below the roof cat ends exactly at the posts x320/1367. Its original rounded end caps
 are moved inward, retaining the central painting and raised cat tab at their original positions.
 The upper cornice is likewise fitted to its posts x148/1388, preventing small projecting tabs
-behind the fascia. Both changes apply only to portrait and preserve the tall roof and cafe zoom.
+behind the fascia. Both changes apply in either orientation and preserve the tall roof.
 
 All garden props sit directly at the
 foot of the facade: the pot and floor cat beside the easel, and the native cup/plant/paw-sign
 arrangement beside the entrance ledge. Their ground contacts are fixed offsets from the doorstep
-in shop coordinates, not fractions of unused courtyard height. The right foreground uses 0.72 times the shop
-scale, the left pot 0.65, and the easel 0.8. The right sleeper, ledge and right garden share the original arrangement's transform,
+in shop coordinates, not fractions of unused courtyard height. Props retain the previous compact
+scale while the cafe zooms closer. The right group moves slightly forward only if its straw would
+cross the lower door paw motif, keeping ground contacts within a short band at the doorstep.
+The right sleeper, ledge and right garden share the original arrangement's transform,
 preserving the relationship between the cat, cup straw and ledge. The easel is drawn ahead of
 the left foliage so its lettering remains visible. Its baked-in original is removed only inside
 the old easel silhouette using the restored cabinet plate.
@@ -165,6 +172,37 @@ the same poses while the curved shoulder stays tucked behind the cat. Raised pos
 
 ## Image provenance and prompts
 
+### Wide neighborhood for the shared landscape cottage (active)
+
+Asset: [storefront-neighborhood-landscape-v1.png](../src/assets/title/storefront-neighborhood-landscape-v1.png).
+Mode: built-in imagegen, opaque illustration using the portrait neighborhood and original cafe
+as style references. The foreground is the same cottage composition in both orientations; this
+plate adds a coherent wide street behind it rather than preserving the old flat landscape menu.
+The neighborhood includes seven distinct houses, small balconies/planters, rose trellis, bench,
+lamp and leafy greenery. Existing garden and moving branches overlap it at the same ground line.
+
+Exact prompt:
+
+```text
+Use case: illustration-story. Asset type: NEW WIDE LANDSCAPE NEIGHBORHOOD BACKGROUND PLATE for the same cat cafe game. Image1 is the existing portrait neighborhood design/style authority; image2 sets the original cafe's warm cream/caramel hand-painted 2D storybook style. Recompose the neighborhood as a wide2048x1024 landscape scene, with SEVEN distinct narrow two-storey neighboring homes along a shared horizontal street baseline near y970. Vary their warm pale peach, ivory and biscuit plaster facades, simple terracotta/caramel gabled and gently curved tiled roofs, small domestic arched and rectangular wooden windows with ivory curtains, restrained shutters, tiny balconies, cream flower boxes and trailing olive ivy. The side regions should be richly but calmly occupied: a short cream fence with peach/ivory flowering shrubs near both edges, a modest wooden garden bench at the far left beside a climbing rose trellis, a slender warm bronze street lamp at the far right near a leafy tree. Add small clusters of olive/sage trees between roofs and along the sides. Keep these details small relative to the buildings and sensible scale. Broad frontal elevation with gentle coherent depth; no forced perspective, no spatial warping. Rooflines begin at y80..220, houses and greenery occupy almost all of the frame, only a thin pale blue/cream sky strip at the top. Small neighboring windows about80..120px wide so their scale stays subordinate to the foreground cafe entry door. CENTER LOWER60% stays visually quiet because a separately rendered foreground gabled cat cafe will overlap it; do not draw that main cafe here. Background buildings should be lighter and slightly muted compared to the cafe, without blur. Ground is just a thin peach stone street strip at the bottom5%, not a large empty courtyard. Same crisp rounded fine brown outlines and simple soft painted color shapes as references. NO foreground cafe or shop awning, no cats, no people, no vehicles, no giant cup, no writing/signage, no UI/buttons, no watermark, no photorealistic 3D. This is a complete seamless opaque landscape painting, not two clipped side panels or repeated copies of one house. Fill every pixel, no transparent background.
+```
+
+### Neighborhood behind the closer portrait cafe (active)
+
+Asset: [storefront-neighborhood-v1.png](../src/assets/title/storefront-neighborhood-v1.png), 1024×1536.
+Mode: built-in imagegen, opaque illustration. Style references: `cat-storefront.png` and
+`storefront-side-garden-v2.png`. The added houses replace the broad blue sky only in portrait.
+The existing foreground cafe is composited unchanged over this plate, with its current matching
+roof and posts. Upper corner trees grow from 72% to 84% viewport width (capped at480 CSS pixels),
+move 12 CSS pixels lower and keep their trunk endings64 CSS pixels beyond each side. Their rigid
+sway and the existing cat/sign/plant motion remain active; landscape uses the earlier composition.
+
+Exact prompt:
+
+```text
+Use case: illustration-story. Asset type: full-bleed PORTRAIT 1024x1536 NEIGHBORHOOD BACKGROUND behind a separately composited foreground cat cafe game. Reference1 supplies the exact warm cream/caramel hand-painted 2D storybook architectural style; reference2 supplies the rounded olive greenery style. Draw a cozy small residential street with FOUR neighboring tall narrow TWO/THREE-STOREY HOUSES, front-facing with gentle depth, their cream, pale peach and muted warm biscuit facades extending all the way to a shared street baseline near y1480. Their staggered terracotta/caramel tiled rooflines begin high in the canvas, around y100..350. Small domestic wood-framed arched and rectangular windows, ivory curtains, modest flower boxes, restrained wooden shutters, low balconies, decorative plaster cornices, little climbing ivy between houses. Make it read as a continuous inhabited neighborhood, not isolated floating house cutouts or a toy village. Tall houses fill most of the upper and side regions; do NOT leave a large empty sky. Only thin soft warm pale-blue/ivory sky gaps between rooftops in the upper 10 percent. A few rounded olive/sage trees and flowering shrubs stand BETWEEN the neighboring houses, ivy drapes lightly over some roof corners. Keep the central lower two-thirds calm: the separately rendered foreground cafe will cover that area. Houses behind should be softly muted and slightly lighter, preserving crisp simple painted edges, so a closer foreground cafe remains the focus. Ground is only a thin warm peach paving strip in the bottom 5 percent, no big empty courtyard, no horizon split through building walls. Consistent warm afternoon light and coherent scale. Same rounded fine brown linework and soft flat painterly texture as reference, no photorealism, no 3D, no blur, no excessive tiny detail, no spatial warping. No cafe storefront or awning in the foreground, no cats, no people, no cars, no giant cups, no UI, no text/lettering or watermarks. The purpose is to REPLACE the large empty blue sky behind the foreground cafe with more houses and greenery. Opaque image, fill every pixel to every edge.
+```
+
 ### Cabinet behind the relocated easel (active, portrait only)
 
 Asset: [storefront-easel-clear-v1.png](../src/assets/title/storefront-easel-clear-v1.png).
@@ -188,7 +226,7 @@ The right plant has a complete outer leaf contour and a converging stem root anc
 existing pot at native (1630,755). Its original rectangular edge is no longer used in portrait.
 The upper trees include both wood and leaves in the same sprite. The two atlas halves rotate
 around their outside roots, with 48 CSS pixels of outer-edge padding so the trunk endings stay
-offscreen during the sway. These assets are not drawn in landscape.
+offscreen during the sway. These complete silhouettes are shared by both orientations.
 
 Right-plant prompt:
 
@@ -233,7 +271,7 @@ left tip x126 and right tip x1408, about 22/20 native pixels beyond the posts at
 instead of the earlier 68-pixel extensions. Both sides remain aligned with the lower posts.
 The portrait left post now uses one continuous painted strip from `storefront-easel-clear-v1.png`
 at native x320..355,y294..827, avoiding the horizontal wood-color seam at the old board patch.
-Landscape retains its original facade and roof treatment.
+The same corrected roof and fascia are shared by both orientations.
 
 Exact prompt:
 

@@ -19,7 +19,7 @@ function place(scale: number,fromX: number,fromY: number,toX: number,toY: number
   return {a: scale,b: 0,c: 0,d: scale,tx: toX-fromX*scale,ty: toY-fromY*scale};
 }
 
-/** Fit a complete cafe cottage, preserving the painted facade and room for open sky. */
+/** One cottage composition, framed vertically or horizontally without stretching its subjects. */
 export function storefrontLayout(width: number,height: number) {
   const w = 1672,h = w*height/width,unit = w/width,portrait = height > width*1.15;
   const roofScaleRatio = (1367-320)/(UPPER_STOREY.wallRight-UPPER_STOREY.wallLeft);
@@ -27,33 +27,32 @@ export function storefrontLayout(width: number,height: number) {
   const houseHeight = 824-148+(UPPER_STOREY.baseY-UPPER_STOREY.fitPeakY)*roofScaleRatio;
   const treeScale = Math.min(width*.72,360)*unit/486;
   const tree = place(treeScale,0,0,-32*unit,-22*unit);
-  if (!portrait) {
-    const scale = Math.min(1,h/941);
-    const shop = place(scale,836,0,w/2,Math.max(0,(h-941*scale)/2));
-    const left = {...shop,tx: -12},right = {...shop,tx: w+12-1672*scale};
-    const groups: Record<string,TitleTransform> = Math.abs(h-941)<.01 ? {} : {
-      tree: left,canopy: left,'window-left': left,'plant-left': left,'pot-left': left,
-      'window-right': right,'plant-right': right,'pot-right': right,
-    };
-    return {w,h,unit,portrait,shop,upperBottom: 0,floor: shop.ty+830*scale,groups};
-  }
-  const floor = h-(height <= 650 ? 180 : 200)*unit;
+  const controlSpace = portrait ? (height <= 650 ? 180 : 200) : (height <= 500 ? 82 : 130);
+  const floor = h-controlSpace*unit;
   // Frame the facade closely; the two prop groups keep their own clear ground contacts.
   const framingScale = (w-96)/1240;
-  const shopScale = Math.min(framingScale*1.18,(floor-56*unit)/houseHeight);
+  const shopScale = Math.min(framingScale*1.38,(floor-(portrait ? 56 : 24)*unit)/houseHeight);
   const propScale = Math.min(shopScale/1.1,framingScale);
   const shop = place(shopScale,844,824,w/2,floor);
   const upperScale = shopScale*roofScaleRatio;
   const upper = place(upperScale,UPPER_STOREY.wallLeft,UPPER_STOREY.baseY,
     shop.tx+320*shopScale,shop.ty+148*shopScale);
-  const garden = place(propScale*.72,1740,877,w-12,floor+68*propScale);
-  const leftPlant = place(propScale*.65,109,866,w*.065,floor+38*propScale);
-  const leftCat = place(propScale*.72,195,887,w*.19,floor+60*propScale);
+  const gardenScale = propScale*.72;
+  const rightEdge = portrait ? w-12 : shop.tx+1590*shopScale;
+  const strawLeft = rightEdge+(1527-1740)*gardenScale;
+  const pawRight = shop.tx+1263*shopScale;
+  // A closer doorway reaches behind the straw. Bring the coherent prop group slightly forward.
+  const gardenOffset = strawLeft < pawRight
+    ? Math.max(68*propScale,398*gardenScale-139*shopScale+6)
+    : 68*propScale;
+  const garden = place(gardenScale,1740,877,rightEdge,floor+gardenOffset);
+  const leftPlant = place(propScale*.65,109,866,portrait ? w*.065 : shop.tx+250*shopScale,floor+38*propScale);
+  const leftCat = place(propScale*.72,195,887,portrait ? w*.19 : shop.tx+410*shopScale,floor+60*propScale);
   const perch = garden;
-  const easel = place(propScale*.8,329,870,w*.22,floor+48*propScale);
+  const easel = place(propScale*.8,329,870,portrait ? w*.22 : shop.tx+440*shopScale,floor+48*propScale);
   const groups: Record<string,TitleTransform> = {
     canopy: tree,tree,upper,easel,awning: {...shop,tx: shop.tx-32*shopScale},
-    sign: place(shopScale,166,212,140,shop.ty+212*shopScale),
+    sign: place(shopScale,166,212,portrait ? 140 : shop.tx+268*shopScale,shop.ty+212*shopScale),
     'plant-left': leftPlant,'pot-left': leftPlant,
     'sleep-left': leftCat,'sleep-right': perch,bench: perch,
     'plant-front': garden,'plant-right': garden,'pot-front': garden,'pot-right': garden,cup: garden,

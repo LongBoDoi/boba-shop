@@ -12,6 +12,8 @@ import gardenImage from '../assets/title/storefront-side-garden-v2.png';
 import rightLeavesImage from '../assets/title/storefront-right-leaves-v1.png';
 import cornerTreesImage from '../assets/title/storefront-corner-trees-v1.png';
 import easelClearImage from '../assets/title/storefront-easel-clear-v1.png';
+import neighborhoodImage from '../assets/title/storefront-neighborhood-v1.png';
+import landscapeNeighborhoodImage from '../assets/title/storefront-neighborhood-landscape-v1.png';
 import { createStorefrontMotion } from './storefrontMotion';
 import { paintStorefrontStill } from './storefrontScene';
 import { storefrontBox, storefrontLayout } from './storefrontLayout';
@@ -36,7 +38,7 @@ export function Storefront({ width, height, paused, greeting }: Props) {
     let reduceMotion = reduced.matches;
     let disposed = false, contextLost = false,artReady = false, frame = 0, elapsed = 0, previous = 0, lastPaint = 0;
     let motion: ReturnType<typeof createStorefrontMotion> = null;
-    const image = new Image(), backdrop = new Image(), cats = new Image(), foreground = new Image(), armSheet = new Image(), foliage = new Image(),courtyard = new Image(),upper = new Image(),garden = new Image(),rightLeaves = new Image(),cornerTrees = new Image(),easelClear = new Image();
+    const image = new Image(), backdrop = new Image(), cats = new Image(), foreground = new Image(), armSheet = new Image(), foliage = new Image(),courtyard = new Image(),upper = new Image(),garden = new Image(),rightLeaves = new Image(),cornerTrees = new Image(),easelClear = new Image(),neighborhood = new Image(),landscapeNeighborhood = new Image();
     const loadedSources = () => ({
       backdrop: backdrop.naturalWidth ? backdrop : undefined,
       cats: cats.naturalWidth ? cats : undefined,
@@ -49,6 +51,8 @@ export function Storefront({ width, height, paused, greeting }: Props) {
       rightLeaves: rightLeaves.naturalWidth ? rightLeaves : undefined,
       cornerTrees: cornerTrees.naturalWidth ? cornerTrees : undefined,
       easelClear: easelClear.naturalWidth ? easelClear : undefined,
+      neighborhood: neighborhood.naturalWidth ? neighborhood : undefined,
+      landscapeNeighborhood: landscapeNeighborhood.naturalWidth ? landscapeNeighborhood : undefined,
     });
     const resize = () => {
       if (!artReady) return;
@@ -86,13 +90,13 @@ export function Storefront({ width, height, paused, greeting }: Props) {
     };
     const ready = () => {
       if (disposed) return;
-      if (!image.complete || !image.naturalWidth || ![backdrop, cats, foreground, armSheet, foliage,courtyard,upper,garden,rightLeaves,cornerTrees,easelClear].every(i => i.complete)) return;
+      if (!image.complete || !image.naturalWidth || ![backdrop, cats, foreground, armSheet, foliage,courtyard,upper,garden,rightLeaves,cornerTrees,easelClear,neighborhood,landscapeNeighborhood].every(i => i.complete)) return;
       if (artReady) return;
       artReady = true;
       motion = createStorefrontMotion(element, image, loadedSources());
       resize(); start();
     };
-    for (const asset of [image,backdrop,cats,foreground,armSheet,foliage,courtyard,upper,garden,rightLeaves,cornerTrees,easelClear]) {asset.onload = ready; asset.onerror = ready;}
+    for (const asset of [image,backdrop,cats,foreground,armSheet,foliage,courtyard,upper,garden,rightLeaves,cornerTrees,easelClear,neighborhood,landscapeNeighborhood]) {asset.onload = ready; asset.onerror = ready;}
     image.src = String(painting);
     backdrop.src = String(backdropImage); cats.src = String(catsImage);
     foreground.src = String(foregroundImage); armSheet.src = String(armSheetImage);
@@ -103,12 +107,14 @@ export function Storefront({ width, height, paused, greeting }: Props) {
     rightLeaves.src = String(rightLeavesImage);
     cornerTrees.src = String(cornerTreesImage);
     easelClear.src = String(easelClearImage);
+    neighborhood.src = String(neighborhoodImage);
+    landscapeNeighborhood.src = String(landscapeNeighborhoodImage);
     reduced.addEventListener('change', preferenceChanged);
     document.addEventListener('visibilitychange', start);
     element.addEventListener('webglcontextlost', lost);
     element.addEventListener('webglcontextrestored', restored);
     return () => {
-      disposed = true; stop(); for (const asset of [image,backdrop,cats,foreground,armSheet,foliage,courtyard,upper,garden,rightLeaves,cornerTrees,easelClear]) {asset.onload = null; asset.onerror = null;}
+      disposed = true; stop(); for (const asset of [image,backdrop,cats,foreground,armSheet,foliage,courtyard,upper,garden,rightLeaves,cornerTrees,easelClear,neighborhood,landscapeNeighborhood]) {asset.onload = null; asset.onerror = null;}
       reduced.removeEventListener('change', preferenceChanged);
       document.removeEventListener('visibilitychange', start);
       element.removeEventListener('webglcontextlost', lost);
@@ -129,7 +135,7 @@ export function Storefront({ width, height, paused, greeting }: Props) {
   return (
     <div class={`storefront-painting ${moving ? 'is-moving' : ''} ${stillReady ? 'has-still' : ''}`}
       style={{ backgroundImage: `url(${String(courtyardImage)})` }} aria-hidden="true">
-      <img src={String(painting)} alt="" draggable={false} />
+      <img src={String(layout.portrait ? neighborhoodImage : landscapeNeighborhoodImage)} alt="" draggable={false} />
       <canvas ref={still} class="storefront-still" />
       <canvas ref={canvas} class="storefront-motion" />
       <div class="storefront-ambience" style={leftLamp}>
