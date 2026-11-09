@@ -1,5 +1,7 @@
 # Animated cat storefront
 
+Current ground-plant palette and rendering: [muted foliage v4](title-foliage-v4.md).
+
 The title follows the supplied cream/caramel cat-cafe composition. **Bắt đầu** stays at the
 bottom centre, **Cài đặt** at the upper right, and **Sổ khách** remains available.
 Returning to an unfinished day preserves its cup, customers and clock.
@@ -7,12 +9,12 @@ Returning to an unfinished day preserves its cup, customers and clock.
 Both orientations now use one complete gabled-cottage design: the same corrected facade, roof,
 cat mascot, baker, sleeping cats, plants, cup and easel. The old flat landscape cafe and the later
 side-panel composition are no longer rendered. Portrait retains its close framing. Landscape
-fits the complete cottage vertically and places compact ground props beside its door, rather than
-stranding them at the screen edges. A dedicated wide neighborhood fills the whole background,
+zooms to the shopfront and roof mascot, cropping the upper gable above the viewport, and places
+compact ground props beside its door. A dedicated wide neighborhood fills the whole background,
 with seven houses, balconies, ivy, a bench/rose trellis and a street lamp. The full garden and
 swaying corner branches fill the wider margins naturally. Subjects retain their aspect ratios.
 Landscape reserves 82 CSS pixels for controls on short phones and 130 on taller screens; the
-roof stays at least 24 CSS pixels below the top. Portrait keeps its existing framing and controls.
+roof mascot stays at least 24 CSS pixels below the top. Portrait keeps its existing framing and controls.
 Settings stays at the safe upper-right corner, start at the bottom centre, and the guest book sits
 above start in portrait. GPU and static fallback use the same placement code. Rotation reuses
 loaded artwork and the renderer, preserving animation time.
@@ -30,7 +32,7 @@ The sky/cloud/bird layer remains only a fallback when the neighborhood cannot lo
 never fly over house windows. Both roof posts align
 with the original cafe posts. Portrait reserves at least 56 CSS pixels above the roof;
 short phones uniformly reduce the house and all foreground props to fit their complete silhouettes.
-Landscape fits the same cottage and keeps its props together on the doorstep. The cafe is not stretched vertically;
+Landscape centers the same cottage at a closer scale and keeps its props together on the doorstep. The cafe is not stretched vertically;
 no extra glass panes or shelf gaps are inserted and pastries are not sliced.
 The fascia below the roof cat ends exactly at the posts x320/1367. Its original rounded end caps
 are moved inward, retaining the central painting and raised cat tab at their original positions.
@@ -443,4 +445,44 @@ Exact prompt:
 
 ```text
 Use case: precise-object-edit. Edit this exact transparent 3 columns x 2 rows cartoon cat paw sprite atlas. Preserve its six tile positions and pose order, exact cream/caramel/peach palette, simple rounded brown outlines, paw size, raised pink pads, lower caramel patch, curved leftward shoulder, transparent gutters, and the single wrist bend animation. Change ONLY the transition immediately UNDER THE LEFTMOST TOE into the LEFT SIDE OF THE WRIST in the curled/bent poses: it currently has a sharp inset step / vertical slice, making the wrist look cut off beneath the thumb. Widen and round just that small outside wrist transition so there is ONE SMOOTH CONTINUOUS CURVED OUTER SILHOUETTE from the leftmost toe down into the foreleg. No right-angle notch, no clipped corner, no straight vertical slice, no broken outline, no thin torn-looking strip, no cutoff ledge beneath the toes. The left toe and wrist must be anatomically joined as one soft plump cat paw, not a fist pasted on a separate narrow tube. Keep the inner toe crease lines short and rounded. The hand still folds forward naturally and pads gradually hide. Keep the same flat simple kawaii illustration, NOT realistic, no fur, no more detail, no new shading. Do not move or resize the root/elbow or change the face of the pads. Fully remove the exterior smoky brown halo/glow; absolutely all exterior pixels should be true alpha zero. Opaque flat paint inside the paw with a clean antialias border only. No background, no text, no grid, no shadows.
+```
+
+### Potted foliage matched to the neighborhood (v2, superseded)
+
+Asset: [storefront-potted-foliage-v2.png](../src/assets/title/storefront-potted-foliage-v2.png),
+1536×1024, three equal-width transparent cells. Created and cleaned with built-in **imagegen**.
+The original foliage sheet supplied the three plant shapes; the landscape neighborhood supplied
+warm olive/sage colors, rounded contours, simple broad shading and subtle painted texture.
+Only the three ground-level plants are replaced; the original scenery and pots retain their pixels.
+
+`storefrontPlants.ts` measures each connected stem end at the bottom of its cropped sprite,
+then places it inside the fitted left/front/right pot mouth at (109,714), (1421,789) and (1631,771).
+These are anchors in the same coordinates as the reconstructed foreground pots, rather than
+assumed centers of the old source atlas. Each plant sways by at most .018 radians around its
+planted end; pots and their front rims are drawn afterward to hide the buried stem.
+Static and GPU rendering share these layers in both orientations.
+
+Final cleanup prompt (the generated three-plant atlas was the edit target):
+
+```text
+Use case: background-extraction. EDIT TARGET the supplied three-plant sprite atlas. Preserve the three plants exactly: same canvas size1536x1024, same leaf shapes, original warm olive colors, brown rounded outlines, texture, stem endpoints and positions. ONLY REMOVE ALL diffuse yellow/brown haze, glow, gradients, halos and smoky shadows outside the actual hard painted leaf/stem silhouettes. Every pixel outside the exact illustrated plant silhouettes must be fully transparent alpha0. The first version mistakenly contains a huge soft yellow glow outside leaves: eliminate it completely. Clean antialiased edge only1pixel, opaque flat illustrated leaves/stems. No new objects, no background, no shadows, no color changes, no rearrangement.
+```
+
+
+### Soft foliage and planted pot openings (v3, superseded by v4)
+
+Asset: [storefront-potted-foliage-v3.png](../src/assets/title/storefront-potted-foliage-v3.png),
+created with built-in **imagegen**, using v2 as the edit target and the landscape neighborhood
+as the style reference. Hard dark contours and coarse grain were removed from the foliage.
+Only the foliage asset changed; the scenery and original pot pixels remain their native artwork.
+
+The root anchors are now (109,710), (1421,778), and (1631,763), inside the actual visible soil.
+`foregroundArt` splits the pot mouth into complementary native-pixel layers: rear rim/soil,
+then animated plant, then front rim/body. Thus the rear lip no longer cuts across the stem.
+The compound cup and paw-sign sprites retain their original overlap with the plants.
+
+Final prompt:
+
+```text
+Use case: style-transfer. Image1 is edit target: a 1536x1024 transparent three-plant sprite sheet, THREE equal-width columns. Image2 is STRICT style authority for these plants: match its soft simple illustrated background shrubs and potted foliage. Repaint ONLY the three plants in image1 keeping their exact positions, sizes, overall silhouettes, three equal-width cell organization and stem endpoints. Significantly SOFTEN their graphic style: remove the hard dark outlines and all gritty speckles / coarse paper grain / etched veins. Use smooth soft matte broad color patches, muted warm olive and sage green, low contrast warm shadow shapes, gently painted edges, at most a faint short center vein. Simple cozy 2D storybook botanical painting, the same softness as image2's shrubs; no black or very dark brown outlines, no harsh yellow highlights, no botanical realism. The stem should be short and leafy close to the base to fit inside a flowerpot. Crisp transparent cutout silhouette with softly painted interior, not a blur filter or glow. True transparent background, NO haze, NO diffuse colored glow or halo, NO pots, no soil, no ground, no cast shadows, no scenery or text. Keep all three connected silhouettes in separate original cells and all other pixels alpha0.
 ```

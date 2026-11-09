@@ -2,10 +2,10 @@ import type { CounterLayout } from './layout';
 
 /** Inner edges of the original painted door; the surrounding wooden frame stays untouched. */
 export const DOOR_ART = {
-  portrait: { x: 369, y: 197, width: 244, height: 308,
-    columns: [[16, 42], [64, 43]], panes: [[15, 62], [83, 111], [200, 82]] },
-  landscape: { x: 850, y: 112, width: 245, height: 213,
-    columns: [[14, 40], [61, 43]], panes: [[14, 38], [59, 43], [107, 38], [151, 45]] },
+  portrait: { x: 326, y: 330, width: 372, height: 403,
+    columns: [[14, 160]], panes: [[14, 373]] },
+  landscape: { x: 833, y: 125, width: 276, height: 265,
+    columns: [[12, 112]], panes: [[12, 242]] },
 } as const;
 
 export function doorPlacement(layout: CounterLayout) {

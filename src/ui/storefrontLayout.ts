@@ -23,7 +23,7 @@ function place(scale: number,fromX: number,fromY: number,toX: number,toY: number
 export function storefrontLayout(width: number,height: number) {
   const w = 1672,h = w*height/width,unit = w/width,portrait = height > width*1.15;
   const roofScaleRatio = (1367-320)/(UPPER_STOREY.wallRight-UPPER_STOREY.wallLeft);
-  // Keep the existing cafe zoom when changing the roof pitch.
+  // Portrait shows the full gable; landscape frames the shopfront and its roof mascot.
   const houseHeight = 824-148+(UPPER_STOREY.baseY-UPPER_STOREY.fitPeakY)*roofScaleRatio;
   const treeScale = Math.min(width*.72,360)*unit/486;
   const tree = place(treeScale,0,0,-32*unit,-22*unit);
@@ -31,7 +31,10 @@ export function storefrontLayout(width: number,height: number) {
   const floor = h-controlSpace*unit;
   // Frame the facade closely; the two prop groups keep their own clear ground contacts.
   const framingScale = (w-96)/1240;
-  const shopScale = Math.min(framingScale*1.38,(floor-(portrait ? 56 : 24)*unit)/houseHeight);
+  const landscape = width >= height;
+  const shopScale = landscape
+    ? Math.min(framingScale*1.1,(floor-24*unit)/824)
+    : Math.min(framingScale*1.38,(floor-(portrait ? 56 : 24)*unit)/houseHeight);
   const propScale = Math.min(shopScale/1.1,framingScale);
   const shop = place(shopScale,844,824,w/2,floor);
   const upperScale = shopScale*roofScaleRatio;

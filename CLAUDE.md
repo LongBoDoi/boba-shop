@@ -1920,21 +1920,24 @@ bracket pivot. See `ui/titleSprite.ts` for alpha cleanup and source-atlas extrac
 requested; keep unrelated UI motion calm. Both orientations now render the SAME full cottage
 composition from storefrontScene.ts: corrected facade, high roof, awning, all cats and complete
 foreground silhouettes. Do not restore the old full-frame landscape painting or side-panel
-variant. Portrait keeps its close framing. Landscape fits the complete cottage between a 24 CSS
-pixel top margin and 82/130 CSS pixels for controls (short/tall screens), and anchors all props to
-the doorstep rather than the outer screen edges. Keep every subject uniformly scaled.
+variant. Portrait keeps its close framing. Landscape zooms to the original shopfront and roof mascot, with a 24 CSS
+pixel top margin and 82/130 CSS pixels for controls (short/tall screens); the tall gable extends
+above the viewport. It anchors all props to the doorstep rather than the outer screen edges. Keep every subject uniformly scaled.
 storefront-neighborhood-v1.png is the portrait background; storefront-neighborhood-landscape-v1.png
 is the wide background, with seven houses, balconies, ivy, a rose trellis, bench and street lamp.
 Cover-fit each above the ground line; the landscape plate is bottom-aligned. Both versions use
 storefront-side-garden-v2.png plus two integrated swaying corner-tree sprites. Loading, reduced
 motion and WebGL fallback must show the current cottage design; do not flash the old flat menu.
 storefront-house-roof-v3.png keeps the preferred tall apex y230, balanced eave ends x126/1408,
-and wall posts x148/1388 joined to cafe posts x320/1367 at y148. Keep its camera fit unchanged.
+and wall posts x148/1388 joined to cafe posts x320/1367 at y148. Keep its native proportions when changing the camera framing.
 The fascia end caps fit x320/1367 and roof cornice caps fit x148/1388. The awning keeps its native
 size and height with a 32 native pixel left offset. Never stretch the facade, insert shelf/glass
 bands, space out pastries or restore excessive overhangs. The continuous left column and old
 easel silhouette are restored from storefront-easel-clear-v1.png; retain original art elsewhere.
-Use storefront-right-leaves-v1.png and complete cup/pot silhouettes, with cup/right-pot and
+Use storefront-potted-foliage-v4.png for the three ground plants, rooted by storefrontPlants.ts
+inside the fitted pot mouths. Sway around each measured stem end. Split the native pot opening into a rear/soil layer
+before foliage and a front rim/body layer afterward; never cover the stem with the rear rim.
+Keep the original canopy, shelf foliage and complete cup/pot silhouettes, with cup/right-pot and
 paw/front-pot pairs intact. Paint the cup pair last. Keep the easel clear of the left pot and draw
 it before the sleeping cat. All ground contacts and shadows remain close to the facade. The
 right sleeper, ledge and garden cluster share one transform. Do not split tails, clip straw/leaf
@@ -1956,11 +1959,13 @@ walk cycle, breathing, glances, occasional resting-paw pose and tail motion. Fra
 joints only; never regenerate SVGs or upload textures per animation frame. See
 [cat animation](docs/customer-animation.md) for lifecycle and browser checks.
 
-The counter/order screen now uses the painted cafe in `assets/counter/cafe-cats-raised-portrait.png` and
-`cafe-cats-raised-landscape.png`, with one continuous image per orientation. `counter/roomLayout.ts` is the
+The counter/order screen now uses the painted cafe in `assets/counter/cafe-peach-portrait-v1.png` and
+`cafe-peach-panorama-v5.png`, with one continuous image per orientation. `counter/roomLayout.ts` is the
 shared pure geometry for the painting, customer queue and live register. It fits the whole width,
 anchors the tabletop near half the page height, and extends only the plain cabinet grain on
-tall phones; no horizontal cover crop. See [raised counter](docs/counter-raised.md). Doorway, queue and
+tall phones; no horizontal cover crop. The peach watercolor cafe uses integrated cat furniture, cookie and pastry displays,
+a clear central aisle without rope barriers, and separate portrait/panoramic plates. Foreground and
+door measurements must follow these plates. See [peach counter](docs/counter-peach.md). Doorway, queue and
 serving cup share `width / 2`; see [centered artwork](docs/counter-symmetry.md). Customers stand on the
 central aisle from the rear entrance up to the counter using the full-body character variant.
 The front figure is larger at this closer viewpoint. `counter/foreground.ts` defines the counter

@@ -1,5 +1,5 @@
-import portrait from '../assets/counter/cafe-cats-raised-portrait.png';
-import landscape from '../assets/counter/cafe-cats-raised-landscape.png';
+import portrait from '../assets/counter/cafe-peach-portrait-v1.png';
+import landscape from '../assets/counter/cafe-peach-panorama-v5.png';
 
 /** One continuous painting per orientation. Geometry lives in counter/roomLayout.ts. */
 export const COUNTER_ROOMS = {

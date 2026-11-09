@@ -1,11 +1,11 @@
 /** Measurements of the two cafe paintings; pure data so layout checks need no image loader. */
 const ROOMS = {
-  portrait: { width: 982, height: 1602, counterY: 844, queueY: 950, doorY: 505,
-    register: { x: 69, y: 800, width: 130, height: 97 },
-    handoff: { y: 984, width: 100 } },
-  landscape: { width: 1945, height: 809, counterY: 412, queueY: 520, doorY: 325,
-    register: { x: 282, y: 390, width: 148, height: 85 },
-    handoff: { y: 542, width: 112 } },
+  portrait: { width: 1024, height: 1536, counterY: 1121, queueY: 1240, doorY: 733,
+    register: { x: 91, y: 1033, width: 146, height: 80 },
+    handoff: { y: 1215, width: 100 } },
+  landscape: { width: 1942, height: 809, counterY: 494, queueY: 588, doorY: 390,
+    register: { x: 145, y: 443, width: 174, height: 76 },
+    handoff: { y: 619, width: 112 } },
 };
 
 export function counterRoomPlacement(width: number, height: number, wide: boolean) {
@@ -26,7 +26,8 @@ export function counterRoomPlacement(width: number, height: number, wide: boolea
     queueY: y + art.queueY * scale, queueX: centerX,
     doorX: centerX, doorY: y + art.doorY * scale,
     register: { x: x + art.register.x * scale, y: y + art.register.y * scale,
-      width: art.register.width * scale, height: art.register.height * scale },
+      width: art.register.width * scale, height: art.register.height * scale,
+      transform: wide ? 'matrix(1,0.022,-0.012,1,0,0)' : undefined },
     // The painted serving mat beside the till, where a cup carried out of the kitchen stands until
     // the register hands it over: `x` is its centre, `y` the line the cup's base rests on, and
     // `width` how wide the cup is drawn, measured off the mat so it keeps the painting's own scale.

@@ -9,11 +9,11 @@ type Sprite = HTMLImageElement | HTMLCanvasElement;
 export type ScenePainter = (image: Sprite,box: ArtBox,transform?: TitleTransform,clip?: ArtBox) => void;
 let prepared: {key: string;art: ReturnType<typeof storefrontArt>;arm: ReturnType<typeof fortuneCatArt>} | null = null;
 export function prepareStorefront(image: HTMLImageElement,sources: StorefrontSources) {
-  const {backdrop,foliage,cats,foreground,armSheet,courtyard,upper,garden,rightLeaves,cornerTrees,easelClear,neighborhood,landscapeNeighborhood} = sources;
+  const {backdrop,foliage,cats,foreground,armSheet,courtyard,upper,garden,plantFoliage,cornerTrees,easelClear,neighborhood,landscapeNeighborhood} = sources;
   if (!backdrop || !foliage || !cats || !foreground || !armSheet) return null;
-  const key = [image,backdrop,foliage,cats,foreground,armSheet,courtyard,upper,garden,rightLeaves,cornerTrees,easelClear,neighborhood,landscapeNeighborhood].map(i => i?.src).join('|');
+  const key = [image,backdrop,foliage,cats,foreground,armSheet,courtyard,upper,garden,plantFoliage,cornerTrees,easelClear,neighborhood,landscapeNeighborhood].map(i => i?.src).join('|');
   if (!prepared || prepared.key !== key) prepared = {
-    key,art: storefrontArt(image,{backdrop,foliage,cats,foreground,armSheet,courtyard,upper,garden,rightLeaves,cornerTrees,easelClear,neighborhood,landscapeNeighborhood}),arm: fortuneCatArt(armSheet),
+    key,art: storefrontArt(image,{backdrop,foliage,cats,foreground,armSheet,courtyard,upper,garden,plantFoliage,cornerTrees,easelClear,neighborhood,landscapeNeighborhood}),arm: fortuneCatArt(armSheet),
   };
   return prepared;
 }
@@ -55,10 +55,10 @@ export function paintStorefront(paint: ScenePainter,scene: Prepared,layout: Stor
   const benchShadow = art.contactShadows.find(s => s.id === 'bench')!;
   still(benchShadow,'bench');still(p.bench,'bench');still(p.mat,'mat');still(p.bracket,'sign');
   for (const shadow of art.contactShadows) if (shadow.id !== 'bench') still(shadow,shadow.id);
+  for (const prop of art.foregrounds) if (prop.back) still({image: prop.back,box: prop.box},prop.id);
   for (const leaf of art.foliage) {
     if (art.cornerTrees && leaf.id === 'canopy') continue;
-    const replacement = leaf.id === 'plant-right' ? art.rightLeaves : null;
-    paint(replacement?.image ?? leaf.crop,replacement?.box ?? leaf.cropBox,
+    paint(leaf.crop,leaf.cropBox,
       compose(subjectTransform(layout,leaf.id),titleTransform(leaf.pivot,leaf.amplitude*Math.sin(seconds*leaf.frequency+leaf.phase))));
   }
   if (art.cornerTrees) {

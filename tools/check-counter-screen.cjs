@@ -63,7 +63,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
         assert.equal(geometry.roomX, 0, 'The left side of the room is not cropped');
         assert.equal(geometry.roomWidth, geometry.width, 'The right side of the room is not cropped');
         assert(geometry.tableY / geometry.h >= 0.41 && geometry.tableY / geometry.h <= 0.51, 'Counter is near halfway down');
-        assert(geometry.background.includes('cafe-cats-raised-'));
+        assert(geometry.background.includes('cafe-peach-'));
         assert.equal(geometry.positions.filter(p => p.bubble).length, 1, 'Only one order bubble');
         geometry.positions.slice(1).forEach((p, i) => {
           assert(p.y < geometry.positions[i].y && p.scale < geometry.positions[i].scale && p.depth < geometry.positions[i].depth,

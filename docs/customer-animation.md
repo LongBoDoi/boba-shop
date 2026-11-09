@@ -22,7 +22,7 @@ floor waypoints in `walkway.ts`, waits for its door lease, reaches for the handl
 crosses out and walks behind the exterior wall. Neither trip fades the customer. Queue guests
 advance only in FIFO order; only the stationary front guest can be served.
 
-Waypoints stay in the central aisle, inside the rope barriers and clear of the chairs/sign.
+Waypoints stay in the central aisle, between the side seating groups and clear of the chairs/displays.
 `queueDepth` and original-painting foreground crops put cats behind the counter and the correct
 side of the posts. Direction follows the departure path. Geometry uses the same source-coordinate
 projection in portrait and landscape layouts.

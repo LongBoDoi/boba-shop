@@ -63,6 +63,7 @@ export const CounterPage = memo(function CounterPage({ width, height, wide }: {
       disabled={!running || opening || !counterReady || (!serving && !requesting && !ordered)}
       style={{ left: Math.max(0, register.x), top: register.y - Math.max(0, 44 - register.height) / 2,
         width: register.width + Math.min(0, register.x), height: Math.max(44, register.height),
+        transform: register.transform,
         fontSize: Math.max(12, Math.min(18, register.width * 0.155)) }}
       onClick={() => {
         if (uiState.value.pageOffset !== 0 || uiState.value.opening || !uiState.value.counterReady || store.state.paused) return;

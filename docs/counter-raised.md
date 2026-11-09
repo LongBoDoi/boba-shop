@@ -1,5 +1,7 @@
 # Raised counter and mobile framing
 
+Historical artwork; the current design and source measurements are in [peach counter](counter-peach.md).
+
 The counter's back edge now sits near halfway down the order page. Both paintings retain the
 central entrance, cat motifs, warm lighting and a clear queue. The portrait menu moves to the
 right of the front customer; the register and drinks have inset margins.

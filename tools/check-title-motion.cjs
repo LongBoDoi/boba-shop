@@ -29,6 +29,7 @@ try{
   assert(Math.hypot(root.x-pivot.x,root.y-pivot.y)<1e-10,'Breathing keeps each cat in contact with its support');
  }
  const{storefrontLayout,storefrontBox,subjectTransform,UPPER_STOREY}=require('../src/ui/storefrontLayout.ts');
+ const{PLANT_ROOTS}=require('../src/ui/storefrontPlants.ts');
  const{skyMotion}=require('../src/ui/storefrontSky.ts');
  const wings=new Set();
  for(let i=0;i<180;i++){
@@ -45,6 +46,15 @@ try{
  ];
  for(const [width,height] of [[329,738],[320,568],[390,844],[430,932],[568,320],[844,390],[932,430],[768,1024],[1024,768],[1672,941],[2560,1080],[600,610]]){
   const layout=storefrontLayout(width,height);
+  for(const root of PLANT_ROOTS){
+   const pot=subjectTransform(layout,root.id.replace('plant-','pot-'));
+   const contact=apply(pot,root);
+   for(let frame=0;frame<48;frame++){
+    const swayed=apply(titleTransform(root,.018*Math.sin(frame/47*Math.PI*2)),root);
+    const planted=apply(subjectTransform(layout,root.id),swayed);
+    assert(Math.hypot(planted.x-contact.x,planted.y-contact.y)<1e-8,'Wind and responsive framing keep the stem planted inside its own pot');
+   }
+  }
   {
   const houseRoof=subjectTransform(layout,'upper');
   const peak=houseRoof.ty+UPPER_STOREY.peakY*houseRoof.d;
@@ -62,7 +72,7 @@ try{
   const canopy=subjectTransform(layout,'canopy');
   assert(canopy.tx/layout.unit<=-30,'The trunk source edge stays outside the screen');
   assert((269*canopy.a+canopy.ty)/layout.unit>70,'A substantial leafy canopy remains visible');
-  assert((houseRoof.ty+UPPER_STOREY.peakY*houseRoof.d)/layout.unit>=(layout.portrait ? 55 : 23),'Whole roof and sky fit in both orientations');
+  if(width<height)assert((houseRoof.ty+UPPER_STOREY.peakY*houseRoof.d)/layout.unit>=(layout.portrait ? 55 : 23),'Portrait keeps the whole roof and sky');
   for(const [x,lowerX]of [[UPPER_STOREY.wallLeft,320],[UPPER_STOREY.wallRight,1367]]){
    const a=apply(houseRoof,{x,y:UPPER_STOREY.baseY}),b=apply(layout.shop,{x:lowerX,y:148});
    assert(Math.hypot(a.x-b.x,a.y-b.y)<1e-8,'Roof walls join both cafe posts without a seam');
@@ -93,7 +103,13 @@ try{
     const a=apply(upper,{x,y:UPPER_STOREY.baseY}),b=apply(layout.shop,{x:lowerX,y:148});
     assert(Math.hypot(a.x-b.x,a.y-b.y)<1e-8,'Roof walls join both cafe posts without a seam');
    }
-   assert((upper.ty+UPPER_STOREY.peakY*upper.d)/layout.unit>=(layout.portrait ? 55 : 23),'Whole roof and open sky remain visible');
+   if(width<height)assert((upper.ty+UPPER_STOREY.peakY*upper.d)/layout.unit>=(layout.portrait ? 55 : 23),'Portrait keeps the whole roof and open sky');
+   else {
+    const facadeWidth=1047*layout.shop.a/layout.unit;
+    assert(facadeWidth>=Math.min(width*.8,height*.8),'Landscape zoom keeps the facade prominent on wide screens');
+    assert(layout.shop.ty/layout.unit>=23.99,'The roof mascot remains below the top edge');
+    assert(Math.abs((apply(layout.shop,{x:844,y:824}).x/layout.unit)-width/2)<1e-8,'The storefront stays centered in landscape');
+   }
    for(const id of ['facade','case','door','roof','baker','mat','plant-shelf','pot-shelf','lamp-left','lamp-right']){
     assert.deepEqual(subjectTransform(layout,id),layout.shop,'Keep the original storefront and fixtures on one uniform transform');
    }

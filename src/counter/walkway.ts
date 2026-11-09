@@ -1,7 +1,7 @@
 import type { CounterLayout } from './layout';
 import { doorPlacement } from './doorGeometry';
 
-/** Floor waypoints stay inside the ropes and clear of chairs, signs and the counter props. */
+/** Floor waypoints stay in the open central aisle, clear of chairs and counter props. */
 export function exitWalkway(layout: CounterLayout, start: { x: number; feet: number; scale: number }, t: number) {
   const p = doorPlacement(layout), room = layout.room;
   const span = start.feet - p.thresholdY;
