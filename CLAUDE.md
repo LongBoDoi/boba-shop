@@ -1960,7 +1960,7 @@ joints only; never regenerate SVGs or upload textures per animation frame. See
 [cat animation](docs/customer-animation.md) for lifecycle and browser checks.
 
 The counter/order screen now uses the painted cafe in `assets/counter/cafe-peach-portrait-v1.png` and
-`cafe-peach-panorama-v5.png`, with one continuous image per orientation. `counter/roomLayout.ts` is the
+`cafe-peach-panorama-v8.png`, with one continuous image per orientation. `counter/roomLayout.ts` is the
 shared pure geometry for the painting, customer queue and live register. It fits the whole width,
 anchors the tabletop near half the page height, and extends only the plain cabinet grain on
 tall phones; no horizontal cover crop. The peach watercolor cafe uses integrated cat furniture, cookie and pastry displays,

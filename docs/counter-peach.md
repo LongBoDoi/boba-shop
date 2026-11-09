@@ -1,6 +1,6 @@
 # Peach cat cafe counter
 
-The current landscape plate is `cafe-peach-panorama-v5.png`; see [subtle tabletop perspective](counter-subtle-register.md) for the current perspective, pixel preservation and prompt. The earlier [local alignment repair](counter-alignment.md) remains historical. Original plates and generation history follow.
+The current landscape plate is `cafe-peach-panorama-v8.png`; see [cookie box perspective match](counter-cookie-perspective.md) for the current perspective, pixel preservation and prompt. The earlier [local alignment repair](counter-alignment.md) remains historical. Original plates and generation history follow.
 
 The current Counter screen follows the user's supplied peach cafe reference: muted cream/peach watercolor grain, olive plants, cat-ear lights and register, cat chairs, a covered cookie display, gingham serving mat and curved pastry case. All fixed objects are painted into each continuous room plate. The previous plates remain archived; no kitchen or title pixels are changed.
 

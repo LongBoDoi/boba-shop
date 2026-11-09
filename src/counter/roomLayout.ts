@@ -27,7 +27,7 @@ export function counterRoomPlacement(width: number, height: number, wide: boolea
     doorX: centerX, doorY: y + art.doorY * scale,
     register: { x: x + art.register.x * scale, y: y + art.register.y * scale,
       width: art.register.width * scale, height: art.register.height * scale,
-      transform: wide ? 'matrix(1,0.022,-0.012,1,0,0)' : undefined },
+      transform: undefined },
     // The painted serving mat beside the till, where a cup carried out of the kitchen stands until
     // the register hands it over: `x` is its centre, `y` the line the cup's base rests on, and
     // `width` how wide the cup is drawn, measured off the mat so it keeps the painting's own scale.

@@ -28,7 +28,7 @@ export class PreloadScene extends Phaser.Scene {
 
   preload() {
     const assets = new Set<string>([...PRELOAD, ...Object.values(SCOOPFUL),
-      ...Object.values(COUNTER_ROOMS).map(room => room.image)]);
+      ...Object.values(COUNTER_ROOMS).flatMap(room => [room.image, room.gardenPatch])]);
     for (const asset of assets) this.load.image(tex(asset), tex(asset));
     const base = uiState.value.loading;
     this.load.on('progress', (value: number) => uiState.set({ loading: base + value * ART_SHARE }));

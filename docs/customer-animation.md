@@ -29,11 +29,16 @@ projection in portrait and landscape layouts.
 
 ## Door and scenery
 
-`Doorway` has a FIFO lease shared by arrivals and departures. The original painted leaf supplies
-25 cached hinge frames, including the exact closed panel. The frame stays stationary. The garden
-is a single stationary texture in both closed and open states: visible pane pixels retain their
-original coordinates; areas previously hidden by wood are reconstructed from adjacent pane
-samples. There is no replacement scenery or brightness change on opening.
+`Doorway` has a FIFO lease shared by arrivals and departures. Only the left door leaf opens; the
+right leaf stays painted in place. The moving sprite contains its wood frame, handle and paw decal.
+Its glass is transparent, so no outdoor scenery can travel with it. A stationary garden texture
+reconstructs only the pixels hidden by that leaf's details; the remaining visible view and the
+entire right leaf retain their original coordinates. The left leaf is projected as one plane across
+31 eased hinge frames. Narrow areas behind the wooden edges copy adjacent glass pixels directly,
+preserving the painted scene's sharpness. The small area behind the removed paw uses a matching
+painted garden patch, with only a two-pixel blend at its boundary. The two patch assets and their
+generation prompts are recorded in `counter-door-garden.md`. There is no scenery or lighting swap
+on opening.
 
 Four cropped original-room strips hide exterior actors outside the aperture, on WebGL and Canvas.
 This avoids Phaser 4's unsupported legacy GeometryMask path in WebGL. Interior actors switch to

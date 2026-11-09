@@ -1,5 +1,7 @@
 # Register matched to tabletop perspective
 
+Historical v5 base; see the [level base correction](counter-level-base.md).
+
 Active landscape image: `src/assets/counter/cafe-peach-panorama-v5.png`, 1942×809. Reduces the exaggerated v4 yaw/sideways lean while retaining the requested rightward direction. Screen edges descend only slightly toward the right, body and support stand almost upright, a small right housing edge remains visible, and the base shares the cookie box's gentle depth direction. Live screen lettering and hit rectangle are remeasured; foreground outline follows the new silhouette. Portrait remains unchanged.
 
 Built-in imagegen source: `/Users/dev/.codex/generated_images/01a13e8f-a6f5-7171-9278-add319e78a23/exec-4a4a3b2d-dbc4-4111-8039-1676f0b49fa2.png`, using v4 as edit target. Only region x96,y354,w285,h308 is composited into v4 with a7px interior feather at original resolution. The rectangle ends before the bell. Pixels outside the edit are checked against decoded v4; the shipped background remains a single complete painting with no runtime prop overlay.

@@ -50,9 +50,24 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
         const ctx = c.getContext('2d'); ctx.drawImage(original, art.x, art.y, art.width, art.height, 0, 0, art.width, art.height);
         const source = ctx.getImageData(0, 0, art.width, art.height).data;
         const garden = d.garden.texture.getSourceImage().getContext('2d').getImageData(0, 0, art.width, art.height).data;
-        for (const offset of [0, art.width / 2]) for (const [x, w] of art.columns) for (const [y, h] of art.panes) {
-          const at = (Math.floor(y+h/2)*art.width+Math.floor(offset+x+w/2))*4;
-          for (let channel=0;channel<4;channel++) if (source[at+channel]!==garden[at+channel]) throw new Error('Visible garden pixel changed');
+        const rightStart = art.width / 2;
+        for (let y = 0; y < art.height; y++) for (let x = rightStart; x < art.width; x++) {
+          const at = (y * art.width + x) * 4;
+          for (let channel = 0; channel < 4; channel++) if (source[at+channel] !== garden[at+channel])
+            throw new Error('The fixed right leaf or its scenery changed');
+        }
+        const glassX = art.glass.x + 20, glassY = art.glass.y + 45;
+        const glassAt = (glassY * art.width + glassX) * 4;
+        for (let channel=0;channel<4;channel++) if (source[glassAt+channel]!==garden[glassAt+channel])
+          throw new Error('Visible outdoor scenery changed');
+        const leaf = d.leftLeaf.texture.getSourceImage().getContext('2d').getImageData(0, 0, art.width, art.height).data;
+        if (leaf[glassAt+3] !== 0) throw new Error('Moving door carries outdoor scenery');
+        for (const [x,y] of [[art.handle.x + art.handle.width / 2, art.handle.y + art.handle.height / 2],
+          [art.paw[0][0], art.paw[0][1]]]) {
+          const at = (Math.floor(y) * art.width + Math.floor(x)) * 4;
+          if (leaf[at+3] === 0) throw new Error('Handle or paw decal missing from moving door');
+          if (source[at] === garden[at] && source[at+1] === garden[at+1] && source[at+2] === garden[at+2])
+            throw new Error('Handle or paw decal remains fixed in the scenery');
         }
         return d.garden.texture.key;
       });
