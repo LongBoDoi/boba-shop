@@ -38,7 +38,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
         const scene = __shop.game().scene.getScene('counter'), l = scene.layout;
         const guest = [...scene.stage.customers.values()].find(g => g.rank === rank);
         const bounds = __shop.game().canvas.getBoundingClientRect(), camera = scene.cameras.main;
-        return { x: bounds.x + camera.x / camera.zoom + guest.root.x,
+        return { x: bounds.x + camera.x / camera.zoom + guest.root.x - camera.scrollX,
           // Waiting faces overlap in perspective; tap their exposed crown, not a nearer guest.
           y: bounds.y + camera.y / camera.zoom + guest.root.y + (l.room.queueY - l.metrics.charHeight * (rank === 0 ? 0.65 : 0.97)) * guest.root.scaleX,
           slot: guest.slot };
@@ -52,6 +52,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
             feet: l.room.queueY, h: l.height, coveredFeet: scene.stage.slotAt(l.room.queueX, l.room.queueY - 1),
             foregroundDepth: scene.backdrop.foreground.depth, bubble: l.stageHeight - l.metrics.bubbleBottom - 68,
             roomX: l.room.x, roomWidth: l.room.width, width: l.width, tableY: l.room.counterY,
+            maxPan: l.room.maxPan, pan: scene.pan, cats: scene.cats.cats.length,
             positions: [...scene.stage.customers.values()].sort((a,b) => a.rank - b.rank).map(g => ({
               y: g.root.y + l.room.queueY * g.root.scaleX, scale: g.root.scaleX, depth: g.root.depth,
               bubble: g.view.bubble.visible })), background: scene.backdrop.room.texture.key };
@@ -61,9 +62,10 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
         assert(geometry.foregroundDepth > geometry.positions[0].depth, 'The counter draws in front of the customer');
         assert(geometry.feet > 0 && geometry.feet < geometry.h && geometry.bubble >= 0);
         assert.equal(geometry.roomX, 0, 'The left side of the room is not cropped');
-        assert.equal(geometry.roomWidth, geometry.width, 'The right side of the room is not cropped');
+        assert(geometry.roomWidth > geometry.width && geometry.maxPan > 0, 'The room can pan to both sides');
+        assert(geometry.cats >= 4, 'Animated resident cats are present');
         assert(geometry.tableY / geometry.h >= 0.41 && geometry.tableY / geometry.h <= 0.51, 'Counter is near halfway down');
-        assert(geometry.background.includes('cafe-peach-'));
+        assert(geometry.background.includes('cafe-cream-'));
         assert.equal(geometry.positions.filter(p => p.bubble).length, 1, 'Only one order bubble');
         geometry.positions.slice(1).forEach((p, i) => {
           assert(p.y < geometry.positions[i].y && p.scale < geometry.positions[i].scale && p.depth < geometry.positions[i].depth,
@@ -105,7 +107,12 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
       const start = await customerPoint(0);
       await page.mouse.move(start.x, start.y); await page.mouse.down();
       await page.mouse.move(start.x - viewport.width * 0.43, start.y, { steps: 12 }); await page.mouse.up();
-      await page.waitForFunction(() => __shop.uiState.value.pageOffset === 1);
+      await page.waitForTimeout(250);
+      assert.equal(await page.evaluate(() => __shop.uiState.value.pageOffset), 0,
+        'Dragging the counter stays in the room');
+      assert(await page.evaluate(() => Math.abs(__shop.game().scene.getScene('counter').pan
+        - __shop.game().scene.getScene('counter').layout.room.initialPan) > 10),
+      'Dragging changes the counter camera');
       assert.equal(await page.evaluate(() => __shop.store.state.slots.filter(c => c?.status === 'ordered').length), 0);
       await reset(30);
       await page.evaluate(() => __shop.store.dispatch({ type: 'SET_PAUSED', paused: true }));

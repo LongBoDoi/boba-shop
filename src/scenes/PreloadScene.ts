@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { COUNTER_ROOMS } from '../art/counterRoomArt';
+import cafeCats from '../assets/counter/cafe-cats-atlas-v1.png';
 
 import { CUP_CREAM, PRELOAD, SCOOPFUL } from '../art/kitchenArt';
 import { prepareReferenceCup, REFERENCE_CUP } from '../art/referenceCupArt';
@@ -28,7 +29,7 @@ export class PreloadScene extends Phaser.Scene {
 
   preload() {
     const assets = new Set<string>([...PRELOAD, ...Object.values(SCOOPFUL),
-      ...Object.values(COUNTER_ROOMS).flatMap(room => [room.image, room.gardenPatch])]);
+      ...Object.values(COUNTER_ROOMS).map(room => room.image), cafeCats]);
     for (const asset of assets) this.load.image(tex(asset), tex(asset));
     const base = uiState.value.loading;
     this.load.on('progress', (value: number) => uiState.set({ loading: base + value * ART_SHARE }));

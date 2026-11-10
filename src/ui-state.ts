@@ -28,9 +28,11 @@ export interface UiState {
   ready: boolean;
   /** The front cat has physically reached the counter and can interact with the register. */
   counterReady: boolean;
+  /** Horizontal camera offset within the painted counter room, in CSS pixels. */
+  counterPan: number;
   /** 0 = counter, 1 = kitchen. Where the pager is resting. */
   page: 0 | 1;
-  /** Where the pager is drawn right now, 0–1, including mid-swipe and mid-animation. */
+  /** Where the pager is drawn right now, 0–1, including the tab slide animation. */
   pageOffset: number;
   /** The day's sign is up; the clock does not run behind it. */
   opening: boolean;
@@ -66,6 +68,7 @@ let ui: UiState = {
   loading: 0,
   ready: false,
   counterReady: false,
+  counterPan: 0,
   page: 0,
   pageOffset: 0,
   opening: false,

@@ -41,24 +41,25 @@ for (const extra of [{ mode: 'relaxed' }, { gear: ['board'] }]) {
 }
 for (const [w, h] of [[320, 660], [375, 540], [390, 766], [430, 850], [568, 240], [932, 350], [768, 850]]) {
   const l = layoutCounter(w, h, w, h, 3);
-  assert.equal(l.room.queueX, w / 2, 'The front customer is on the screen centerline');
-  assert.equal(l.room.doorX, w / 2, 'The entrance is on the same centerline');
-  assert.equal(l.room.handoff.x, w / 2, 'The serving cup stays on that centerline too');
+  assert.equal(l.room.queueX - l.room.initialPan, w / 2, 'The front customer opens on the screen centerline');
+  assert.equal(l.room.doorX, l.room.queueX, 'The entrance is on the same centerline');
+  assert.equal(l.room.handoff.x, l.room.queueX, 'The serving cup stays on that centerline too');
   assert.equal(l.room.x, 0, 'The complete left side remains visible');
-  assert.equal(l.room.width, w, 'The complete right side remains visible');
+  assert(l.room.width > w && l.room.maxPan > 0, 'The room extends beyond both sides for panning');
   assert(l.room.counterY / h >= 0.41 && l.room.counterY / h <= 0.51, 'The table stays near mid-screen');
-  assert(l.room.register.x >= 0.06 * w, 'The register has breathing room on the left');
+  assert(l.room.register.x + l.room.register.width > l.room.initialPan,
+    'The register is at least partly visible on opening');
   assert(l.room.queueY > l.room.counterY, 'The guest stands immediately behind the tabletop');
   assert(l.room.y <= 0 && l.room.y + l.room.height + l.room.cabinetExtension >= h - 0.01,
     'The painting covers the screen vertically without enlarging and cropping its sides');
-  assert(behindCounterForeground(l.room, w / 2, l.room.queueY), 'The foreground conceals the feet');
-  assert(!behindCounterForeground(l.room, w / 2, l.room.queueY - l.metrics.charHeight * 0.65), 'The face remains visible and tappable');
+  assert(behindCounterForeground(l.room, l.room.queueX, l.room.queueY), 'The foreground conceals the feet');
+  assert(!behindCounterForeground(l.room, l.room.queueX, l.room.queueY - l.metrics.charHeight * 0.65), 'The face remains visible and tappable');
   let last = queuePosition(l, 0);
   for (let rank = 1; rank < 9; rank++) {
     const next = queuePosition(l, rank);
-    assert.equal(next.x, w / 2, 'The line stays vertical at every depth');
+    assert.equal(next.x, l.room.queueX, 'The line stays vertical at every depth');
     assert(next.feet < last.feet && next.scale < last.scale, 'Queue recedes toward the door');
-    assert(next.feet > l.room.doorY && next.x > 0 && next.x < w);
+    assert(next.feet > l.room.doorY && next.x > 0 && next.x < l.room.width);
     last = next;
   }
 }

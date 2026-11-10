@@ -25,6 +25,7 @@ export const CounterPage = memo(function CounterPage({ width, height, wide }: {
   width: number; height: number; wide: boolean;
 }) {
   const root = useRef<HTMLDivElement>(null);
+  const world = useRef<HTMLDivElement>(null);
   const opening = useUi(ui => ui.opening);
   const counterReady = useUi(ui => ui.counterReady);
   const { requesting, ordered, serving, name, running } = useGame(state => {
@@ -49,16 +50,20 @@ export const CounterPage = memo(function CounterPage({ width, height, wide }: {
       root.current!.style.transform = `translate3d(${-offset * width}px, 0, 0)`;
       root.current!.style.visibility = offset < 1 ? 'visible' : 'hidden';
       root.current!.dataset.active = offset === 0 ? 'true' : 'false';
+      world.current!.style.transform = `translate3d(${-uiState.value.counterPan}px, 0, 0)`;
     };
     apply();
-    return uiState.subscribe((ui, was) => { if (ui.pageOffset !== was.pageOffset) apply(); });
+    return uiState.subscribe((ui, was) => {
+      if (ui.pageOffset !== was.pageOffset || ui.counterPan !== was.counterPan) apply();
+    });
   }, [width]);
   const action = !counterReady ? 'Xin chào' : serving ? 'Trao ly' : requesting ? 'Nhận đơn' : ordered ? 'Pha chế' : 'Xin chào';
   const detail = !counterReady ? 'Mời bạn vào quán' : serving ? `Cho ${name}`
     : requesting ? `${requesting} khách chờ` : ordered ? `${ordered} đơn đã nhận` : 'Mời bạn gọi món';
   return <div ref={root} class="counter-register-layer" style={{ width, height }}>
-    {waiting && <HandoffCup key={cupId} drink={waiting} seat={handoff} />}
-    <button type="button" class={`counter-register ${serving ? 'ready' : ''}`}
+    <div ref={world} class="counter-world">
+      {waiting && <HandoffCup key={cupId} drink={waiting} seat={handoff} />}
+      <button type="button" class={`counter-register ${serving ? 'ready' : ''}`}
       aria-label={!counterReady ? 'Khách đang đến quầy' : serving ? `Trao ly cho ${name}` : requesting ? `Nhận đơn, ${requesting} khách đang chờ` : action}
       disabled={!running || opening || !counterReady || (!serving && !requesting && !ordered)}
       style={{ left: Math.max(0, register.x), top: register.y - Math.max(0, 44 - register.height) / 2,
@@ -74,8 +79,9 @@ export const CounterPage = memo(function CounterPage({ width, height, wide }: {
         else if (slot !== null && store.state.slots[slot]?.status === 'ordered') goToPage(1);
       }}>
       <span>{action}</span>
-      {register.height >= 48 && <small>{detail}</small>}
-    </button>
+        {register.height >= 48 && <small>{detail}</small>}
+      </button>
+    </div>
   </div>;
 });
 

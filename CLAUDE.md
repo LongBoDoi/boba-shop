@@ -760,19 +760,17 @@ leave running, because how long the tap was held is measured off the wall clock 
 when the game was put down would tip however long the player was away into the cup and ruin a drink
 they never touched.
 
-### The two pages (swipe navigation)
+### The two pages and their panoramas
 
-`src/game/pager.ts` owns one number, `uiState.pageOffset` (0 = counter, 1 = kitchen, in between
-mid-swipe): the two scenes' cameras and the HTML of both pages follow it, so a page slides as one
-piece. A finger drags it (`dragPage`), letting go settles on whichever page is nearer or wherever a
-flick was aimed (`releasePage`), and a tab taps straight to one (`goToPage`). The `PageTabs`
-indicator under the HUD highlights the active page and badges each side (Quầy = # waiting to order,
-with a `+N` beside it for anyone in the line outside, Pha chế = # tickets to make). Swiping is the
-primary gesture; the tabs are the shortcut.
-
-The kitchen's own horizontal swipes belong to its panorama — the wall is reached by dragging it —
-so the counter is reached from the kitchen by the tab, while the kitchen is reached from the
-counter either way.
+`src/game/pager.ts` owns `uiState.pageOffset` (0 = counter, 1 = kitchen, including animation).
+The two scenes' cameras and both HTML layers follow it when a tab or service action calls
+`goToPage`. `PageTabs` under the HUD highlights the active page and badges each side. Horizontal
+drags inside either room pan that room's own painting. The counter has a separate camera offset,
+`uiState.counterPan`, which also shifts its register label and waiting cup. Keep the customer queue,
+cat touch areas, painted foreground and HTML controls in the same room coordinates. Keep cat sprites
+separate from the painting; animate them without moving background pixels. The current cream counter
+paintings and sprite atlas live in `src/assets/counter/cafe-cream-*` and
+`src/assets/counter/cafe-cats-atlas-v1.png`.
 
 
 ### The shop's money

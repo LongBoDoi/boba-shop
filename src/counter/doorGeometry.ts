@@ -9,13 +9,13 @@ export const DOOR_ART = {
     foregroundLeft: { x: 65, y: 326 },
     paw: [[98, 188, 17, 13], [80, 177, 6, 8], [90, 166, 6, 8],
       [104, 166, 6, 8], [116, 177, 6, 8]] },
-  landscape: { x: 833, y: 125, width: 276, height: 265,
-    glass: { x: 12, y: 12, width: 118, height: 242 },
-    handle: { x: 116, y: 129, width: 13, height: 62 },
-    pawClear: { x: 69, y: 110, rx: 27, ry: 23 },
-    foregroundLeft: { x: 0, y: 265 },
-    paw: [[69, 117, 16, 12], [53, 107, 6, 7], [63, 98, 6, 7],
-      [76, 98, 6, 7], [86, 107, 6, 7]] },
+  landscape: { x: 957, y: 146, width: 253, height: 245,
+    glass: { x: 14, y: 13, width: 105, height: 219 },
+    handle: { x: 107, y: 122, width: 11, height: 59 },
+    pawClear: { x: 65, y: 107, rx: 27, ry: 24 },
+    foregroundLeft: { x: 0, y: 245 },
+    paw: [[65, 114, 16, 12], [49, 104, 6, 7], [59, 95, 6, 7],
+      [72, 95, 6, 7], [82, 104, 6, 7]] },
 } as const;
 
 export function doorPlacement(layout: CounterLayout) {

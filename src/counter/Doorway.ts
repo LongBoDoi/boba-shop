@@ -59,12 +59,6 @@ export class Doorway {
       const original = c.getImageData(0, 0, art.width, art.height);
       const result = c.getImageData(0, 0, art.width, art.height);
       const paw = art.pawClear;
-      const patchKey = tex(COUNTER_ROOMS[layout.room.orientation].gardenPatch);
-      const painted = document.createElement('canvas'); painted.width = art.width; painted.height = art.height;
-      const paintedContext = painted.getContext('2d')!;
-      if (scene.textures.exists(patchKey)) paintedContext.drawImage(
-        scene.textures.get(patchKey).getSourceImage() as HTMLImageElement, 0, 0, art.width, art.height);
-      const paintedPixels = paintedContext.getImageData(0, 0, art.width, art.height);
       // Keep the entire right door and the garden in their painted positions. Only pixels hidden
       // by details of the moving left leaf need a stationary outdoor reconstruction.
       for (let y = 0; y < art.height; y++) for (let x = 0; x < half; x++) {
@@ -89,7 +83,7 @@ export class Doorway {
           const edge = (1 - Math.sqrt(((x - paw.x) / paw.rx) ** 2 + ((y - paw.y) / paw.ry) ** 2)) * Math.min(paw.rx, paw.ry);
           const mix = Math.max(0, Math.min(1, edge / 2));
           for (let channel = 0; channel < 3; channel++) {
-            const donor = paintedPixels.data[at + 3] ? paintedPixels.data[at + channel] : original.data[fallback + channel];
+            const donor = original.data[fallback + channel];
             result.data[at + channel] = original.data[at + channel] * (1 - mix) + donor * mix;
           }
           continue;
