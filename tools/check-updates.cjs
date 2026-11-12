@@ -32,9 +32,9 @@ const { NATIVE_VERSION } = require(path.join(root, 'src/updates/native.ts'));
 
 // ============================================================ the shell, and the number for it
 /**
- * Everything an update cannot carry. A file is listed by name so that one appearing or
+ * Text files an update cannot carry. A file is listed by name so that one appearing or
  * disappearing is itself a change; the `@capacitor/*` versions are in here because a plugin
- * upgrade is native code too.
+ * upgrade is native code too. The launcher icons are binary and scanned separately below.
  */
 const SHELL = [
   'capacitor.config.ts',
@@ -71,11 +71,24 @@ function fingerprint() {
     const text = fs.existsSync(full) ? fs.readFileSync(full, 'utf8') : '(missing)';
     hash.update(text.replace(/\r\n/g, '\n'));
   }
+  // Android launcher icons — native resources packed into the APK. Scanned rather than listed
+  // one by one so that every mipmap-* density is covered without naming all 24 files here.
+  const res = path.join(root, 'android', 'app', 'src', 'main', 'res');
+  for (const dir of fs.readdirSync(res).filter(d => d.startsWith('mipmap-')).sort()) {
+    for (const file of fs.readdirSync(path.join(res, dir)).sort()) {
+      hash.update(`${dir}/${file}`);
+      hash.update(fs.readFileSync(path.join(res, dir, file)));
+    }
+  }
+  // iOS app icon — same deal: baked into the IPA, cannot travel in an OTA update.
+  const iosIcon = path.join(root, 'ios', 'App', 'App', 'Assets.xcassets', 'AppIcon.appiconset', 'AppIcon-512@2x.png');
+  hash.update('AppIcon-512@2x.png');
+  hash.update(fs.existsSync(iosIcon) ? fs.readFileSync(iosIcon) : Buffer.from('(missing)'));
   return hash.digest('hex').slice(0, 16);
 }
 
 /** The shell as it was when NATIVE_VERSION last moved. Re-record both together, never one. */
-const BUILT = { nativeVersion: 2, fingerprint: 'd479ea84c330c611' };
+const BUILT = { nativeVersion: 3, fingerprint: '73a2a3df758dc825' };
 
 const now = fingerprint();
 assert.equal(NATIVE_VERSION, BUILT.nativeVersion,

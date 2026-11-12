@@ -31,8 +31,8 @@ from PIL import Image, ImageDraw
 ROOT = Path(__file__).resolve().parent.parent
 SOURCE = ROOT / 'tools' / 'sheets' / 'logo.png'
 
-#: The tan the mark is painted on, and the colour that stays behind it on an icon.
-TAN = (237, 200, 181, 255)
+#: The cream the mark is painted on, and the colour that stays behind it on an icon.
+TAN = (254, 243, 223, 255)
 #: How wide the mark is drawn across an icon that keeps its corners.
 SQUARE = 0.86
 #: ...across a layer a launcher may crop to a circle, and across the already-inset mipmap one.

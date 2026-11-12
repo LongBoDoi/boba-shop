@@ -17,5 +17,7 @@
  * 2 — `@capacitor/filesystem`, the installer plugin and `REQUEST_INSTALL_PACKAGES`: the shell that
  *     can update itself. An app from before this cannot be updated over the air at all, and is
  *     told to install a new file once.
+ * 3 — new launcher icon (Android mipmap bitmaps and iOS app icon are native resources; they cannot
+ *     travel in an OTA update and require a new build).
  */
-export const NATIVE_VERSION = 2;
+export const NATIVE_VERSION = 3;
