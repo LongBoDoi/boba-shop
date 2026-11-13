@@ -1,8 +1,8 @@
-/** Measurements of the cream cafe paintings in source pixels. */
+/** Measurements of the cream cafe panorama in source pixels. Both orientations use this painting. */
 const ROOMS = {
-  portrait: { width: 1024, height: 1536, counterY: 1121, queueY: 1240, doorY: 733,
-    register: { x: 91, y: 1033, width: 146, height: 80 },
-    handoff: { y: 1215, width: 100 } },
+  portrait: { width: 2172, height: 724, counterY: 476, queueY: 548, doorY: 370,
+    register: { x: 315, y: 397, width: 165, height: 75 },
+    handoff: { y: 563, width: 112 } },
   landscape: { width: 2172, height: 724, counterY: 476, queueY: 548, doorY: 370,
     register: { x: 315, y: 397, width: 165, height: 75 },
     handoff: { y: 563, width: 112 } },
@@ -11,10 +11,11 @@ const ROOMS = {
 export function counterRoomPlacement(width: number, height: number, wide: boolean) {
   const orientation = wide ? 'landscape' : 'portrait';
   const art = ROOMS[orientation];
-  // The panorama is deliberately wider than the viewport. Keep its painted proportions intact;
-  // a finger pans the camera to the shelves at either end.
-  const scale = wide ? Math.max(width / art.width * 1.36, height / art.height * 0.87)
-    : width / art.width * 1.20;
+  // The panorama is deliberately wider than the viewport in both orientations. Keep its painted
+  // proportions intact; a finger pans the camera to the shelves at either end.
+  // In portrait the height term dominates (tall screen, wide art), giving a ~1× scale that fills
+  // the screen height. In landscape the width term dominates as before.
+  const scale = Math.max(width / art.width * 1.36, height / art.height * 0.87);
   const x = 0;
   const y = Math.min(0, height * 0.5 - art.counterY * scale);
   const centerX = art.width * scale / 2;

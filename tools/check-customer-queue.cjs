@@ -47,8 +47,11 @@ for (const [w, h] of [[320, 660], [375, 540], [390, 766], [430, 850], [568, 240]
   assert.equal(l.room.x, 0, 'The complete left side remains visible');
   assert(l.room.width > w && l.room.maxPan > 0, 'The room extends beyond both sides for panning');
   assert(l.room.counterY / h >= 0.41 && l.room.counterY / h <= 0.51, 'The table stays near mid-screen');
-  assert(l.room.register.x + l.room.register.width > l.room.initialPan,
-    'The register is at least partly visible on opening');
+  // In landscape the register sits at the left edge and is visible immediately. In portrait the
+  // same panorama is used but the queue/entrance is centred on opening; the register is to the
+  // far left and reached by panning.
+  if (l.wide) assert(l.room.register.x + l.room.register.width > l.room.initialPan,
+    'The register is at least partly visible on opening (landscape)');
   assert(l.room.queueY > l.room.counterY, 'The guest stands immediately behind the tabletop');
   assert(l.room.y <= 0 && l.room.y + l.room.height + l.room.cabinetExtension >= h - 0.01,
     'The painting covers the screen vertically without enlarging and cropping its sides');

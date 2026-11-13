@@ -186,11 +186,14 @@ for (const [what, width, height] of COUNTER_SHAPES) {
   const room = counterRoomPlacement(width, height, counterIsWide(width, height));
   const { handoff: seat, register } = room;
   const cup = cupLayout(seat.width, { straw: true, sealed: true });
-  const left = seat.x - cup.boxWidth / 2;
-  assert(left >= 0 && left + cup.boxWidth <= width, `${what}: the whole cup is on the page`);
+  // seat.x is a world (room) coordinate; subtract initialPan to get the screen position.
+  const screenLeft = seat.x - room.initialPan - cup.boxWidth / 2;
+  assert(screenLeft >= 0 && screenLeft + cup.boxWidth <= width, `${what}: the whole cup is on the page`);
   assert(seat.y - cup.svgHeight >= 0 && seat.y <= height, `${what}: its straw and its base are both on the page`);
   assert(seat.width >= 28, `${what}: the cup is big enough to be read as a cup (${seat.width.toFixed(0)}px)`);
-  assert(left > register.x + register.width || left + cup.boxWidth < register.x,
+  // Both are world coordinates; the cup is centred on the queue/door axis, the register is on the left.
+  const worldLeft = seat.x - cup.boxWidth / 2;
+  assert(worldLeft > register.x + register.width || worldLeft + cup.boxWidth < register.x,
     `${what}: the cup stands clear of the till, so neither covers the other`);
 }
 

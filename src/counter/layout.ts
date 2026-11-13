@@ -53,7 +53,10 @@ export function layoutCounter(width: number, height: number, windowWidth: number
   const queueWidth = Math.min(width * 0.74, wide ? 300 : 230);
   const metrics = stageMetrics(queueWidth, stageHeight, 1, wide);
   // Scale the standing figure with the painted room; never stretch it with queue length.
-  metrics.charWidth = (wide ? 170 : 260) * room.scale;
+  // Both orientations now use the same panorama, so the same base constant applies. The portrait
+  // scale is ~1× while landscape is ~0.5×, so the base is halved to keep characters a similar
+  // on-screen size in both.
+  metrics.charWidth = (wide ? 170 : 85) * room.scale;
   metrics.charHeight = metrics.charWidth * 1.76;
   // The close customer speaks beside their face, clear of the waiting heads behind them.
   metrics.bubbleBottom = metrics.charHeight * 0.60 + FIGURE_LIFT;
@@ -69,7 +72,7 @@ export function queuePosition(layout: CounterLayout, rank: number) {
   const distance = Math.pow(0.63, rank);
   // The landscape painting has a much shorter aisle: its doorway figures stay larger so the
   // line recedes above the front guest instead of disappearing behind their head.
-  const doorScale = layout.wide ? 0.52 : 0.42;
+  const doorScale = 0.52;
   const scale = doorScale + (1 - doorScale) * distance;
   const { room } = layout;
   return { x: room.doorX + (room.queueX - room.doorX) * distance,

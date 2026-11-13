@@ -9,10 +9,12 @@ type Cat = { root: Phaser.GameObjects.Container; picture: Phaser.GameObjects.Ima
 
 const SPOTS: Record<'portrait' | 'landscape', CatSpot[]> = {
   portrait: [
-    { sprite: 0, x: 245, y: 690, width: 92, phase: 2.5 },
-    { sprite: 1, x: 812, y: 691, width: 79, phase: 3.2 },
-    { sprite: 5, x: 333, y: 932, width: 118, phase: 4.1, floor: true },
-    { sprite: 0, x: 842, y: 972, width: 138, phase: 4.9 },
+    { sprite: 2, x: 386, y: 275, width: 112, phase: 0 },
+    { sprite: 0, x: 549, y: 359, width: 115, phase: 2.2 },
+    { sprite: 5, x: 769, y: 465, width: 95, phase: 4.3, floor: true },
+    { sprite: 1, x: 1235, y: 464, width: 87, phase: 5.4, floor: true },
+    { sprite: 0, x: 1575, y: 386, width: 119, phase: 6.0 },
+    { sprite: 1, x: 1980, y: 468, width: 88, phase: 3.1, floor: true },
   ],
   landscape: [
     { sprite: 2, x: 386, y: 275, width: 112, phase: 0 },
